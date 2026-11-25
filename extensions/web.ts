@@ -210,6 +210,128 @@ export function passages(text: string, phrase: string, around = 2): string[] {
   return out;
 }
 
+// ---- the same search in the job's own browser tab, when the engine above turns us away:
+// the job doesn't have to judge it, as `web.py search` in deep-research does by hand
+
+const ENGINES: Record<string, string> = {
+  naver: "https://search.naver.com/search.naver?where=web&query={q}",
+  google: "https://www.google.com/search?q={q}&hl={hl}",
+  bing: "https://www.bing.com/search?q={q}",
+  yahoo: "https://search.yahoo.com/search?p={q}",
+};
+/** read in the page: result links (engine wrappers unwrapped, ads and the engine's own links left out) */
+const SERP = `(() => {
+  const own = /(^|\\.)(bing|google|naver|yahoo|msn|microsoft|duckduckgo)\\.(com|net|co\\.kr)$|(^|\\.)gstatic\\.com$/;
+  const unwrap = (href) => {
+    try {
+      const u = new URL(href, location.href);
+      if (/bing\\.com$/.test(u.hostname) && u.searchParams.get('u')) {
+        let s = u.searchParams.get('u').slice(2).replace(/-/g, '+').replace(/_/g, '/');
+        s += '='.repeat((4 - s.length % 4) % 4);
+        return decodeURIComponent(escape(atob(s)));
+      }
+      if (/google\\./.test(u.hostname) && u.pathname === '/url') return u.searchParams.get('q') || u.searchParams.get('url');
+      const ru = href.match(/\\/RU=([^/]+)\\/R[KS]=/); if (ru) return decodeURIComponent(ru[1]);
+      return u.href;
+    } catch (e) { return null; }
+  };
+  const page = (document.title + ' ' + location.href + ' ' + (document.body ? document.body.innerText.slice(0, 800) : '')).toLowerCase();
+  const blocked = /\\/sorry\\/|unusual traffic|captcha|not a robot|verify (you|you're)|verifying|are you a robot|자동입력 방지/.test(page);
+  const hits = new Map();
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (a.closest('header, nav, footer, [role=navigation], [aria-label*="광고"], .b_ad, #tads, #bottomads')) continue;
+    const url = unwrap(a.getAttribute('href'));
+    if (!url || !/^https?:/.test(url)) continue;
+    let host; try { host = new URL(url).hostname; } catch (e) { continue; }
+    if (own.test(host)) continue;
+    const t = (a.innerText || '').replace(/새 창 열림/g, '').replace(/\\s+/g, ' ').trim();
+    const h = hits.get(url) || { url, title: '', snippet: '', heading: false };
+    const isHead = !!(a.querySelector('h2, h3') || a.closest('h2, h3'));
+    if (t.length >= 8 && !/›|»/.test(t) && (isHead && !h.heading || !h.title)) { if (h.title && h.title !== t && t.length > h.snippet.length) h.snippet = h.title; h.title = t; h.heading = h.heading || isHead; }
+    else if (t.length > h.snippet.length && t !== h.title) h.snippet = t;
+    if (!h.snippet || h.snippet.length < 40) {
+      const box = a.closest('li, article, [data-testid=result], .algo, .b_algo, .g') || a.parentElement && a.parentElement.parentElement && a.parentElement.parentElement.parentElement;
+      if (box && box.innerText.length < 1200) { const s = box.innerText.replace(/새 창 열림/g, '').replace(/\\s+/g, ' ').replace(h.title, '').trim(); if (s.length > h.snippet.length) h.snippet = s; }
+    }
+    hits.set(url, h);
+  }
+  const list = [...hits.values()].filter((h) => h.title).map(({ heading, ...h }) => ({ ...h, snippet: h.snippet.slice(0, 240) }));
+  return JSON.stringify({ blocked: blocked && list.length < 3, hits: list });
+})()`;
+
+const STOP = new Set(["the", "and", "for", "with", "what", "how", "why", "vs", "or", "of", "in", "on", "to", "a", "an", "is", "are"]);
+/** engines feed junk to a browser they take for a bot: results that share no words with the query */
+export function onTopic(q: string, h: Hit): boolean {
+  const terms = (q.toLowerCase().match(/[\w.+#가-힣-]+/g) ?? []).filter((t) => !STOP.has(t) && (t.length >= 3 || /[가-힣]/.test(t)));
+  if (!terms.length) return true;
+  const hay = `${h.title} ${h.snippet} ${h.url}`.toLowerCase();
+  return terms.filter((t) => hay.includes(t)).length >= Math.max(1, Math.floor((terms.length + 2) / 3));
+}
+
+export type Run = (args: string[], stdin?: string, timeoutMs?: number) => Promise<{ code: number; out: string }>;
+/** ondra-browser in the job's own tab (the engine's env names its session) */
+const browser: Run = (args, stdin, timeoutMs = 60_000) =>
+  new Promise((done) => {
+    const child = execFile("ondra-browser", args, { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, encoding: "utf8" }, (err, out, errOut) =>
+      done({ code: err ? 1 : 0, out: `${out}${err ? `${errOut} ${err.message}` : ""}` }),
+    );
+    if (stdin !== undefined) child.stdin?.end(stdin);
+  });
+
+/** An engine that just turned the tab away sits out a while (the file `web.py` keeps too, shared by every job). */
+const benched = (dir: string): Record<string, number> => {
+  try {
+    return JSON.parse(readFileSync(join(dir, "engines.json"), "utf8"));
+  } catch {
+    return {};
+  }
+};
+function bench(dir: string, engine: string) {
+  const f = join(dir, "engines.json");
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${f}.${process.pid}`, JSON.stringify({ ...benched(dir), [engine]: Date.now() / 1000 + 30 * 60 }));
+    renameSync(`${f}.${process.pid}`, f);
+  } catch {}
+}
+
+/** The query on search pages in the job's browser tab, engine by engine, until one gives results on the topic. */
+export async function browserSearch(query: string, run: Run = browser, dir = webDir): Promise<{ engine?: string; hits: Hit[]; tried: string[] }> {
+  const hangul = /[가-힣]/.test(query);
+  const all = hangul ? ["naver", "google", "bing", "yahoo"] : ["google", "bing", "naver", "yahoo"];
+  const out = benched(dir);
+  const order = all.filter((e) => (out[e] ?? 0) < Date.now() / 1000);
+  const tried: string[] = [];
+  for (const e of order.length ? order : all) {
+    const url = ENGINES[e].replace("{q}", encodeURIComponent(query)).replace("{hl}", hangul ? "ko" : "en");
+    const opened = await run(["open", url, "--wait-until", "domcontentloaded"]);
+    if (opened.code) {
+      tried.push(`${e}: ${opened.out.trim().slice(-120)}`);
+      // no browser at all: no other engine will do better
+      if (/ENOENT|not found/i.test(opened.out)) break;
+      continue;
+    }
+    await run(["wait", "--fn", "document.readyState !== 'loading' && document.querySelectorAll('a[href]').length > 20"], undefined, 30_000);
+    const read = await run(["eval", "--stdin"], SERP, 40_000);
+    let d: { blocked?: boolean; hits?: Hit[] };
+    try {
+      const v = JSON.parse(read.out.trim() || '""');
+      d = typeof v === "string" ? JSON.parse(v) : v;
+    } catch {
+      tried.push(`${e}: unreadable page`);
+      continue;
+    }
+    const hits = (d.hits ?? []).filter((h) => onTopic(query, h));
+    if (d.blocked || hits.length < 2) {
+      tried.push(`${e}: ${d.blocked ? "captcha or block page" : "no results on the topic"}`);
+      bench(dir, e);
+      continue;
+    }
+    return { engine: e, hits, tried };
+  }
+  return { hits: [], tried };
+}
+
 export default function (pi: any) {
   pi.registerTool({
     name: "web_search",
@@ -226,14 +348,21 @@ export default function (pi: any) {
       const n = Math.max(1, Math.min(15, p.count ?? 8));
       try {
         const r = await search(p.query, signal);
-        const hits = r.hits.slice(0, n);
-        if (!hits.length)
+        const refused = r.status === 429 || r.status === 202 || !!r.busyUntil;
+        if (!r.hits.length && refused) {
+          // turned away: the same search in this job's browser tab, without the job having to judge it
+          const b = await browserSearch(p.query);
+          if (b.hits.length) {
+            const hits = b.hits.slice(0, n);
+            return text(`(searched on ${b.engine} in your browser tab: the usual engine is refusing searches for now)\n${hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n")}`, { query: p.query, hits, engine: b.engine });
+          }
           return text(
-            r.status === 429 || r.status === 202 || r.busyUntil
-              ? "The search engine is refusing searches for now (every job shares it). Don't retry in a loop: search in your own ondra-browser tab instead (deep-research's `web.py search \"<query>\"` does it; otherwise `ondra-browser open \"https://search.naver.com/search.naver?where=web&query=<words>\"`, then `ondra-browser snapshot -i --urls -s '#main_pack'`), or work on with what you have and search later."
-              : `No results (HTTP ${r.status}). Try other words, or search in your ondra-browser tab.`,
+            `The search engine is refusing searches for now, and your browser tab found nothing either (${b.tried.join("; ") || "no engine to try"}). Don't retry in a loop: work on with what you have and search later, or open a site you know in your ondra-browser tab.`,
             { query: p.query, hits: [] },
           );
+        }
+        const hits = r.hits.slice(0, n);
+        if (!hits.length) return text(`No results (HTTP ${r.status}). Try other words, or search in your ondra-browser tab.`, { query: p.query, hits: [] });
         return text(hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"), { query: p.query, hits, cached: !!r.cached });
       } catch (e) {
         return text(`Search failed: ${(e as Error).message}. Try again, or use the browser.`, { query: p.query, hits: [] });
