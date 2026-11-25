@@ -214,7 +214,7 @@ export default function (pi: any) {
   pi.registerTool({
     name: "web_search",
     label: "Web search",
-    // reached through use (or tool_search); loaded later, it carries no prompt lines (they would rebuild the prompt)
+    // reached through use; never declared, it carries no prompt lines (they would rebuild the prompt)
     exposure: "deferred",
     description:
       "Search the web. Returns the top results (title, url, snippet). Use it for anything you are not sure is current and exact: names of tools, libraries, people, products, versions, prices, news, anything the user calls by a name you don't recognise. Search with the user's hints (who made it, where it's from), then web_fetch the best pages and cite their URLs.",

@@ -16,7 +16,7 @@ import { state, taskById } from "../state/store";
 import { fsRead, skillList } from "../lib/native";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
-import { type CtxMessage, estimate, type Loaded, loadChat, loadJob } from "./contextData";
+import { type CtxMessage, estimate, skillsRead, type Loaded, loadChat, loadJob } from "./contextData";
 import { isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
 import { parseSkill } from "./SkillsTab";
 import { t } from "../i18n";
@@ -289,9 +289,11 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
   const sec = (name: string) => c().sections.find((s) => s.name === name)?.tokens ?? 0;
   const engineSections = () => c().sections.filter((s) => !["addendum", "project_context", "skills"].includes(s.name));
   const activeTools = () => enabledTools(c());
-  /** the skills Settings lists; agents search them, so their text is in the prompt only when the engine put it there */
-  const loadedSkills = () => props.data.skills ?? [];
   const inPrompt = (name: string) => (sec("skills") > 0 ? c().skills.find((s) => s.name === name && s.modelInvocable) : undefined);
+  /** the skills this conversation actually holds: read into it (by the skill tool, a read of its SKILL.md, /skill:), or put in the prompt by the engine */
+  const read = createMemo(() => skillsRead(c().messages));
+  const loadedSkills = () => (props.data.skills ?? []).filter((s) => read().has(s.name) || inPrompt(s.name));
+  const skillSize = (name: string) => read().get(name) ?? (inPrompt(name) ? skillTokens(inPrompt(name)!) : 0);
   const counted = createMemo(() => {
     const s: Record<Seg, number> = {
       engine: engineSections().reduce((n, x) => n + x.tokens, 0),
@@ -402,7 +404,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
               )}
             </For>
           </Part>
-          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} note={loadedSkills().length && !segs().skills ? t("검색해서 불러옴") : undefined} meta={`${loadedSkills().length}`} empty={!loadedSkills().length}>
+          <Part seg="skills" title={t("스킬")} size={loadedSkills().reduce((n, s) => n + skillSize(s.name), 0)} meta={`${loadedSkills().length}`} empty={!loadedSkills().length}>
             <div class="cx-list">
               <For each={loadedSkills()}>
                 {(s) => (
@@ -411,7 +413,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                     <span title={s.description}>{skillLine(s, s.own)}</span>
                     {/* where it comes from, by name (기본, 내 스킬); never a folder path */}
                     <em>{/^[~/]/.test(skillSource(s.path)) ? "" : skillSource(s.path)}</em>
-                    <small>{inPrompt(s.name) ? tokens(skillTokens(inPrompt(s.name)!)) : ""}</small>
+                    <small>{tokens(skillSize(s.name))}</small>
                   </div>
                 )}
               </For>

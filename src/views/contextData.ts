@@ -284,3 +284,18 @@ function sample(args: string[]): EngineContext {
     contextUsage: { tokens: 31_400, contextWindow: 272_000, percent: 11.5 },
   };
 }
+
+/**
+ * The skills read into a conversation, by name, with what their text takes: a tool result or a
+ * message that opens with a skill (the skill tool and /skill: write "Skill: <name> Location: …",
+ * a read of a SKILL.md starts with its frontmatter "--- name: <name>").
+ */
+export function skillsRead(messages: CtxMessage[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const m of messages) {
+    if (m.role !== "toolResult" && m.role !== "user") continue;
+    const name = /^Skill: ([\w.:-]+) Location:/.exec(m.preview)?.[1] ?? /^---\s*name:\s*["']?([\w.:-]+)/.exec(m.preview)?.[1];
+    if (name) out.set(name, (out.get(name) ?? 0) + m.tokens);
+  }
+  return out;
+}

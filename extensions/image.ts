@@ -2,7 +2,7 @@
 // the `image` tool asks GPT's image_generation for a picture, optionally from reference pictures
 // (the same character in a new pose, an edit of a picture), and saves it as a PNG. No API key, no
 // billing per call: it spends the ChatGPT plan's usage, like a GPT job does.
-// Found with tool_search (deferred): pet-maker draws a pet's poses with it, any job can make images.
+// Called through use (deferred): pet-maker draws a pet's poses with it, any job can make images.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { Type } from "typebox";

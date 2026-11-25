@@ -46,7 +46,7 @@ function groupsOf(c: EngineContext): Group[] {
   const order = ["기본 도구", "Ondra 확장", "다른 확장"];
   for (const x of [...c.tools].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))) {
     const s = toolSource(x);
-    // deferred tools sit behind tool_search: declared only once a job looks for them
+    // deferred tools sit behind use: never declared, called by name when needed
     const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
     const optional = !x.active && !found;
     // a tool jobs don't get unless switched on, and not switched on: not listed (only on, so it can go off)
@@ -85,8 +85,6 @@ export function ToolsTab() {
     const add = r.mcp ? !on : on;
     setState("settings", "extraTools", (l) => (add ? [...new Set([...(l ?? []), entry])] : (l ?? []).filter((n) => n !== entry)));
   };
-  // every tool group counts the same way, on/all (the tools sent with every request of all it lists); skills, one number
-  const counted = (g: Group) => ({ tools: g.rows.some((r) => r.tool), on: g.rows.filter((r) => r.tool && isOn(r) && !r.found).length });
   const toggle = (key: string) => {
     // selecting text in an open row doesn't fold it
     if (window.getSelection()?.toString()) return;
@@ -113,9 +111,6 @@ export function ToolsTab() {
               <>
                 <div class="set-group-title tl-gtitle">
                   {t(g.title)}
-                  <span class="tl-count" title={counted(g).tools ? t("켜짐 {on} · 전체 {n}", { on: counted(g).on, n: g.rows.length }) : undefined}>
-                    {counted(g).tools ? `${counted(g).on}/${g.rows.length}` : g.rows.length}
-                  </span>
                   <Show when={g.hint}><span class="tl-ghint">{g.hint}</span></Show>
                   <Show when={i() === 0}>
                     <span class="spacer" />

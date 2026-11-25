@@ -550,7 +550,7 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** Main declares only use and tool_search: its tools (jobs, skills, web, settings, read / bash) are called through use. Secrets are hidden from its tool results too. */
+/** Main declares only use: its tools (jobs, skills, web, settings, read / bash) are called through it. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
@@ -644,8 +644,8 @@ function guardTurn(space: string, ev: any) {
     if (tool === "bash" && typeof ev.args?.command === "string") t.cmds.set(id, { command: ev.args.command, at: Date.now() });
   } else {
     t.cmds.delete(id);
-    const out = ev.result?.content?.find?.((c: any) => c?.type === "text")?.text;
-    if (tool === "tool_search" && (ev.isError || /No matching tools|Repeated call/i.test(String(out ?? "")))) t.misses++;
+    // a lookup that failed (a tool called through use with args that didn't fit, a fetch that broke)
+    if (ev.isError && tool !== "bash") t.misses++;
   }
   if (t.nudged || (t.calls < MAIN_CALLS && t.misses < 2)) return;
   t.nudged = true;
@@ -832,7 +832,7 @@ async function ensureCaptain(space: string) {
     "--session-dir",
     sessionDir(space),
     ...(resume ? ["--continue"] : []),
-    // only use and tool_search are declared; the rest are called through use
+    // only use is declared; the rest are called through it
     ...(await mainToolArgs(acc.id)),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote

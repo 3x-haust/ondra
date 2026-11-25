@@ -356,12 +356,12 @@ export function trimEntries(entries: Entry[], max = MAX_ENTRIES) {
 }
 
 /**
- * What a job's model sees up front: the four file/shell tools, memory search and
- * tool_search. Every other tool (phone devices, saving memory, MCP servers, …) is
- * registered as deferred and declared only after tool_search finds it.
+ * What a job's model sees up front: the four file/shell tools, memory search and use.
+ * Every other tool (phone devices, saving memory, web, jobs, skills …) is registered as
+ * deferred and called through use by name (extensions/use.ts). No tool_search: Ondra loads
+ * no MCP servers (the engine runs with --no-extensions), so use reaches everything.
  */
-// (the engine runs with --no-extensions, so the built-in tool_search is loaded by name)
-export const WORKER_TOOLS = ["--extension", "builtin:tool-search", "--tools", "+tool_search"];
+export const WORKER_TOOLS: string[] = [];
 
 /**
  * A job's tool flags: WORKER_TOOLS plus the tools turned on in Settings › 도구.
@@ -370,9 +370,9 @@ export const WORKER_TOOLS = ["--extension", "builtin:tool-search", "--tools", "+
  */
 export function workerTools(extra: readonly string[] | undefined = state.settings.extraTools): string[] {
   // exact names only: "+name" entries take no patterns, and a comma would split the list
-  const names = [...new Set((extra ?? []).map((n) => n.trim()).filter((n) => /^\w[\w.:-]*$/.test(n) && n !== "tool_search"))];
+  const names = [...new Set((extra ?? []).map((n) => n.trim()).filter((n) => /^\w[\w.:-]*$/.test(n)))];
   if (!names.length) return WORKER_TOOLS;
-  return ["--extension", "builtin:tool-search", "--tools", ["+tool_search", ...names.map((n) => `+${n}`)].join(",")];
+  return ["--tools", names.map((n) => `+${n}`).join(",")];
 }
 
 /**

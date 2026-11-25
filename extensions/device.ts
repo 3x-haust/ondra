@@ -586,7 +586,7 @@ export default function (pi: any) {
   pi.registerTool({
     name: "device",
     label: "Device",
-    // found with tool_search when a job needs a phone; not declared up front
+    // called through use when a job needs a phone; not declared up front
     exposure: "deferred",
     description: [
       "Drive an iOS simulator or Android emulator. One device per job, made for this job.",
