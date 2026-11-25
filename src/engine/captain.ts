@@ -18,7 +18,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { AGENT_CHAT, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -151,6 +151,8 @@ export const STEP_MARK = "\u0000step:";
 const [draftsAll, setDraftsAll] = createSignal<Record<string, { id: string; text: string }>>({});
 /** which reply each chat is answering now */
 const answering = new Map<string, string>();
+/** for tests: main is answering this message (a job's end) */
+export const mainAnswering = (space: string, replyId: string) => answering.set(space, replyId);
 export const mainDraft = (key: string, replyId: string) => (draftsAll()[key]?.id === replyId ? draftsAll()[key].text : "");
 function setDraft(key: string, text: string) {
   const id = answering.get(key) ?? "";
@@ -194,44 +196,66 @@ export function endChat(t: Task): { project?: string } | undefined {
   return t.agent ? (owners.find((m) => m.project === AGENT_CHAT) ?? agentRun(t)) : (owners.find((m) => m.project && m.project !== AGENT_CHAT) ?? owners[0]);
 }
 
+/** The jobs of a group that ended since main last heard of it (just the job when it has no group). */
+function endedBatch(t: Task): Task[] {
+  const jobs = groupOf(t);
+  if (jobs.length < 2) return [t];
+  const ids = new Set(jobs.map((x) => x.id));
+  const heard = Math.max(0, ...state.captain.filter((m) => m.after && ids.has(m.after)).map((m) => m.at));
+  const batch = jobs.filter((x) => (x.status === "done" || x.status === "failed") && (x.finishedAt ?? 0) > heard);
+  return batch.includes(t) ? batch : [...batch, t];
+}
+
 function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
   void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
   const from = endChat(t);
   if (!from) return;
+  // a job of a group: main hears of it, and 결과물 keeps it, once the last of them ends
+  if (groupGoing(t)) return;
+  const batch = endedBatch(t);
   // its own result, kept now: the chat's row for it opens this (the agent's work isn't in 결과물)
-  if (!t.agent) keepJobResult(t);
+  if (!t.agent) keepJobResult(t, undefined, batch);
   const space = chatKey(t.space, from.project);
-  const handed = from.project ? requestsOf(space).find((q) => q.jobs.has(t.id))?.ask : undefined;
+  const handed = from.project ? requestsOf(space).find((q) => batch.some((x) => q.jobs.has(x.id)))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
   followUps.set(space, n);
-  const { said, blocks } = reportOf(t);
-  const evidence = jobReport(t).blocks.flatMap((b) => (b.type === "evidence" ? b.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
-  const asked = userFollowUps(t.space, [t.id]);
-  const own = toFork(t);
+  const asked = userFollowUps(t.space, batch.map((x) => x.id));
   // main already sent this fork back since the user last spoke: once is enough
   const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
+  // a group's report shares the room: each job gets its part of it
+  const room = Math.floor(3500 / batch.length);
+  const part = (x: Task) => {
+    const { said, blocks } = reportOf(x);
+    const evidence = jobReport(x).blocks.flatMap((b) => (b.type === "evidence" ? b.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
+    const own = toFork(x);
+    return [
+      `Fork ${x.id} "${x.title}" ${x.status === "done" ? "finished" : "failed"}.`,
+      x.status === "done" ? `Summary: ${x.summary ?? ""}` : `Error: ${x.error ?? ""}`,
+      x.unverified?.length ? `Not verified: ${x.unverified.join("; ")}` : "",
+      evidence.length ? `Evidence: ${evidence.join(" | ")}` : "",
+      said ? `What it reported:\n${said.slice(-room)}` : "",
+      blocks.length ? `Its result blocks:\n${blocks.slice(batch.length > 1 ? -4 : -10).join("\n")}` : "",
+      own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}` : "",
+      userParked(x) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
+      ...[...endNotes].map((fn) => fn(x)),
+    ].filter(Boolean).join("\n");
+  };
+  const root = groupRoot(t);
   const text = [
     handed?.via === "main" ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, the jobs' results go back to main on their own.` : "",
-    `Fork ${t.id} "${t.title}" ${t.status === "done" ? "finished" : "failed"}.`,
-    t.status === "done" ? `Summary: ${t.summary ?? ""}` : `Error: ${t.error ?? ""}`,
-    t.unverified?.length ? `Not verified: ${t.unverified.join("; ")}` : "",
-    evidence.length ? `Evidence: ${evidence.join(" | ")}` : "",
-    said ? `What it reported:\n${said.slice(-3500)}` : "",
-    blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
+    batch.length > 1 ? `The jobs of "${root.title}" have all ended (${batch.length}). Report them to the user as one result, not job by job.` : "",
+    ...batch.map(part),
     asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
-    own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}` : "",
     sentBack ? "You already sent this fork back once since the user last spoke. Stop here: no append to it until the user asks; say in one line what is still open, if anything." : "",
-    userParked(t) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
     ),
-    ...[...endNotes].map((fn) => fn(t)),
-  ].filter(Boolean).join("\n");
+  ].filter(Boolean).join(batch.length > 1 ? "\n\n" : "\n");
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
   setState("captain", (list) => trimChats([...list, reply]));
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
@@ -1359,6 +1383,16 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       // carrying on a job: a finished one hands over now; one still going wraps up first and this waits for it
       const from = job(r.from) && !job(r.from)!.parentId ? job(r.from) : undefined;
       const still = from && !finished(from) ? from.id : undefined;
+      const after = [
+        ...new Set([
+          ...(Array.isArray(r.after) ? r.after : []).map((k: unknown) => byKey.get(String(k)) ?? job(k)?.id ?? "").filter(Boolean),
+          ...(still ? [still] : []),
+        ]),
+      ];
+      // the work this is a part of: the job named ("under": a spec's tickets), the step it builds on,
+      // or the job whose end main is answering. One group ends as one (one sound, report and result)
+      const reacting = fromUser ? undefined : state.captain.find((m) => m.id === answering.get(space))?.after;
+      const part = [r.under != null ? (byKey.get(String(r.under)) ?? job(r.under)?.id) : undefined, after[0], reacting].map((x) => job(x)).find((x) => x && !x.parentId && !x.answer);
       const id = createTask({
         space: sp(space),
         title: String(r.title ?? "작업"),
@@ -1379,13 +1413,9 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...(fromUser ? namedSpaces(original, sp(space), state.spaces) : [])])]
           .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
           .filter((x): x is SpaceId => !!x && x !== sp(space)),
-        after: [
-          ...new Set([
-            ...(Array.isArray(r.after) ? r.after : []).map((k: unknown) => byKey.get(String(k)) ?? job(k)?.id ?? "").filter(Boolean),
-            ...(still ? [still] : []),
-          ]),
-        ],
+        after,
         follows: from?.id,
+        ...(part ? { group: groupRoot(part).id } : {}),
         ...(isAgentChat(space) ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
       });
       if (still) handOn(still, id);

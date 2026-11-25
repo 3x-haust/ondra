@@ -212,8 +212,9 @@ nothing is built.
 - **In main**: hand the spec and tickets to one job to write them down (as
   issues or files, per the project), then one job per ticket. A ticket's job
   gets the ticket and the spec (their issue numbers or paths), and `after` the
-  jobs of the tickets that block it; tickets with nothing between them run at
-  the same time. Each job starts fresh with just its ticket: the interview
+  writing job and the jobs of the tickets that block it; tickets with nothing
+  between them run at the same time. All of them are then one piece of work:
+  listed under the writing job, one result and one sound when the last ends. Each job starts fresh with just its ticket: the interview
   isn't carried, the written spec is.
 - **In a job** (the interview happened there): write the spec and tickets down,
   then build them in order yourself when they're few or tightly linked; when

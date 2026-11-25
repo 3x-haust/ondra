@@ -337,12 +337,35 @@ export function trimChats(list: CaptainMessage[], keep = 300): CaptainMessage[] 
 
 /** a job of the list: not a subagent, a quick answer or archived */
 export const listed = (t: Task) => !t.parentId && !t.answer && !t.archived && !t.agent;
-/** the job a follow-up carries on (one started by answering it, say "merge it"), when that one is in
- *  the same list: the follow-up is part of its line, shown under it and named by it */
+/** the job a follow-up carries on (one started by answering it, say "merge it") or the job of its group,
+ *  when that one is in the same list: the job is part of its line, shown under it and named by it */
 export function carriedOn(t: Task): Task | undefined {
-  const p = t.follows ? taskById(t.follows) : undefined;
-  return p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project ? p : undefined;
+  for (const id of [t.follows, t.group]) {
+    const p = id ? taskById(id) : undefined;
+    if (p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project) return p;
+  }
+  return undefined;
 }
+/** the job a job is a part of (the spec its ticket came from), or the job itself */
+export const groupRoot = (t: Task): Task => (t.group ? (taskById(t.group) ?? t) : t);
+/** a job's group, its root first: just the job when it has none */
+export function groupOf(t: Task): Task[] {
+  const root = groupRoot(t);
+  return [root, ...state.tasks.filter((x) => x.group === root.id && x.id !== root.id)];
+}
+/** running, waiting on the user, or queued behind steps that can still finish (a step whose
+ *  step failed never starts, so it isn't going) */
+export function stillGoing(t: Task, seen = new Set<string>()): boolean {
+  if (t.status === "running" || t.status === "waiting") return true;
+  if (t.status !== "queued" || seen.has(t.id)) return false;
+  seen.add(t.id);
+  return (t.after ?? []).every((id) => {
+    const d = taskById(id);
+    return !d || d.status === "done" || stillGoing(d, seen);
+  });
+}
+/** another job of its group is still going: this one's end isn't the group's */
+export const groupGoing = (t: Task) => groupOf(t).some((x) => x.id !== t.id && stillGoing(x));
 /** the first job of a follow-up's line (the job itself when it follows none) */
 export function lineHead(t: Task): Task {
   let x = t;
