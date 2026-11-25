@@ -1871,11 +1871,14 @@ func onlineDisplays() -> [CGDirectDisplayID] {
     return Array(ids.prefix(Int(n)))
 }
 
-/// The off-screen display, made once and held for the helper's life.
+/// The off-screen display: the one the app holds while it runs, else one made once and held
+/// for the helper's life.
 final class Backdrop {
     static let shared = Backdrop()
     static let queue = DispatchQueue(label: "ondra.backdrop")
     static let serialBase: UInt32 = 0x4f440000
+    /// the display the app holds (`--hold-display`), outside the per-helper slots
+    static let heldSerial: UInt32 = serialBase + 0xff
     private var display: CGVirtualDisplay?
     private(set) var displayID: CGDirectDisplayID = 0
     private let conn: Int32
@@ -1890,22 +1893,38 @@ final class Backdrop {
     }
 
     /// Make the display if it isn't up yet. Returns false if it could not be created.
-    @discardableResult func ensure() -> Bool {
+    @discardableResult func ensure(hold: Bool = false) -> Bool {
         if display != nil { return true }
-        // Each helper (one per job using the computer) holds its own display, in a numbered slot
-        // with a fixed serial. The system remembers where a display it has seen goes, so from the
+        // The display the app holds while it runs is shared by every job, so starting or ending
+        // one attaches or drops no display. Either makes macOS leave and re-enter Stage Manager,
+        // and a user's window it remembers elsewhere jumps there and back (it shrinks for a
+        // moment); nothing done to the window beforehand stops that.
+        if !hold {
+            if displayID != 0, onlineDisplays().contains(displayID) { return true }
+            displayID = 0
+            if let held = onlineDisplays().first(where: { Backdrop.isOurs($0) && CGDisplaySerialNumber($0) == Backdrop.heldSerial }) {
+                displayID = held
+                let t0 = nowMs()
+                while spaceID == 0, nowMs() - t0 < 3000 { usleep(20_000) }
+                dbgLog("display \(displayID) (the app's) shared, space \(spaceID)")
+                return true
+            }
+        }
+        // Without it (no app holding one), each helper holds its own display, in a numbered
+        // slot with a fixed serial. The system remembers where a display it has seen goes, so from the
         // second time on a slot comes up straight in its corner. A display it hasn't seen lands
         // beside the main one first, and a Dock on that side jumps onto it for a moment (the
         // Dock flicker users saw when every helper made a new one).
-        let taken = Set(onlineDisplays().filter { CGDisplayVendorNumber($0) == 0x1234 && CGDisplayModelNumber($0) == 0x4f44 }.map { CGDisplaySerialNumber($0) })
+        let taken = Set(onlineDisplays().filter(Backdrop.isOurs).map { CGDisplaySerialNumber($0) })
         var made: CGVirtualDisplay?
-        for slot in UInt32(0)..<8 where !taken.contains(Backdrop.serialBase + slot) {
+        let serials = hold ? [Backdrop.heldSerial] : (UInt32(0)..<8).map { Backdrop.serialBase + $0 }
+        for serial in serials where !taken.contains(serial) {
             let d = CGVirtualDisplayDescriptor()
             // its own queue: the main thread is often busy with a request
             d.queue = Backdrop.queue; d.name = "Ondra"
             d.maxPixelsWide = 1920; d.maxPixelsHigh = 1200
             d.sizeInMillimeters = CGSize(width: 480, height: 300)
-            d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = Backdrop.serialBase + slot
+            d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = serial
             guard let v = CGVirtualDisplay(descriptor: d) else { continue } // another helper took it just now
             let st = CGVirtualDisplaySettings(); st.hiDPI = 0
             st.modes = [CGVirtualDisplayMode(width: 1920, height: 1200, refreshRate: 30)]
@@ -1914,13 +1933,15 @@ final class Backdrop {
         guard let v = made else { dbgLog("display: create failed"); return false }
         let t1 = nowMs()
         while !onlineDisplays().contains(v.displayID), nowMs() - t1 < 2000 { usleep(10_000) }
-        // Its place: off the bottom-right corner of the real displays, touching them only at a
-        // corner, so the pointer can never wander onto it; past another job's display if one is
-        // there. Saved for this set of displays, so it's already there next time.
-        var corner = CGPoint(x: CGDisplayBounds(CGMainDisplayID()).maxX, y: CGDisplayBounds(CGMainDisplayID()).maxY)
-        for other in onlineDisplays() where other != v.displayID && CGDisplayVendorNumber(other) == 0x1234 && CGDisplayModelNumber(other) == 0x4f44 {
-            let b = CGDisplayBounds(other)
-            if b.maxX > corner.x { corner = CGPoint(x: b.maxX, y: b.maxY) }
+        // Its place: above and right of every screen of the user's, touching them only at a
+        // corner; past another job's display if one is there. A window's top never goes above
+        // its screen's menu bar, so no window the user drags or the app moves can reach it (one
+        // dragged off the bottom-right corner lands on a display there). Saved for this set of
+        // displays, so it's already there next time.
+        let screens = userDisplayBounds()
+        var corner = CGPoint(x: screens.map(\.maxX).max()!, y: screens.map(\.minY).min()! - CGDisplayBounds(v.displayID).height)
+        for other in onlineDisplays() where other != v.displayID && Backdrop.isOurs(other) && CGDisplayBounds(other).maxY <= corner.y + CGDisplayBounds(v.displayID).height {
+            corner.x = max(corner.x, CGDisplayBounds(other).maxX)
         }
         if CGDisplayBounds(v.displayID).origin != corner {
             var cfg: CGDisplayConfigRef?
@@ -1948,6 +1969,8 @@ final class Backdrop {
     }
 
     func assign(_ pid: pid_t, to space: UInt64) { _ = assignFn(conn, pid, space) }
+
+    static func isOurs(_ id: CGDirectDisplayID) -> Bool { CGDisplayVendorNumber(id) == 0x1234 && CGDisplayModelNumber(id) == 0x4f44 }
 
     /// Is this window frame on the off-screen display?
     func contains(_ frame: CGRect) -> Bool {
@@ -3128,6 +3151,104 @@ func countNodes(_ node: [String: Any]) -> Int {
     return moved
 }
 
+/// The user's screens: every online display but the off-screen ones.
+func userDisplayBounds() -> [CGRect] {
+    let own = onlineDisplays().filter { !Backdrop.isOurs($0) }.map { CGDisplayBounds($0) }
+    return own.isEmpty ? [CGDisplayBounds(CGMainDisplayID())] : own
+}
+
+/// Where the pointer goes back to: the nearest point on the user's screens.
+func nearestUserPoint(_ p: CGPoint, in screens: [CGRect]) -> CGPoint {
+    screens.map { s in CGPoint(x: min(max(p.x, s.minX), s.maxX - 1), y: min(max(p.y, s.minY), s.maxY - 1)) }
+        .min { hypot($0.x - p.x, $0.y - p.y) < hypot($1.x - p.x, $1.y - p.y) } ?? p
+}
+
+/// Where a window that reaches onto an off-screen display goes: moved the least way (left or
+/// up) that clears it, kept on the user's screen it is mostly on. nil when it is clear already.
+func clearedOrigin(_ f: CGRect, off: [CGRect], screen: CGRect) -> CGPoint? {
+    guard off.contains(where: { $0.intersects(f) }) else { return nil }
+    var o = f.origin
+    for b in off where b.intersects(CGRect(origin: o, size: f.size)) {
+        let left = CGRect(origin: o, size: f.size).maxX - b.minX, up = CGRect(origin: o, size: f.size).maxY - b.minY
+        if left <= up { o.x -= left } else { o.y -= up }
+    }
+    o.x = max(screen.minX, min(o.x, screen.maxX - min(f.width, screen.width)))
+    o.y = max(screen.minY, min(o.y, screen.maxY - min(f.height, screen.height)))
+    return o
+}
+
+/// The off-screen display is for jobs only. macOS always places a display touching another (it
+/// moves one set apart back against it), so the pointer can cross onto it at the corner it
+/// touches. While the app holds the display, a pointer event that lands there is moved back
+/// onto the user's screen before any app gets it, and the pointer with it. No window reaches
+/// the display where it sits (see Backdrop.ensure); one moved onto it another way (a
+/// window-manager tool, a menu command) is put back: a window of the app in front (the
+/// user's: a job's app is never brought to the front) that reaches onto it is moved back onto
+/// the user's screen when a drag ends, and checked each second otherwise, never during a drag.
+func keepUserOffBackdrop() -> Never {
+    let mask = [CGEventType.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .leftMouseUp]
+        .reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+    let callback: CGEventTapCallBack = { _, type, event, _ in
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let t = keeperTap { CGEvent.tapEnable(tap: t, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
+        let off = onlineDisplays().filter(Backdrop.isOurs).map { CGDisplayBounds($0) }
+        let p = event.location
+        if off.contains(where: { $0.contains(p) }) {
+            let back = nearestUserPoint(p, in: userDisplayBounds())
+            // the event goes on from the user's screen, so no app sees the pointer there
+            event.location = back
+            CGWarpMouseCursorPosition(back)
+            dbgLog("keeper: pointer \(Int(p.x)),\(Int(p.y)) put back at \(Int(back.x)),\(Int(back.y))")
+            // a warp holds the pointer still for a moment; the user's mouse keeps moving it
+            CGAssociateMouseAndMouseCursorPosition(1)
+        }
+        if type == .leftMouseUp, !off.isEmpty, let front = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) { pullBackWindows(of: front) }
+        }
+        return Unmanaged.passUnretained(event)
+    }
+    let tapRef = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
+                               eventsOfInterest: mask, callback: callback, userInfo: nil)
+    if let tap = tapRef {
+        keeperTap = tap
+        CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        dbgLog("keeper: watching the pointer, display \(Backdrop.shared.displayID)")
+    } else {
+        dbgLog("keeper: no event tap")
+    }
+    Thread.detachNewThread {
+        while true {
+            sleep(1)
+            let dragging = [CGMouseButton.left, .right, .center].contains { CGEventSource.buttonState(.combinedSessionState, button: $0) }
+            if !dragging, let front = NSWorkspace.shared.frontmostApplication?.processIdentifier { pullBackWindows(of: front) }
+        }
+    }
+    CFRunLoopRun()
+    exit(0)
+}
+var keeperTap: CFMachPort?
+
+/// Move the app's windows that reach onto an off-screen display back onto the user's screen.
+func pullBackWindows(of pid: pid_t) {
+    let off = onlineDisplays().filter(Backdrop.isOurs).map { CGDisplayBounds($0) }
+    let screens = userDisplayBounds()
+    var winsRef: CFTypeRef?
+    guard !off.isEmpty, AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &winsRef) == .success,
+          let wins = winsRef as? [AXUIElement] else { return }
+    for win in wins {
+        guard let f = axFrame(win), f.width > 1, f.height > 1 else { continue }
+        let screen = screens.max { $0.intersection(f).area < $1.intersection(f).area } ?? screens[0]
+        guard var o = clearedOrigin(f, off: off, screen: screen), let v = AXValueCreate(.cgPoint, &o) else { continue }
+        let r = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, v)
+        dbgLog("keeper: window of \(pid) at \(Int(f.minX)),\(Int(f.minY)) moved back to \(Int(o.x)),\(Int(o.y)) (\(r.rawValue))")
+    }
+}
+
+extension CGRect { var area: CGFloat { isNull ? 0 : width * height } }
+
 /// Watches the background copies while the helper runs: a copy can put a panel up at any time
 /// (a global drag monitor, a timer), not only during an action.
 func startWindowKeeper() {
@@ -3357,6 +3478,16 @@ if CommandLine.arguments.contains("--version") {
 if CommandLine.arguments.contains("--reap") {
     print("{\"reaped\":\(reapOrphanCopies())}")
     exit(0)
+}
+
+// --hold-display: the app keeps the off-screen display up while it runs, for every job to share
+// (see Backdrop.ensure), and keeps the user off it. It goes when the app closes this helper's
+// stdin or stops it. Another copy of the app already holding it: nothing to do.
+if CommandLine.arguments.contains("--hold-display") {
+    guard Backdrop.shared.ensure(hold: true) else { exit(0) }
+    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
+    Thread.detachNewThread { while readLine() != nil {}; exit(0) }
+    keepUserOffBackdrop()
 }
 
 // One-shot queries for scripts (skills/computer-use/shot-check.sh), one JSON line each:

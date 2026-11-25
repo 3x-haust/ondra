@@ -22,8 +22,19 @@ using only **public** APIs:
   screen.
 - **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
   so the user's frontmost app stays in front.
-- **Off-screen display**: an app the job opens runs on a `CGVirtualDisplay` the
-  helper holds just off the corner of the real screens (`Backdrop`). The process is
+- **Off-screen display**: an app the job opens runs on a `CGVirtualDisplay` above and
+  right of the real screens, touching them only at a corner (`Backdrop`). The app holds one for as long as it runs
+  (`ondra-cuhost --hold-display`, started at launch, gone with the app) and every job's
+  helper shares it: attaching or dropping any display makes macOS leave and re-enter
+  Stage Manager, and a window of the user's it remembers elsewhere jumps there and back
+  (it shrinks for a moment). Nothing done to the window beforehand stops that, so no
+  job attaches or drops one. A window's top never goes above its screen's menu bar, so
+  no window reaches the display there (off the bottom-right corner, a window dragged
+  into the corner landed on it, out of sight). macOS always places a display touching
+  another, so the pointer could cross at that corner: the holder's HID event tap moves
+  such an event back onto the user's screen before any app gets it, and the pointer
+  with it. A window moved onto the display another way (a window-manager tool) is put
+  back when a drag ends and each second. The process is
   spawned suspended, assigned to that display's desktop (`SLSProcessAssignToSpace`),
   then resumed, so its first window opens off-screen — no flash, no Dock tile
   (it runs from an `LSBackgroundOnly` copy), no focus taken. Capture and pointer/key
@@ -69,9 +80,9 @@ using only **public** APIs:
   off-screen display's space before its first window, then shown there once every
   window has moved over (`mode: offscreen`). Its Dock tile shows it running; nothing
   else does. If it can't be placed, it stays hidden (`mode: hidden`) and a capture or
-  events unhide it behind the user's windows for the moment they need. Each helper
-  holds its own display in a numbered slot with a fixed serial, so jobs running at once
-  don't collide, and macOS remembers where each slot goes: from the second time on it
+  events unhide it behind the user's windows for the moment they need. Without the
+  app's display (a helper run on its own), each helper holds its own display in a
+  numbered slot with a fixed serial, so jobs running at once don't collide, and macOS remembers where each slot goes: from the second time on it
   comes up straight in its corner. A display macOS hasn't seen first lands beside the
   main one, and a Dock on that side jumps onto it for a moment.
   On release (or when the helper exits) a real app the job opened is quit, so its Dock
@@ -83,7 +94,8 @@ The background contract is **verified, not masked**: the helper records the
 frontmost app, key window and mouse position before and after every action and
 returns whether they changed; the tool refuses to continue if they did, rather
 than forging focus events to hide the change (see `computer-use-host.md`). It
-never activates an app, warps the cursor or posts global events. `act` re-observes
+never activates an app or posts global events, and warps the cursor only to keep it
+off the off-screen display. `act` re-observes
 in the **same call**. Each step first prepares its target; a sensitive step also
 waits for an in-app confirmation before the helper executes the held action. The
 TypeScript side is `extensions/lib/computer-host.ts`; the tool is available when
