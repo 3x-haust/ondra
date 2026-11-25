@@ -28,18 +28,16 @@ pub struct GitChanges {
 /// Put a space's environment (`space_env`: its git identity, GitHub login, ssh
 /// config, CLI shims) on a command Ondra runs for that space. Its PATH goes first.
 pub fn space_env_into(cmd: &mut Command, env: &[(String, String)]) {
-    cmd.env("PATH", user_path());
+    cmd.env("PATH", crate::engine::scoped_path(env, user_path()));
     for (k, v) in env {
-        if k == "PATH" {
-            cmd.env("PATH", format!("{v}:{}", user_path()));
-        } else {
+        if !crate::engine::is_path_key(k) {
             cmd.env(k, v);
         }
     }
 }
 
 fn git(cwd: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
+    let out = crate::engine::background_command("git")
         .args(args)
         .current_dir(cwd)
         .env("PATH", user_path())
@@ -211,7 +209,7 @@ pub struct FileAt {
 const FILE_CAP: usize = 1024 * 1024;
 
 fn git_bytes(cwd: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let out = Command::new("git")
+    let out = crate::engine::background_command("git")
         .args(args)
         .current_dir(cwd)
         .env("PATH", user_path())
@@ -461,7 +459,7 @@ mod tests {
 /// Run a command in `cwd` with the space's environment and return stdout, or the
 /// last lines of stderr as the error.
 fn run(cwd: &str, cmd: &str, args: &[&str], env: &[(String, String)]) -> Result<String, String> {
-    let mut c = Command::new(cmd);
+    let mut c = crate::engine::background_command(cmd);
     c.args(args).current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0");
     space_env_into(&mut c, env);
     let out = c.output().map_err(|e| format!("{cmd}: {e}"))?;
