@@ -31,7 +31,12 @@ fn sdk() -> PathBuf {
     std::env::var("ANDROID_HOME")
         .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
         .map(PathBuf::from)
-        .unwrap_or_else(|_| dirs_home().join("Library/Android/sdk"))
+        .unwrap_or_else(|_| {
+            #[cfg(windows)]
+            { dirs::data_local_dir().unwrap_or_else(|| dirs_home().join("AppData/Local")).join("Android/Sdk") }
+            #[cfg(not(windows))]
+            { dirs_home().join("Library/Android/sdk") }
+        })
 }
 /// What makes an emulator light for testing: drawn on the Mac's GPU (headless,
 /// plain `-gpu auto` falls back to drawing in software on the CPU), no sound, no
@@ -46,12 +51,17 @@ pub const LEAN: [&str; 5] = ["-no-window", "-gpu", "auto-no-window", "-no-audio"
 /// Xcode's compilation cache, one for every job's builds (XCODE_XCCONFIG_FILE). Its keys don't
 /// carry the folder (prefix maps), so a build in a job's fresh worktree reuses what any job
 /// compiled before: Orbit's Debug build went from 43s to 19s. Older Xcodes ignore the settings.
+#[cfg(not(target_os = "macos"))]
+pub fn xcode_cache() -> Option<PathBuf> { None }
+
+#[cfg(target_os = "macos")]
 pub fn xcode_cache() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     // no spaces in it (Application Support has one): the path goes to the compilers as is
     xcode_cache_in(&PathBuf::from(home).join("Library/Caches/dev.3xhaust.ondra/xcode"), std::env::var("XCODE_XCCONFIG_FILE").ok())
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn xcode_cache_in(dir: &std::path::Path, theirs: Option<String>) -> Option<PathBuf> {
     if theirs.is_some_and(|t| !t.is_empty()) {
         return None;
@@ -68,6 +78,13 @@ fn xcode_cache_in(dir: &std::path::Path, theirs: Option<String>) -> Option<PathB
     Some(file)
 }
 
+#[cfg(windows)]
+pub fn job_sdk(_data: &std::path::Path) -> Option<PathBuf> {
+    let real = sdk();
+    real.is_dir().then_some(real)
+}
+
+#[cfg(unix)]
 pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
     let real = sdk();
     let real_emu = real.join("emulator/emulator");
@@ -103,13 +120,13 @@ pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
 }
 
 fn dirs_home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+    crate::engine::home()
 }
 fn adb() -> PathBuf {
-    sdk().join("platform-tools/adb")
+    sdk().join(format!("platform-tools/adb{}", std::env::consts::EXE_SUFFIX))
 }
 fn emulator() -> PathBuf {
-    sdk().join("emulator/emulator")
+    sdk().join(format!("emulator/emulator{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn out(cmd: &mut Command) -> Option<String> {
@@ -118,6 +135,7 @@ fn out(cmd: &mut Command) -> Option<String> {
 }
 
 /// "2026-11-03T10:20:30Z" → ms (good enough for sorting; no chrono dependency)
+#[cfg(target_os = "macos")]
 fn chrono_like(s: &str) -> Option<i64> {
     let d: Vec<i64> = s.split(|c: char| !c.is_ascii_digit()).filter(|x| !x.is_empty()).take(6).filter_map(|x| x.parse().ok()).collect();
     if d.len() < 6 {
@@ -147,6 +165,10 @@ fn job_on(root: &std::path::Path, serial: &str) -> Option<String> {
     })
 }
 
+#[cfg(not(target_os = "macos"))]
+fn ios() -> Vec<Device> { Vec::new() }
+
+#[cfg(target_os = "macos")]
 fn ios() -> Vec<Device> {
     let Some(json) = out(Command::new("xcrun").args(["simctl", "list", "devices", "-j"])) else { return vec![] };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) else { return vec![] };
@@ -184,7 +206,7 @@ fn avd_of(serial: &str, key: &str, model: &str, live: &[String]) -> String {
     if let Some((_, n)) = names.iter().find(|(k, _)| k == key) {
         return n.clone();
     }
-    let asked = out(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"])).and_then(|s| s.lines().next().map(|l| l.trim().to_string())).filter(|s| !s.is_empty());
+    let asked = out(crate::engine::background_command(adb()).args(["-s", serial, "emu", "avd", "name"])).and_then(|s| s.lines().next().map(|l| l.trim().to_string())).filter(|s| !s.is_empty());
     match asked {
         Some(n) => {
             names.push((key.to_string(), n.clone()));
@@ -198,7 +220,7 @@ fn android(root: &std::path::Path) -> Vec<Device> {
     let mut list: Vec<Device> = vec![];
     // what runs now: emulators (with their AVD name) and phones
     let mut running: Vec<(String, String, String)> = vec![]; // (serial, avd or model, kind)
-    if let Some(txt) = out(Command::new(adb()).args(["devices", "-l"])) {
+    if let Some(txt) = out(crate::engine::background_command(adb()).args(["devices", "-l"])) {
         let key = |l: &str| format!("{} {}", l.split_whitespace().next().unwrap_or(""), l.split_whitespace().find(|p| p.starts_with("transport_id:")).unwrap_or(""));
         let live: Vec<String> = txt.lines().skip(1).map(key).collect();
         for line in txt.lines().skip(1) {
@@ -215,7 +237,7 @@ fn android(root: &std::path::Path) -> Vec<Device> {
             }
         }
     }
-    if let Some(txt) = out(Command::new(emulator()).arg("-list-avds")) {
+    if let Some(txt) = out(crate::engine::background_command(emulator()).arg("-list-avds")) {
         for avd in txt.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("INFO") && !internal(l)) {
             let run = running.iter().find(|r| r.2 == "emulator" && r.1 == avd);
             list.push(Device {
@@ -288,7 +310,7 @@ pub async fn device_boot(platform: String, id: String) -> Result<(), String> {
                 _ => Ok(()),
             }
         } else {
-            Command::new(emulator())
+            crate::engine::background_command(emulator())
                 .args(["-avd", &id])
                 .args(LEAN)
                 .stdin(Stdio::null())
@@ -323,7 +345,7 @@ pub async fn device_delete(platform: String, id: String) -> Result<(), String> {
         if platform == "ios" {
             run(Command::new("xcrun").args(["simctl", "delete", &id]))
         } else {
-            let avdmanager = sdk().join("cmdline-tools/latest/bin/avdmanager");
+            let avdmanager = sdk().join(if cfg!(windows) { "cmdline-tools/latest/bin/avdmanager.bat" } else { "cmdline-tools/latest/bin/avdmanager" });
             if avdmanager.is_file() {
                 run(Command::new(avdmanager).args(["delete", "avd", "-n", &id]))
             } else {
@@ -568,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn a_job_emulator_boots_without_a_window() {
         let root = std::env::temp_dir().join(format!("ondra-sdk-test-{}", std::process::id()));
         let real = root.join("real");

@@ -13,6 +13,7 @@ import { sendSide } from "../engine/aside";
 import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
+import { rememberPickedFiles } from "../engine/pickedFiles";
 import { farError, farMemAdd, HostCtx, listFiles, sendFiles } from "../engine/far";
 import { discarded, endTime, pausedAt, planCount, taskDiff, workedMs } from "../state/progress";
 import { rawStats, prOf, renameTask, finishTask, markRead, stopTask, resumeTask, startTask, setTaskAccount, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell, decide } from "../engine/tasks";
@@ -541,8 +542,14 @@ export function TaskView(props: { id: string }) {
                   placeholder={answering() ? tr("다른 답 입력") : task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "auto"} onChange={(p) => void setTaskPermission(task().id, p)} />}
                   // a question waiting: what is typed here is the answer to it (the card's "다른 답")
-                  onSend={(m) => (answering() ? void decide(answering()!.id, m) : tell(task().id, m, { now: true }))}
-                  onQueue={answering() ? (m) => void decide(answering()!.id, m) : task().status === "running" ? (m) => tell(task().id, m) : undefined}
+                  onSend={(m, picked) => {
+                    void rememberPickedFiles("task", task().id, picked);
+                    return answering() ? void decide(answering()!.id, m) : tell(task().id, m, { now: true });
+                  }}
+                  onQueue={answering() || task().status === "running" ? (m, picked) => {
+                    void rememberPickedFiles("task", task().id, picked);
+                    return answering() ? void decide(answering()!.id, m) : tell(task().id, m);
+                  } : undefined}
                   running={task().status === "running"}
                   onStop={() => stopTask(task().id)}
                   right={

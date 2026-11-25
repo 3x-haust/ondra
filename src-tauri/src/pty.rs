@@ -136,8 +136,12 @@ pub fn pty_open(
             b
         }
         None => {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            #[cfg(windows)]
+            let shell = std::env::var_os("ComSpec").unwrap_or_else(|| "cmd.exe".into());
+            #[cfg(not(windows))]
+            let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
             let mut b = CommandBuilder::new(shell);
+            #[cfg(not(windows))]
             b.arg("-l");
             b.args(&args);
             b
@@ -145,11 +149,9 @@ pub fn pty_open(
     };
     let cwd = if cwd.is_empty() { home().display().to_string() } else { cwd };
     cmd.cwd(&cwd);
-    cmd.env("PATH", with_sidecars(user_path()));
+    cmd.env("PATH", crate::engine::scoped_path(&env, &with_sidecars(user_path())));
     for (k, v) in env {
-        if k == "PATH" {
-            cmd.env("PATH", format!("{v}:{}", with_sidecars(user_path())));
-        } else {
+        if !crate::engine::is_path_key(&k) {
             cmd.env(k, v);
         }
     }

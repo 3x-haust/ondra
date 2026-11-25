@@ -123,7 +123,7 @@ pub fn verify(path: &Path, size: u64, sha256: &str) -> Result<(), String> {
 /// A folder holds the whole component (what each one runs is there).
 pub fn complete(name: &str, dir: &Path) -> bool {
     match name {
-        "engine" => dir.join("ondra-engine").is_file() && dir.join("package.json").is_file(),
+        "engine" => dir.join(if cfg!(windows) { "ondra-engine.exe" } else { "ondra-engine" }).is_file() && dir.join("package.json").is_file(),
         "chrome" => crate::tools::chrome_in(dir).is_some(),
         "binary-analysis" => dir.join("bin/radare2").is_file(),
         _ => dir.is_dir(),
@@ -170,7 +170,7 @@ static MANIFEST: OnceLock<Manifest> = OnceLock::new();
 /// What this build needs. Development builds use the repo's resources and never download.
 pub fn manifest(app: &AppHandle) -> &'static Manifest {
     MANIFEST.get_or_init(|| {
-        if cfg!(debug_assertions) {
+        if cfg!(any(debug_assertions, windows)) {
             return Manifest::default();
         }
         let file = app.path().resource_dir().ok().map(|d| d.join("components.json"));
@@ -195,6 +195,11 @@ fn dev_dir() -> Option<PathBuf> {
 
 /// The folder `name` runs from, if any copy of it is here.
 pub fn path(app: &AppHandle, name: &str) -> Option<PathBuf> {
+    #[cfg(windows)]
+    if name == "engine" {
+        // The Windows installer carries the engine and its assets together, not a component archive.
+        return app.path().resource_dir().ok().map(|d| d.join("engine")).filter(|d| complete(name, d));
+    }
     let want = manifest(app).get(name).map(|c| c.version.as_str());
     let bundle = app.path().resource_dir().ok();
     resolve(candidates(root(app).as_deref(), want, bundle.as_deref(), dev_dir().as_deref(), name), |d| complete(name, d))
@@ -399,6 +404,7 @@ pub fn install_from(name: &str, dir: &Path, fill: impl FnOnce(&Path) -> Result<(
     let filled = fill(&tmp).and_then(|_| if complete(name, &tmp) { Ok(()) } else { Err(format!("{name} {version} is incomplete")) });
     // a copy out of an app installed from the dmg carries its quarantine flag; the app was
     // opened already, and its parts should start the way they did inside it
+    #[cfg(target_os = "macos")]
     if filled.is_ok() {
         let _ = Command::new("/usr/bin/xattr").args(["-dr", "com.apple.quarantine"]).arg(&tmp).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
@@ -673,6 +679,19 @@ mod tests {
     }
 
     #[test]
+    fn bundled_engine_needs_the_platform_executable_and_its_assets() {
+        let d = tmp("engine");
+        std::fs::write(d.join(if cfg!(windows) { "ondra-engine" } else { "ondra-engine.exe" }), []).unwrap();
+        std::fs::write(d.join("package.json"), "{}").unwrap();
+        assert!(!complete("engine", &d));
+        std::fs::write(d.join(if cfg!(windows) { "ondra-engine.exe" } else { "ondra-engine" }), []).unwrap();
+        assert!(complete("engine", &d));
+        std::fs::remove_file(d.join("package.json")).unwrap();
+        assert!(!complete("engine", &d));
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
     fn finds_the_installed_version_first_then_the_bundle_then_the_repo() {
         let d = tmp("resolve");
         let (root, bundle, dev) = (d.join("data"), d.join("Resources"), d.join("repo"));
@@ -743,6 +762,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    #[cfg(target_os = "macos")] // the macOS component archive and clone tools
     #[test]
     fn unpacks_an_archive_and_clones_a_bundled_copy() {
         let d = tmp("unpack");

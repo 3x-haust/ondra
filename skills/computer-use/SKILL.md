@@ -1,7 +1,7 @@
 ---
 name: computer-use
 description: >
-  Native Mac app automation that runs in the background on the user's own Mac.
+  Local native app automation on Mac, in the background. Unavailable on Windows workers.
   Read before operating Mac apps, clicking buttons, typing into fields or
   capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 메신저 앱).
   Covers how it stays in the background, starting the right app, observation,
@@ -14,6 +14,12 @@ metadata:
 ---
 
 # Computer use
+
+## On a Windows worker
+
+The `computer` tool is unavailable: Ondra cannot verify the Windows user's approval for a specific app. Permission to view a remote project is not permission to read or control its desktop. Even an active, unlocked session does not enable app access. If a task needs a Windows app, ask the user to complete that step. Do not use a shell, remote input or the Mac fallbacks below instead.
+
+## On a Mac worker
 
 Native app automation runs **in the background on the user's own Mac**, through
 the `computer` tool and its signed `ondra-cuhost` helper. It operates one target

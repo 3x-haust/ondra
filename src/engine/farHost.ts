@@ -10,7 +10,7 @@
 import { onEvent, artifactsList, farPiece, farPut, farReal, farStat, fsFiles, fsGrep, fsRead, fsWrite, ghIssue, ghIssues, ghPrView, gitChanges, gitCommit, gitFileAt, gitMerged, gitPr, gitPush, openInEditor, ptyClose, ptyOpen, ptyResize, ptyWrite, reverseTrace, revealPath, spaceEnv, type Env } from "../lib/native";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Project, Task } from "../state/types";
-import { allowedPath, capText, cleanRoots, mentions, normPath, repoPath, under } from "./farPaths";
+import { allowedPath, capText, cleanRoots, mentions, mirrorPath, normPath, realPath, repoPath, tooWide, under, windowsHome } from "./farPaths";
 import { engine, expand } from "./rpc";
 import { addMemory, isLive, removeMemory, updateMemory } from "./memory";
 import { skillsFor } from "./skillMenu";
@@ -57,7 +57,9 @@ export function rootsFor(p: FarPeer): string[] {
   const data = engine.info.dataDir;
   for (const t of state.tasks) {
     if (!p.sees(t)) continue;
-    dirs.push(t.cwd, t.worktree?.path, t.worktree?.repo);
+    dirs.push(t.cwd);
+    const w = t.worktree;
+    if (w) dirs.push(...[w.path, w.repo].map((root) => w.sub ? `${root}/${w.sub}` : root));
     if (data) dirs.push(`${data}/artifacts/${safeId(t.id)}`);
   }
   if (data) dirs.push(`${data}/attachments/remote`);
@@ -68,14 +70,17 @@ export function rootsFor(p: FarPeer): string[] {
  *  path, not a part of a longer one */
 function named(p: FarPeer, abs: string): boolean {
   if (!/\/[^/]*[^/.]\.[A-Za-z0-9]+$/.test(abs)) return false;
+  const win = windowsHome(home());
+  const native = win ? abs.replace(/\//g, "\\") : abs;
+  const textNames = (text: string) => mentions(text, abs) || (win && mentions(text, native));
   for (const t of state.tasks) {
     if (!p.sees(t)) continue;
-    if (t.shot && expand(t.shot) === abs) return true;
+    if (t.shot && normPath(t.shot, home()) === abs) return true;
     for (const e of t.entries) {
       const hit =
-        e.kind === "tool" ? !!e.tool.image && expand(e.tool.image) === abs
-        : e.kind === "text" || e.kind === "user" ? mentions(e.text, abs)
-        : e.kind === "block" ? mentions(JSON.stringify(e.block), abs)
+        e.kind === "tool" ? !!e.tool.image && normPath(e.tool.image, home()) === abs
+        : e.kind === "text" ? textNames(e.text)
+        : e.kind === "block" ? mentions(JSON.stringify(e.block), abs) || (win && mentions(JSON.stringify(e.block), JSON.stringify(native).slice(1, -1)))
         : false;
       if (hit) return true;
     }
@@ -83,23 +88,55 @@ function named(p: FarPeer, abs: string): boolean {
   return false;
 }
 
+/** A file selected on this host for this job (directly, or via the main chat that routed it).
+ * The transcript is only used to narrow a routed selection, never to make a new one. */
+function pickedTargets(p: FarPeer, abs: string): Set<string> {
+  const targets = new Set<string>();
+  const routed = state.captain.filter((m) => m.pickedFiles?.some((f) => f.path === abs));
+  for (const t of state.tasks) {
+    if (!p.sees(t)) continue;
+    for (const f of t.pickedFiles ?? []) if (f.path === abs) targets.add(f.real);
+    for (const m of routed) {
+      if (!m.routes?.some((r) => (r.kind === "append" || r.kind === "new") && r.taskId === t.id)) continue;
+      const native = windowsHome(home()) ? abs.replace(/\//g, "\\") : abs;
+      if (!t.entries.some((e) => e.kind === "user" && (mentions(e.text, abs) || mentions(e.text, native)))) continue;
+      for (const f of m.pickedFiles!) if (f.path === abs) targets.add(f.real);
+    }
+  }
+  return targets;
+}
+
 /** The path, absolute, when that Mac may reach it; else an error. Links are followed: one
  *  pointing out of the folders counts as outside. `files`: a single file a job named is fine too
  *  (as it named it: that one file, wherever it is). */
 async function reach(p: FarPeer, path: unknown, files = false): Promise<string> {
-  if (typeof path !== "string") fail(NOT_THERE);
+  if (!home() || typeof path !== "string") fail(NOT_THERE);
   const abs = normPath(path as string, home()) ?? fail(NOT_THERE);
-  if (files && named(p, abs)) return abs;
   const roots = rootsFor(p);
-  if (!allowedPath(abs, roots, home())) fail(NOT_THERE);
-  const [real, ...rootsReal] = await farReal([abs, ...roots]).catch(() => [abs, ...roots]);
-  if (real && real !== abs && !rootsReal.some((r, i) => under(real, r ?? roots[i]))) fail(NOT_THERE);
-  return abs;
+  const inProject = allowedPath(abs, roots, home());
+  const picks = files && !inProject ? pickedTargets(p, abs) : undefined;
+  const oneFile = files && !inProject && named(p, abs);
+  if (!inProject && !oneFile && !picks?.size) return fail(NOT_THERE);
+  const [real, ...rootsReal] = (await farReal([abs, ...roots])).map((r) => realPath(r, home()));
+  if (!real) return fail(NOT_THERE);
+  if (inProject && rootsReal.some((r) => r && !tooWide(r, home()) && under(real, r))) return real;
+  // A named output grants that file, not a target it can be redirected to. macOS stores
+  // /var and /tmp under /private, including its standard screenshot and temp directories.
+  const sameName = real === abs || (!windowsHome(home()) && /^\/(tmp|var)\//.test(abs) && real === `/private${abs}`);
+  if (picks?.has(real) || (oneFile && sameName)) {
+    const st = await farStat(real);
+    if (st && !st.dir) return real;
+  }
+  return fail(NOT_THERE);
 }
 
 /** the env of a folder's space here (gh signed in as that space) */
 const envOf = async (dir: string): Promise<Env> => {
-  const pr = (state.projects ?? []).find((x) => under(dir, expand(x.folder)));
+  // `dir` came back from reach() with links followed: match it against the folders followed too
+  const projects = state.projects ?? [];
+  const folders = projects.map((x) => normPath(x.folder, home()) ?? "");
+  const reals = (await farReal(folders).catch(() => folders)).map((r) => realPath(r, home()));
+  const pr = projects.find((_, i) => [reals[i], folders[i]].some((root) => root && under(dir, root)));
   const space = pr?.space ?? state.space;
   return spaceEnv(spaceById(space)).catch(() => []);
 };
@@ -170,31 +207,31 @@ export function farMsg(p: FarPeer, msg: Record<string, unknown>) {
 type Fn = (p: FarPeer, ...a: never[]) => unknown;
 const FAR: Record<string, Fn> = {
   /** every file of a folder (relative paths) */
-  "far.files": async (p, dir: string) => fsFiles(await reach(p, dir)),
+  "far.files": async (p, dir: string) => fsFiles(await reach(p, dir), true),
   "far.read": async (p, path: string) => fsRead(await reach(p, path, true)),
-  "far.grep": async (p, dir: string, q: string) => fsGrep(await reach(p, dir), String(q ?? "")),
+  "far.grep": async (p, dir: string, q: string) => fsGrep(await reach(p, dir), String(q ?? ""), true),
   "far.write": async (p, path: string, text: string, expect?: number) => fsWrite(await reach(p, path), String(text ?? ""), typeof expect === "number" ? expect : undefined),
   "far.stat": async (p, path: string) => farStat(await reach(p, path, true)),
   "far.piece": async (p, path: string, offset: number, len: number) => farPiece(await reach(p, path, true), Math.max(0, Number(offset) || 0), Math.min(MAX_PIECE, Math.max(0, Number(len) || MAX_PIECE))),
   "far.changes": async (p, dir: string, base?: string, counts?: boolean) => {
-    const c = await gitChanges(await reach(p, dir), typeof base === "string" ? base : undefined);
+    const c = await gitChanges(await reach(p, dir), typeof base === "string" ? base : undefined, true);
     if (counts === true) return { ...c, patch: "" };
     const { text, cut } = capText(c.patch ?? "", MAX_TEXT);
     return { ...c, patch: text, cut };
   },
   "far.fileAt": async (p, dir: string, rev: string | null, path: string) => {
-    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path) ?? fail(NOT_THERE));
+    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path, home()) ?? fail(NOT_THERE), true);
     if (f.text === null) return f;
     const { text, cut } = capText(f.text, MAX_TEXT);
     return { ...f, text, cut: f.cut || cut };
   },
   "far.merged": async (p, repo: string, branch: string, into: string | undefined, base: string) => {
-    const m = await gitMerged(await reach(p, repo), String(branch), typeof into === "string" ? into : undefined, String(base));
+    const m = await gitMerged(await reach(p, repo), String(branch), typeof into === "string" ? into : undefined, String(base), true);
     if (!m) return m;
     const { text, cut } = capText(m.changes.patch ?? "", MAX_TEXT);
     return { ...m, changes: { ...m.changes, patch: text, cut } };
   },
-  "far.artifacts": (p, id: string) => artifactsList(myTask(p, id).id),
+  "far.artifacts": async (p, id: string) => (await artifactsList(myTask(p, id).id)).map((f) => ({ ...f, path: mirrorPath(f.path, home()) })),
   "far.trace": async (p, id: string, from: number) => {
     const r = await reverseTrace(myTask(p, id).id, Math.max(0, Number(from) || 0));
     const { text, cut } = capText(r.text, 1 << 20);

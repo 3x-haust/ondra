@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 // that Mac's files, and the copies made here
 const there = new Map<string, { text: string; modified: number }>();
 const here = new Map<string, string>();
+let winCache = false;
 const refused = new Set<string>();
 const enc = (s: string) => new TextEncoder().encode(s);
 const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
@@ -29,7 +30,7 @@ vi.mock("../lib/native", async (orig) => {
   return {
     ...real,
     farPut: vi.fn(async (kind: string, name: string, offset: number, data: string) => {
-      const p = `/cache/${kind}/${name}`;
+      const p = winCache ? `C:\\cache\\${kind}\\${name.replace(/\//g, "\\")}` : `/cache/${kind}/${name}`;
       here.set(p, (offset ? here.get(p) ?? "" : "") + fromB64(data));
       return p;
     }),
@@ -40,7 +41,7 @@ vi.mock("../lib/native", async (orig) => {
 
 import { askHost } from "./hosts";
 import { pageSrcOf } from "./far";
-import { refreshEngine } from "./rpc";
+import { engine, refreshEngine } from "./rpc";
 
 const put = (p: string, text: string, modified = 1) => there.set(p, { text, modified });
 const flush = async () => {
@@ -53,6 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   there.clear();
   here.clear();
+  winCache = false;
   refused.clear();
 });
 
@@ -101,6 +103,21 @@ describe("a page of another Mac", () => {
     );
     // asked there in that Mac's terms
     expect(vi.mocked(askHost).mock.calls.every((c) => String((c[2] as unknown[])[0]).startsWith("/Users/other") || typeof (c[2] as unknown[])[0] !== "string")).toBe(true);
+  });
+
+  it("fetches an old Mac's home-relative page and image onto a Windows viewer", async () => {
+    const info = vi.spyOn(engine, "info", "get").mockReturnValue({ ...engine.info, home: String.raw`C:\Users\viewer` });
+    const p = String.raw`C:\Users\viewer/site/index.html`;
+    winCache = true;
+    put("/Users/other/site/index.html", '<img src="img/a%20b.png">');
+    put("/Users/other/site/img/a b.png", "photo");
+    try {
+      pageSrcOf(p, "win-viewer");
+      await vi.waitFor(() => expect(fetched().sort()).toEqual(["/Users/other/site/img/a b.png", "/Users/other/site/index.html"]));
+      expect([...here.keys()].sort()).toEqual([expect.stringMatching(/^C:\\cache\\site\\\w+\\site\\img\\a b\.png$/), expect.stringMatching(/^C:\\cache\\site\\\w+\\site\\index\.html$/)]);
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it("is copied again when it changes there, and what didn't change stays", async () => {

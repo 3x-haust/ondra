@@ -35,7 +35,7 @@ import {
   type GitChanges,
   type Merged,
 } from "../lib/native";
-import { asHostPath, cacheName, pageRefs, resolveRef, scanKind, siteName, uploadName } from "./farPaths";
+import { asHostPath, cacheName, pageRefs, resolveRef, scanKind, siteName, uploadName, uploadBase } from "./farPaths";
 import { askHost, onPeerKind, tellHost } from "./hosts";
 import { engine } from "./rpc";
 import { t } from "../i18n";
@@ -165,11 +165,10 @@ const SITE_BYTES = 200 << 20;
 const SCAN_MAX = 4 << 20;
 
 interface Site {
-  /** the page's copy here, and the folder the copies are laid out in */
+  /** the page's copy here */
   path?: string;
-  root?: string;
-  /** each file copied: its version there ("modified:size") */
-  got: Map<string, string>;
+  /** Each file's version there and the actual local path returned by farPut. */
+  got: Map<string, { mark: string; file: string }>;
   /** the page's version when last copied */
   page?: number;
   busy?: boolean;
@@ -198,13 +197,13 @@ async function syncSite(host: string, page: string, s: Site): Promise<boolean> {
     const mark = `${st.modified}:${st.size}`;
     const name = siteName(host, path);
     // the same version as last time, still here: kept
-    let file = s.root && s.got.get(path) === mark ? `${s.root}${name}` : undefined;
+    const cached = s.got.get(path);
+    let file = cached?.mark === mark ? cached.file : undefined;
     if (file && (await farStat(file))?.size !== st.size) file = undefined;
     if (!file) {
       file = await fetchTo(host, path, name, st.size, "site").catch(() => undefined);
       if (!file) return;
-      s.got.set(path, mark);
-      s.root ??= file.slice(0, file.length - name.length);
+      s.got.set(path, { mark, file });
       changed = true;
     }
     if (path === page) s.path = file;
@@ -253,6 +252,9 @@ async function lookSite(host: string, page: string, key: string) {
  *  that Mac comes with the files it uses, and shows again when it changes there. */
 export function pageSrcOf(path: string, host: Where): string {
   if (!host || !path) return pageSrc(path);
+  // Views may have expanded the remote '~' with the viewer's local drive.
+  // Resolve links and lay out the copies in the remote path's grammar instead.
+  path = there(path);
   const key = `${host}|${path}`;
   const s: Site = siteState.get(key) ?? { got: new Map(), at: 0, seen: 0, wait: 4000 };
   s.seen = Date.now();
@@ -270,7 +272,7 @@ export function pageSrcOf(path: string, host: Where): string {
   return x?.path ? `${pageSrc(x.path)}?v=${x.v}` : "";
 }
 /** too big to copy from that Mac */
-export const pageTooBig = (path: string, host: Where) => !!host && !!sites[`${host}|${path}`]?.big;
+export const pageTooBig = (path: string, host: Where) => !!host && !!sites[`${host}|${there(path)}`]?.big;
 
 // ───────── attachments: sent to that Mac, its paths given back
 
@@ -282,10 +284,11 @@ export async function sendFiles(host: string, files: string[]): Promise<string[]
   const out: string[] = [];
   for (const f of files) {
     const st = await farStat(f);
-    if (!st) throw new Error(t("파일이 없어요 · {name}", { name: f.split("/").pop() ?? f }));
-    if (st.dir) throw new Error(t("폴더는 다른 Mac에 보낼 수 없어요 · {name}", { name: f.split("/").pop() ?? f }));
-    if (st.size > MAX_UPLOAD) throw new Error(t("파일이 너무 커요 · {name}", { name: f.split("/").pop() ?? f }));
-    const name = uploadName(f, Date.now(), Math.random().toString(36).slice(2, 8));
+    const base = uploadBase(f, engine.info.home);
+    if (!st) throw new Error(t("파일이 없어요 · {name}", { name: base }));
+    if (st.dir) throw new Error(t("폴더는 다른 Mac에 보낼 수 없어요 · {name}", { name: base }));
+    if (st.size > MAX_UPLOAD) throw new Error(t("파일이 너무 커요 · {name}", { name: base }));
+    const name = uploadName(base, Date.now(), Math.random().toString(36).slice(2, 8));
     let at = "";
     for (let off = 0; off < st.size || off === 0; ) {
       const p = await farPiece(f, off, PIECE);

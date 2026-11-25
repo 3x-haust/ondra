@@ -11,7 +11,7 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -318,8 +318,9 @@ fn claude_session(path: &Path) -> ImportSession {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn keychain_has(service: &str) -> bool {
-    Command::new("/usr/bin/security")
+    std::process::Command::new("/usr/bin/security")
         .args(["find-generic-password", "-s", service])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -363,7 +364,8 @@ fn scan_claude() -> ImportSource {
     files.sort_by(|a, b| b.1.cmp(&a.1));
     files.truncate(SESSIONS_PER_SOURCE * 2);
     src.sessions = files.iter().map(|(p, _)| claude_session(p)).filter(keep_session).take(SESSIONS_PER_SOURCE).collect();
-    src.logged_in = src.logged_in || keychain_has("Claude Code-credentials");
+    #[cfg(target_os = "macos")]
+    { src.logged_in = src.logged_in || keychain_has("Claude Code-credentials"); }
     src
 }
 
@@ -638,7 +640,10 @@ fn scan_cursor() -> ImportSource {
         }
     }
     add_skills(&mut src, &root.join("skills"));
-    src.logged_in = home().join("Library/Application Support/Cursor").is_dir();
+    #[cfg(windows)]
+    { src.logged_in = dirs::data_dir().is_some_and(|dir| dir.join("Cursor").is_dir()); }
+    #[cfg(not(windows))]
+    { src.logged_in = home().join("Library/Application Support/Cursor").is_dir(); }
     src
 }
 
@@ -651,7 +656,7 @@ fn opencode_db() -> PathBuf {
 /// Runs a read-only query with the system sqlite3 and returns its JSON rows.
 fn sqlite_json(db: &Path, sql: &str) -> Vec<Value> {
     let uri = format!("file:{}?immutable=1", db.display());
-    let Ok(out) = Command::new("/usr/bin/sqlite3")
+    let Ok(out) = crate::engine::background_command(if cfg!(windows) { "sqlite3.exe" } else { "/usr/bin/sqlite3" })
         .args(["-json", &uri, sql])
         .stdin(Stdio::null())
         .stderr(Stdio::null())

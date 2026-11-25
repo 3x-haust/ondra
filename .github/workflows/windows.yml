@@ -1,0 +1,133 @@
+name: Windows installer
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify NSIS (x64 MSVC)
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      ENGINE_REV: 3311ed88dc6c5c403db2ce4edc762b734acbfb25
+      TARGET: x86_64-pc-windows-msvc
+      CARGO_INCREMENTAL: '0' # No artifacts from this runner are reused in a later build.
+      RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.14.0'
+          package-manager-cache: false
+
+      - id: bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64-baseline.zip
+          no-cache: true
+
+      - name: Install pnpm and Rust MSVC
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $tools = Join-Path $env:RUNNER_TEMP pnpm
+          npm install --global --prefix $tools pnpm@11.6.0
+          $tools >> $env:GITHUB_PATH
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+
+      - name: Build the pinned coding agent
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $engine = Join-Path $env:RUNNER_TEMP engine
+          git init --quiet $engine
+          Set-Location $engine
+          git config core.autocrlf false
+          git config core.longpaths true
+          git fetch --no-tags --depth 1 https://github.com/3x-haust/3xhaustpi.git $env:ENGINE_REV
+          git checkout --detach $env:ENGINE_REV
+          npm ci --ignore-scripts
+          npm run build:offline
+          "ONDRA_ENGINE_DIST=$((Resolve-Path packages/coding-agent/dist).Path)" >> $env:GITHUB_ENV
+
+      - name: Install app dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build unsigned installer
+        env:
+          ONDRA_ENGINE_BUN_EXE: ${{ steps.bun.outputs.bun-path }}
+        run: pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
+
+      - name: Verify installed payload
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $bundles = "src-tauri/target/$env:TARGET/release/bundle/nsis"
+          $setup = @(Get-ChildItem $bundles -Filter '*-setup.exe' -File)
+          if ($setup.Count -ne 1) { throw "Expected one NSIS installer in $bundles; found $($setup.Count)" }
+          $installed = Join-Path $env:RUNNER_TEMP installed
+          $process = Start-Process $setup[0].FullName -ArgumentList '/S', "/D=$installed" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "NSIS installer exited with $($process.ExitCode)" }
+
+          foreach ($file in 'ondra.exe', 'engine/package.json', 'engine/photon_rs_bg.wasm',
+                   'engine/native/win32/prebuilds/win32-x64/win32-platform.node', 'engine/THIRD_PARTY_NOTICES.txt') {
+            if ((Get-Item -LiteralPath (Join-Path $installed $file)).Length -eq 0) { throw "Empty installed file: $file" }
+          }
+          $builtHash = (Get-FileHash "src-tauri/binaries/ondra-remote-$env:TARGET.exe" -ErrorAction Stop).Hash
+          $installedHash = (Get-FileHash "$installed/ondra-remote.exe" -ErrorAction Stop).Hash
+          if ($installedHash -ne $builtHash) { throw 'Installed remote helper differs from the build' }
+          $expected = (Get-Content "$env:ONDRA_ENGINE_DIST/../package.json" -Raw | ConvertFrom-Json).version
+          Set-Location $installed
+          $version = & ./engine/ondra-engine.exe --version
+          if ($version -ne $expected) { throw "Installed engine reported '$version'; expected '$expected'" }
+          Get-FileHash $setup[0].FullName | Format-List
+
+      - name: Check first launch and relaunch
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP installed/ondra.exe
+          $first = Start-Process $exe -PassThru
+          try {
+            $deadline = (Get-Date).AddMinutes(1)
+            do {
+              $first.Refresh()
+              if ($first.HasExited) { throw "Ondra exited during startup: $($first.ExitCode)" }
+              if ($first.MainWindowHandle -ne 0) { break }
+              Start-Sleep -Milliseconds 250
+            } until ((Get-Date) -ge $deadline)
+            if ($first.MainWindowHandle -eq 0) { throw 'Ondra did not open a window' }
+            $second = Start-Process $exe -PassThru
+            if (!$second.WaitForExit(15000) -or $second.ExitCode -ne 0 -or $first.HasExited) {
+              throw 'Relaunch did not reuse the running app'
+            }
+          } finally {
+            if (!$first.HasExited) { $first.Kill(); $first.WaitForExit() }
+          }
+
+      - name: Run Windows platform tests
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          pnpm test src/engine/farPaths.test.ts src/lib/nativeAssets.test.ts
+          cargo test --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked identity
+          foreach ($test in 'remote::power::tests', 'winvault::tests', 'providers::tests::keychain_wrapper_stores_reads_and_deletes',
+                   'farfs::tests', 'components::tests::bundled_engine_needs_the_platform_executable_and_its_assets') {
+            cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib $test
+          }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Ondra-windows-x64-nsis
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

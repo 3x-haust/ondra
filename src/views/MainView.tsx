@@ -16,6 +16,7 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
 import { fsFiles, pickFolder } from "../lib/native";
+import { rememberPickedFiles } from "../engine/pickedFiles";
 import { listFiles, sendFiles, srcOf } from "../engine/far";
 import { splitProjectId } from "../state/mirror";
 import { jobShot, resultOfTask } from "../engine/results";
@@ -631,7 +632,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
   const p = () => (props.project ? projectById(props.project) : undefined);
   const account = () => chooseAccount(state.space, p()?.name ?? "");
   const computer = () => (p() ? (p()!.host ? { host: p()!.host! } : undefined) : chosenComputer());
-  const send = (text: string) => {
+  const send = (text: string, picked?: string[]) => {
     // "/skill:pet-maker 피카츄" is titled by its words, not the skill's name
     const words = text.replace(/^\/skill:\S+\s*(\(also use [^)]*\)\s*)?/, "");
     const id = createTask({
@@ -648,6 +649,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
       hostAccount: computer() ? hostAccount(computer()!, state.space)?.id : undefined,
       ...(computer() ? hostPick(computer()!) : {}),
     });
+    void rememberPickedFiles("task", id, picked);
     setPaneDraft(props.pane, null);
     focusPane(props.pane);
     openTask(id);
@@ -751,15 +753,19 @@ export function MainView() {
   const raw = () => (project() && mainHere() ? undefined : computer());
   /** the question the input answers: the first card in the dock (the one its number keys answer), as in a job's thread */
   const answering = () => ((d) => (d && !d.ui && !d.form?.length ? d : undefined))(asks()[0]);
-  const sendMain = (text: string) => {
+  const sendMain = (text: string, picked?: string[]) => {
     // a question is open: what's typed is the answer to it, not a new message
     const d = answering();
-    if (d) return void decide(d.id, text.trim());
+    if (d) {
+      void rememberPickedFiles("task", d.taskId, picked);
+      return void decide(d.id, text.trim());
+    }
     const p = project();
     const at = raw();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
     if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
-    return throwThought(text, state.space, { project: p?.id });
+    const reply = throwThought(text, state.space, { project: p?.id });
+    void rememberPickedFiles("main", reply, picked);
   };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
   const lastRow = createMemo(() => {

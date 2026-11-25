@@ -146,8 +146,8 @@ pub fn permission_guide(pane: String, title: String, sub: String) -> Result<(), 
 
 /// Sidecars sit beside the running executable, both in `tauri dev` and in the bundle.
 pub fn sidecar(name: &str) -> Option<PathBuf> {
-    let path = sidecar_dir()?.join(name);
-    path.exists().then_some(path)
+    let path = sidecar_dir()?.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    path.is_file().then_some(path)
 }
 
 pub fn sidecar_dir() -> Option<PathBuf> {
@@ -198,7 +198,7 @@ pub fn chrome_in(dir: &Path) -> Option<PathBuf> {
 
 /// A Command for ondra-browser that finds its Chrome.
 pub fn browser_command(app: &AppHandle) -> Option<Command> {
-    let mut cmd = Command::new(sidecar("ondra-browser")?);
+    let mut cmd = crate::engine::background_command(sidecar("ondra-browser")?);
     if let Some(chrome) = chrome_path(app) {
         cmd.env("ONDRA_BROWSER_EXECUTABLE_PATH", chrome);
     }
@@ -225,7 +225,7 @@ pub struct ToolStatus {
 #[tauri::command]
 pub async fn tool_status(app: AppHandle) -> ToolStatus {
     // `ondra-cuhost --version` / `ondra-browser --version` print "<name> <version>"
-    let version = |name: &str| first_line(sidecar(name).map(Command::new), &["--version"]).map(|s| s.trim_start_matches(name).trim().to_string());
+    let version = |name: &str| first_line(sidecar(name).map(crate::engine::background_command), &["--version"]).map(|s| s.trim_start_matches(name).trim().to_string());
     let desktop_version = version("ondra-cuhost");
     ToolStatus {
         browser_version: version("ondra-browser"),
@@ -455,7 +455,7 @@ pub struct GlobalSkill {
 
 #[tauri::command(async)]
 pub fn global_skills() -> Vec<GlobalSkill> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return vec![] };
+    let Some(home) = crate::engine::user_home() else { return vec![] };
     let mut out = Vec::new();
     for (name, path) in skill_dirs(&home.join(".agents/skills")) {
         let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -676,6 +676,7 @@ fn dev_bundle(app: &AppHandle, id: &str) {
 // log in, and from then on that space has its own login. 개인 uses the Mac's.
 
 /** CLIs that keep their login under $HOME and have no variable to move it */
+#[cfg(unix)]
 const HOME_CLIS: &[&str] = &["vercel", "supabase", "netlify", "railway", "fly", "flyctl", "firebase", "eas", "heroku", "doctl", "wrangler", "stripe"];
 
 pub(crate) fn space_base(app: &AppHandle, space: &str) -> PathBuf {
@@ -685,7 +686,7 @@ pub(crate) fn space_base(app: &AppHandle, space: &str) -> PathBuf {
 
 fn expand_home(p: &str) -> PathBuf {
     match p.strip_prefix("~/") {
-        Some(rest) => std::env::var("HOME").map(|h| PathBuf::from(h).join(rest)).unwrap_or_else(|_| PathBuf::from(p)),
+        Some(rest) => crate::engine::home().join(rest),
         None => PathBuf::from(p),
     }
 }
@@ -740,10 +741,12 @@ fn prepare_home(base: &Path) {
     if text != before {
         let _ = std::fs::write(&git, text);
     }
+    #[cfg(target_os = "macos")]
     link_keychain(base);
 }
 
 /** CLIs run with a space home as $HOME still find the Mac's login keychain */
+#[cfg(target_os = "macos")]
 fn link_keychain(base: &Path) {
     let kc = base.join("Library/Keychains");
     if !kc.exists() {
@@ -756,6 +759,7 @@ fn link_keychain(base: &Path) {
 }
 
 /** shims that run HOME-only CLIs with the space's home, for the ones installed */
+#[cfg(unix)]
 fn write_shims(dir: &Path, base: &Path) {
     let _ = std::fs::create_dir_all(dir);
     let q = |p: &Path| p.display().to_string().replace('\'', "'\\''");
@@ -804,15 +808,22 @@ pub fn space_env(app: AppHandle, space: String, home: Option<String>) -> Vec<(St
     if base.join(".ssh/config").exists() {
         env.push(("GIT_SSH_COMMAND".into(), format!("ssh -F '{}'", b(".ssh/config"))));
     }
-    link_keychain(&base);
-    let shims = space_base(&app, &space).join("bin");
-    write_shims(&shims, &base);
-    let mut path = vec![shims.display().to_string()];
+    let mut path = Vec::new();
+    #[cfg(unix)]
+    {
+        #[cfg(target_os = "macos")]
+        link_keychain(&base);
+        let shims = space_base(&app, &space).join("bin");
+        write_shims(&shims, &base);
+        path.push(shims.display().to_string());
+    }
     // a wrapper setup the user already has (…/home next to …/bin): its commands first
     if let Some(bin) = base.parent().map(|p| p.join("bin")).filter(|p| !own && p.is_dir()) {
         path.insert(0, bin.display().to_string());
     }
-    env.push(("PATH".into(), path.join(":")));
+    if !path.is_empty() {
+        env.push(("PATH".into(), path.join(crate::engine::PATH_SEPARATOR)));
+    }
     env
 }
 
@@ -827,7 +838,7 @@ pub struct SpaceTools {
 }
 
 fn git_get(file: Option<&Path>, key: &str) -> Option<String> {
-    let mut cmd = Command::new("git");
+    let mut cmd = crate::engine::background_command("git");
     cmd.arg("config");
     match file {
         Some(f) => cmd.arg("--file").arg(f).arg("--includes"),
@@ -846,7 +857,13 @@ pub fn space_tools(app: AppHandle, space: String, home: Option<String>) -> Space
             prepare_home(b);
         }
     }
-    let gh_dir = base.as_ref().map(|b| b.join(".config/gh")).unwrap_or_else(|| expand_home("~/.config/gh"));
+    let gh_dir = base.as_ref().map(|b| b.join(".config/gh")).unwrap_or_else(|| {
+        #[cfg(windows)]
+        if let Some(dir) = std::env::var_os("GH_CONFIG_DIR").map(PathBuf::from).or_else(|| std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join("GitHub CLI"))) {
+            return dir;
+        }
+        expand_home("~/.config/gh")
+    });
     let git = base.as_ref().map(|b| b.join(".gitconfig"));
     SpaceTools {
         home: base.as_ref().map(|b| b.display().to_string()),
@@ -864,8 +881,21 @@ pub fn space_gh_login(app: AppHandle, space: String, home: Option<String>) -> Re
     if let Some(g) = &gh {
         std::fs::create_dir_all(g).map_err(|e| e.to_string())?;
     }
-    let dir = space_base(&app, &space);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new("gh");
+        if let Some(dir) = gh { cmd.env("GH_CONFIG_DIR", dir); }
+        cmd.args(["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"])
+            .creation_flags(0x00000010).spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    { open_gh_login(&space_base(&app, &space), gh) }
+}
+
+#[cfg(not(windows))]
+fn open_gh_login(dir: &Path, gh: Option<PathBuf>) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let script = dir.join("github-login.command");
     let export = gh.map(|g| format!("export GH_CONFIG_DIR='{}'\n", g.display().to_string().replace('\'', "'\\''"))).unwrap_or_default();
     std::fs::write(&script, format!("#!/bin/zsh -l\n{export}gh auth login --hostname github.com --git-protocol https --web\necho\necho \"이 창은 닫아도 돼요.\"\n"))
@@ -888,7 +918,7 @@ pub fn space_git_identity(app: AppHandle, space: String, home: Option<String>, n
         }
     }
     for (key, v) in [("user.name", name.trim()), ("user.email", email.trim())] {
-        let mut cmd = Command::new("git");
+        let mut cmd = crate::engine::background_command("git");
         cmd.arg("config");
         match &base {
             Some(b) => cmd.arg("--file").arg(b.join(".gitconfig")),

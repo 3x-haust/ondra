@@ -2,6 +2,9 @@ import { reconcile } from "solid-js/store";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { freshState, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
+import { engine } from "./rpc";
+import { onPeer } from "./hosts";
+import { mirror, setMirror } from "../state/mirror";
 
 // the helper, as engine/remote.ts hears it: events in, commands out
 let hear: (ev: Record<string, unknown>) => void = () => {};
@@ -50,6 +53,37 @@ beforeEach(() => {
   hear({ ev: "msg", conn: 1, data: { t: "watch", projects: ["app", "payroll"] } });
 });
 
+describe("Windows projects mirrored to a Mac", () => {
+  it("discovers the project, mirrors usable page paths and reads back the relative image", async () => {
+    const win = vi.spyOn(engine, "info", "get").mockReturnValue({ ...engine.info, home: String.raw`C:\Users\me` });
+    try {
+      const dir = String.raw`D:\Work\그림`;
+      setState("projects", [{ id: "app", name: "그림", space: "work", folder: dir }]);
+      setState("tasks", [job("inApp", { cwd: dir, project: "app", space: "work", entries: [
+        { id: "e", at: 1, kind: "block", block: { type: "page", path: `${dir}\\index.html` } },
+        { id: "f", at: 1, kind: "text", text: String.raw`![shot](C:\Shots\밖.png)` },
+      ] })]);
+      hear({ ev: "msg", conn: 1, data: { t: "projects" } });
+      const packets = () => sent.map((c) => c.data as { t?: string; list?: unknown[]; tasks?: { id: string; head?: Partial<Task>; entries: Task["entries"] }[] } | undefined);
+      const projects = packets().find((m) => m?.t === "projects" && (m.list?.[0] as { name?: string })?.name === "그림")!;
+      expect(projects.list).toEqual([{ id: "app", name: "그림", space: "회사", folder: "/@drive/D/Work/그림" }]);
+      setState("settings", "hosts", [{ id: DEV, name: "PC" }]);
+      onPeer({ ev: "peer", peer: DEV, state: "ok" });
+      onPeer({ ev: "peer-msg", peer: DEV, data: projects });
+      expect(state.settings.hostProjects).toContainEqual({ host: DEV, id: "app", space: "work", name: "그림", folder: "/@drive/D/Work/그림" });
+      await vi.waitFor(() => expect(packets().some((m) => m?.t === "patch" && m.tasks?.some((j) => j.head?.cwd === "/@drive/D/Work/그림"))).toBe(true));
+      for (const m of packets().filter((m) => m?.t === "patch")) onPeer({ ev: "peer-msg", peer: DEV, data: m });
+      expect(mirror.hosts[DEV].tasks[0].entries).toMatchObject([{ block: { path: "/@drive/D/Work/그림/index.html" } }, { text: "![shot](/@drive/C/Shots/밖.png)" }]);
+      expect(await call("far.read", ["/@drive/D/Work/그림/img/a.png"])).toHaveProperty("value.text");
+      // The host keeps its actual path, not the mirror's spelling.
+      expect(taskById("inApp")!.cwd).toBe(dir);
+    } finally {
+      win.mockRestore();
+      setMirror("hosts", DEV, undefined!);
+    }
+  });
+});
+
 describe("calls from a Mac allowed in", () => {
   it("act on the jobs it may reach", async () => {
     expect(await call("renameTask", ["inApp", "renamed"])).toMatchObject({ value: null });
@@ -70,9 +104,26 @@ describe("calls from a Mac allowed in", () => {
     expect(taskById("inPayroll")?.title).toBe("mine now");
     // a new job or project there is refused too; here it's fine
     expect((await call("create", [{ id: "n1", title: "n", ask: "do", project: "payroll" }]))?.error).toBeTruthy();
-    expect((await call("addProject", ["/tmp/new"]))?.value).toBeTruthy();
-    expect(state.projects?.find((p) => p.folder === "/tmp/new")?.space).toBe("home");
+    const before = state.projects!.map((p) => p.id);
+    expect((await call("addProject", ["/tmp/new"]))?.error).toBeTruthy();
+    expect((await call("addProject", ["/tmp/payroll", "개인"]))?.error).toBeTruthy();
+    expect((await call("addProject", ["/tmp/app", "개인"]))?.value).toBe("app");
+    expect(state.projects!.map((p) => p.id)).toEqual(before);
     setDeviceSpaces(DEV, undefined);
+  });
+  it("keeps a new job in its allowed workspace and only inherits folders from visible jobs", async () => {
+    setDeviceSpaces(DEV, ["home"]);
+    try {
+      const id = "workspace-job";
+      await call("create", [{ id, title: "notes", ask: "notes", project: "app", follows: "inSecret", after: ["inApp", "inSecret"], reach: ["회사"] }]);
+      const task = taskById(id)!;
+      expect(task.cwd).toBe("/tmp/app");
+      expect(task.after).toEqual(["inApp"]);
+      expect(task.reach).toBeUndefined();
+      expect(task.follows).toBeUndefined();
+    } finally {
+      setDeviceSpaces(DEV, undefined);
+    }
   });
   it("answer, hand over and read secrets only for what it may reach", async () => {
     setState("decisions", [

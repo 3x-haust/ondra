@@ -3,8 +3,8 @@
 //!
 //! Each connection is written as one provider in the account's engine
 //! `models.json` (its `PI_CODING_AGENT_DIR`), merged with whatever else is there.
-//! Keys and header values never go into that file: they live in the macOS
-//! keychain and the file names them with the engine's `!command` form, which
+//! Keys and header values never go into that file: Keychain or Windows user-scoped DPAPI
+//! protects them, and the file names them with the engine's `!command` form, which
 //! the engine runs when it sends a request. Nothing here prints or logs a key.
 //!
 //! Listing models and the connection check run here rather than in the webview,
@@ -12,13 +12,18 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+#[cfg(any(not(windows), test))]
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+#[cfg(any(not(windows), test))]
+use std::process::Command;
+#[cfg(not(windows))]
+use std::process::Stdio;
 use std::time::Duration;
 use tauri::AppHandle;
 
 pub const SERVICE: &str = "dev.3xhaust.ondra.provider";
+#[cfg(not(windows))]
 const SECURITY: &str = "/usr/bin/security";
 /// what a keyless provider gets: the engine lists a provider's models only once it has some key
 pub const NO_KEY: &str = "none";
@@ -30,11 +35,18 @@ fn safe_name(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | ':'))
 }
 
+#[cfg(not(windows))]
 fn hex(s: &str) -> String {
     s.bytes().map(|b| format!("{b:02x}")).collect()
 }
 
+#[cfg(windows)]
+mod windows_keys;
+#[cfg(windows)]
+pub use windows_keys::{secret_set, secret_get, secret_exists, secret_delete, secret_ref, ref_account};
+
 /// Stores (or replaces) a secret. It goes to `security` on stdin as hex, never on a command line.
+#[cfg(not(windows))]
 pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
     if !safe_name(service) || !safe_name(account) {
         return Err("bad keychain name".into());
@@ -61,6 +73,7 @@ pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), Strin
 }
 
 /// Whether an item is there (attributes only; the secret is not read).
+#[cfg(not(windows))]
 pub fn secret_exists(service: &str, account: &str) -> bool {
     Command::new(SECURITY)
         .args(["find-generic-password", "-s", service, "-a", account])
@@ -72,6 +85,7 @@ pub fn secret_exists(service: &str, account: &str) -> bool {
 }
 
 /// The secret, for a request made from here (listing models, the check). Never returned to the webview.
+#[cfg(not(windows))]
 pub fn secret_get(service: &str, account: &str) -> Option<String> {
     let out = Command::new(SECURITY)
         .args(["find-generic-password", "-s", service, "-a", account, "-w"])
@@ -89,6 +103,7 @@ pub fn secret_get(service: &str, account: &str) -> Option<String> {
     (!v.is_empty()).then_some(v)
 }
 
+#[cfg(not(windows))]
 pub fn secret_delete(service: &str, account: &str) {
     // a name can have several items (made twice by hand): delete until none is left
     for _ in 0..8 {
@@ -106,11 +121,13 @@ pub fn secret_delete(service: &str, account: &str) {
 }
 
 /// The engine's command form for a keychain item: `!security find-generic-password … -w`.
-pub fn secret_ref(service: &str, account: &str) -> String {
-    format!("!{SECURITY} find-generic-password -s '{service}' -a '{account}' -w")
+#[cfg(not(windows))]
+pub fn secret_ref(service: &str, account: &str) -> Result<String, String> {
+    Ok(format!("!{SECURITY} find-generic-password -s '{service}' -a '{account}' -w"))
 }
 
 /// The keychain account a `secret_ref` value names, when it is one of ours.
+#[cfg(not(windows))]
 pub fn ref_account(service: &str, value: &str) -> Option<String> {
     let rest = value.strip_prefix(&format!("!{SECURITY} find-generic-password -s '{service}' -a '"))?;
     let (acct, tail) = rest.split_once('\'')?;
@@ -291,9 +308,9 @@ pub fn save_in(service: &str, dir: &Path, account_id: &str, provider: &str, mut 
         }
         Some(k) => {
             secret_set(service, &key_acct, k)?;
-            secret_ref(service, &key_acct)
+            secret_ref(service, &key_acct)?
         }
-        None if secret_exists(service, &key_acct) => secret_ref(service, &key_acct),
+        None if secret_exists(service, &key_acct) => secret_ref(service, &key_acct)?,
         None => NO_KEY.to_string(),
     };
     obj.insert("apiKey".into(), Value::String(api_key));
@@ -310,7 +327,7 @@ pub fn save_in(service: &str, dir: &Path, account_id: &str, provider: &str, mut 
             None if secret_exists(service, &acct) => {}
             None => continue,
         }
-        out.insert(h.name.clone(), Value::String(secret_ref(service, &acct)));
+        out.insert(h.name.clone(), Value::String(secret_ref(service, &acct)?));
     }
     // headers that were there and are gone now
     if let Some(old) = &old {
@@ -849,12 +866,13 @@ mod tests {
 
     #[test]
     fn keychain_refs_round_trip() {
-        let r = secret_ref(SERVICE, "acc-1/direct-x");
+        let r = secret_ref(SERVICE, "acc-1/direct-x").unwrap();
+        #[cfg(not(windows))]
         assert_eq!(r, "!/usr/bin/security find-generic-password -s 'dev.3xhaust.ondra.provider' -a 'acc-1/direct-x' -w");
         assert_eq!(ref_account(SERVICE, &r).as_deref(), Some("acc-1/direct-x"));
         assert_eq!(ref_account("other", &r), None);
         assert_eq!(ref_account(SERVICE, "sk-literal"), None);
-        let entry = json!({ "apiKey": r, "headers": { "X-A": secret_ref(SERVICE, "acc-1/direct-x/h/X-A"), "X-B": "plain" } });
+        let entry = json!({ "apiKey": r, "headers": { "X-A": secret_ref(SERVICE, "acc-1/direct-x/h/X-A").unwrap(), "X-B": "plain" } });
         assert_eq!(refs_in(SERVICE, &entry), vec!["acc-1/direct-x", "acc-1/direct-x/h/X-A"]);
         assert!(!safe_name("a b"));
         assert!(!safe_name("a'b"));
@@ -1076,8 +1094,13 @@ mod tests {
         assert!(secret_exists(svc, &acct));
         assert_eq!(secret_get(svc, &acct).as_deref(), Some(secret));
         // the engine's command form reads the same value
-        let cmd = secret_ref(svc, &acct);
+        let cmd = secret_ref(svc, &acct).unwrap();
+        #[cfg(not(windows))]
         let out = Command::new("/bin/sh").arg("-c").arg(&cmd[1..]).output().unwrap();
+        #[cfg(windows)]
+        let out = Command::new("cmd.exe").args(["/d", "/s", "/c"]).raw_arg(format!("\"{}\"", &cmd[1..])).output().unwrap();
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim_end_matches('\n'), secret);
         secret_set(svc, &acct, "second").unwrap();
         assert_eq!(secret_get(svc, &acct).as_deref(), Some("second"));
@@ -1092,13 +1115,13 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("models.json")).unwrap();
         assert!(!text.contains("k-1") && !text.contains("blue"), "no secret in the file");
         let entry = provider_entry(Some(&text), "direct-x").unwrap();
-        assert_eq!(entry["apiKey"], secret_ref(svc, &key_account(&id, "direct-x")));
+        assert_eq!(entry["apiKey"], secret_ref(svc, &key_account(&id, "direct-x")).unwrap());
         assert!(provider_entry(Some(&text), "other").is_some());
         assert_eq!(secret_get(svc, &key_account(&id, "direct-x")).as_deref(), Some("k-1"));
         // editing without a new key keeps it; dropping the header deletes its item
         save_in(svc, &dir, &id, "direct-x", json!({ "baseUrl": "http://h2/v1", "api": "openai-completions" }), None, vec![]).unwrap();
         let text = std::fs::read_to_string(dir.join("models.json")).unwrap();
-        assert_eq!(provider_entry(Some(&text), "direct-x").unwrap()["apiKey"], secret_ref(svc, &key_account(&id, "direct-x")));
+        assert_eq!(provider_entry(Some(&text), "direct-x").unwrap()["apiKey"], secret_ref(svc, &key_account(&id, "direct-x")).unwrap());
         assert!(!secret_exists(svc, &header_account(&id, "direct-x", "X-Team")));
         // 연결 삭제 deletes the account: every key its models.json names goes with it
         forget_in(svc, &dir);

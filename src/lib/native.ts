@@ -149,9 +149,9 @@ diff --git a/docs/setup.md b/docs/setup.md
 +- Xcode 명령줄 도구
 `;
 // outside the app: the readme job's own sample, every other job the fixture's changes (fixtureChanges.ts)
-export const gitChanges = (cwd: string, base?: string): Promise<GitChanges> =>
+export const gitChanges = (cwd: string, base?: string, scoped = false): Promise<GitChanges> =>
   inTauri || base === "readme"
-    ? call<GitChanges>("git_changes", { cwd, base: base ?? null }, {
+    ? call<GitChanges>("git_changes", { cwd, base: base ?? null, scoped }, {
         isRepo: true,
         branch: "task/t3",
         files: [
@@ -171,16 +171,16 @@ export interface FileAt {
   /** too long: `text` is its start */
   cut: boolean;
 }
-export const gitFileAt = (cwd: string, rev: string | null, path: string): Promise<FileAt> =>
-  inTauri ? invoke<FileAt>("git_file_at", { cwd, rev, path }) : import("../state/fixtureChanges").then((m) => m.fixtureFileAt(rev, path));
+export const gitFileAt = (cwd: string, rev: string | null, path: string, scoped = false): Promise<FileAt> =>
+  inTauri ? invoke<FileAt>("git_file_at", { cwd, rev, path, scoped }) : import("../state/fixtureChanges").then((m) => m.fixtureFileAt(rev, path));
 /** A merged job's work once its worktree is gone: the commits it was merged between, and what changed. */
 export interface Merged {
   from: string;
   to: string;
   changes: GitChanges;
 }
-export const gitMerged = (repo: string, branch: string, into: string | undefined, base: string): Promise<Merged | null> =>
-  inTauri ? invoke<Merged | null>("git_merged", { repo, branch, into: into ?? null, base }) : import("../state/fixtureChanges").then((m) => m.fixtureMerged());
+export const gitMerged = (repo: string, branch: string, into: string | undefined, base: string, scoped = false): Promise<Merged | null> =>
+  inTauri ? invoke<Merged | null>("git_merged", { repo, branch, into: into ?? null, base, scoped }) : import("../state/fixtureChanges").then((m) => m.fixtureMerged());
 
 interface WorktreeInfo {
   repo: string;
@@ -204,7 +204,7 @@ export const worktreeRemove = (repo: string, path: string, branch: string, keepB
 /** Every file in a folder, relative paths (git-tracked + new, or a capped walk). */
 /** Git repos in a folder, one or two levels down (worktrees left out). */
 export const fsRepos = (root: string) => call<string[]>("fs_repos", { root }, ["/Users/me/Work/projects/acme", "/Users/me/Work/projects/acme-web"]);
-export const fsFiles = (cwd: string) => call<string[]>("fs_files", { cwd }, ["src/router.ts", "src/auth/session.ts", "src/auth/oauth.ts", "README.md", "package.json"]);
+export const fsFiles = (cwd: string, scoped = false) => call<string[]>("fs_files", { cwd, scoped }, ["src/router.ts", "src/auth/session.ts", "src/auth/oauth.ts", "README.md", "package.json"]);
 export interface FileText {
   text: string | null;
   size: number;
@@ -215,8 +215,8 @@ export interface FileText {
 export const fsRead = (path: string) =>
   call<FileText>("fs_read", { path }, { text: "import { restore } from './auth/session';\n\nexport async function guard(to) {\n  await restore();\n  return to;\n}\n", size: 80, binary: false });
 /** Lines in the folder's files containing `query` (case-insensitive), up to 500. */
-export const fsGrep = (cwd: string, query: string) =>
-  call<{ path: string; line: number; text: string }[]>("fs_grep", { cwd, query }, [
+export const fsGrep = (cwd: string, query: string, scoped = false) =>
+  call<{ path: string; line: number; text: string }[]>("fs_grep", { cwd, query, scoped }, [
     { path: "src/router.ts", line: 4, text: "await restore();" },
     { path: "src/auth/session.ts", line: 12, text: "export async function restore() {" },
   ]);
@@ -502,11 +502,14 @@ export const applyKeys = (keys: { capture: string | null; quit: string | null; c
   call<string[]>("keys_apply", { keys, save }, []);
 
 /** A local file (screenshot, recording) as something an <img> can show. */
-export const fileSrc = (path: string) => (inTauri && path.startsWith("/") ? convertFileSrc(path) : path);
-/** A page to show in a frame: like fileSrc, but only the leading "/" is encoded, so the page's relative links
- *  (its css, scripts, images, other pages) resolve inside its own folder. */
-export const pageSrc = (path: string) =>
-  inTauri && path.startsWith("/") ? convertFileSrc("/") + path.slice(1).split("/").map(encodeURIComponent).join("/") : path;
+const drivePath = (path: string) => /^[a-z]:[\\/]/i.test(path);
+export const fileSrc = (path: string) => (inTauri && (path.startsWith("/") || drivePath(path)) ? convertFileSrc(path) : path);
+/** Keep page path separators visible so relative links resolve inside the asset protocol. */
+export const pageSrc = (path: string) => {
+  if (!inTauri) return path;
+  if (drivePath(path)) return convertFileSrc("") + path.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/");
+  return path.startsWith("/") ? convertFileSrc("/") + path.slice(1).split("/").map(encodeURIComponent).join("/") : path;
+};
 export const pdfSrc = (path: string, modified?: number) => `/pdf.html?${new URLSearchParams({ file: fileSrc(path) + (modified === undefined ? "" : `?v=${modified}`) })}`;
 
 export function onEvent<T>(name: string, fn: (payload: T) => void): Promise<UnlistenFn> {

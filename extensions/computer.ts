@@ -181,6 +181,8 @@ function stepLine(r: Record<string, unknown>): string {
 }
 
 export default function (pi: any) {
+  // A project UI confirmation cannot authorize access to the Windows user's desktop.
+  if (process.platform === "win32") return;
   let forceFull = false;
   let evaluationError = false;
   let busy = false;

@@ -22,7 +22,11 @@ struct Running {
 
 static HELPER: Mutex<Option<Running>> = Mutex::new(None);
 
+#[cfg(not(target_os = "macos"))]
+fn helper() -> Result<PathBuf, String> { Err("Ondra 받아쓰기는 macOS에서만 쓸 수 있어요".into()) }
+
 /// The bundled helper; in development also straight from src-tauri/binaries.
+#[cfg(target_os = "macos")]
 fn helper() -> Result<PathBuf, String> {
     const TRIPLE: &str = if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" };
     crate::tools::sidecar("ondra-dictate")

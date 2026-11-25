@@ -23,9 +23,14 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 
 use super::{adb, run};
 
+#[cfg(target_os = "macos")]
 const TRIPLE: &str = if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" };
 
+#[cfg(not(target_os = "macos"))]
+fn simhelper() -> Result<PathBuf, String> { Err("iOS 시뮬레이터는 macOS에서만 쓸 수 있어요".into()) }
+
 /// The bundled helper; in development also straight from src-tauri/binaries.
+#[cfg(target_os = "macos")]
 fn simhelper() -> Result<PathBuf, String> {
     crate::tools::sidecar("ondra-simhelper")
         .or_else(|| {
@@ -113,7 +118,7 @@ pub async fn device_stream(platform: String, id: String, serial: Option<String>,
             while !stop.load(Ordering::Relaxed) {
                 let t = Instant::now();
                 // PNG straight from the device: no temp file, no extra copy
-                let o = Command::new(adb()).args(["-s", &serial, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).stderr(Stdio::null()).output();
+                let o = crate::engine::background_command(adb()).args(["-s", &serial, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).stderr(Stdio::null()).output();
                 match o {
                     Ok(o) if o.status.success() && o.stdout.len() > 8 => {
                         fails = 0;
@@ -492,10 +497,10 @@ pub async fn device_rotate(platform: String, id: String, serial: Option<String>)
 
 /// ~/Desktop/<name> <date time>.<ext>, like Simulator's own screenshots.
 fn desktop_file(name: &str, ext: &str) -> PathBuf {
-    let home = PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let home = crate::engine::home();
     let dir = [home.join("Desktop"), home.clone()].into_iter().find(|d| d.is_dir()).unwrap_or(home);
-    let stamp = Command::new("date").arg("+%Y-%m-%d %H.%M.%S").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
-    let safe: String = name.chars().map(|c| if c == '/' || c == ':' { '-' } else { c }).collect();
+    let stamp = chrono::Local::now().format("%Y-%m-%d %H.%M.%S").to_string();
+    let safe: String = name.chars().map(|c| if matches!(c, '/' | ':') || (cfg!(windows) && (c.is_control() || "\\<>\"|?*".contains(c))) { '-' } else { c }).collect();
     dir.join(format!("{safe} {stamp}.{ext}"))
 }
 

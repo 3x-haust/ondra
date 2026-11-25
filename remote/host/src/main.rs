@@ -96,7 +96,54 @@ impl Shared {
     }
 }
 
+#[cfg(windows)]
+#[allow(dead_code)] // The app also uses this vault for other items.
+#[path = "../../../src-tauri/src/winvault.rs"]
+mod winvault;
+
+#[cfg(windows)]
+fn load_key(dir: &Path) -> Result<SecretKey> {
+    const PURPOSE: &[u8] = b"ondra/remote/identity/v1";
+    // Two helpers starting for the first time must not announce different identities.
+    let lock = std::fs::File::options().create(true).truncate(false).read(true).write(true).open(dir.join("key.lock"))?;
+    lock.lock()?;
+    let path = dir.join("key.dpapi");
+    let saved = winvault::read_optional_bound(&path, PURPOSE).context("open protected device identity")?;
+    migrate_identity(dir, saved, |key| winvault::write_bound(&path, key, PURPOSE))
+}
+
+#[cfg(any(windows, test))]
+fn migrate_identity(dir: &Path, saved: Option<Vec<u8>>, protect: impl FnOnce(&[u8]) -> std::io::Result<()>) -> Result<SecretKey> {
+    let parse = |raw: &[u8]| -> Result<SecretKey> {
+        Ok(SecretKey::from_bytes(raw.try_into().context("invalid device identity length")?))
+    };
+    let path = dir.join("key");
+    let legacy = match std::fs::read(&path) {
+        Ok(bytes) => Some(parse(&bytes)?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e.into()),
+    };
+    let key = match saved {
+        Some(bytes) => {
+            let key = parse(&bytes)?;
+            // A crash after persisting the ciphertext can leave both copies.
+            anyhow::ensure!(legacy.as_ref().is_none_or(|old| old.public() == key.public()), "conflicting device identities");
+            key
+        }
+        None => {
+            let key = legacy.clone().unwrap_or_else(SecretKey::generate);
+            protect(&key.to_bytes()).context("protect device identity")?;
+            key
+        }
+    };
+    if legacy.is_some() {
+        std::fs::remove_file(path).context("remove unprotected device identity")?;
+    }
+    Ok(key)
+}
+
 /// The Mac's key: made once, kept in Ondra's data folder (readable by the user only).
+#[cfg(not(windows))]
 fn load_key(dir: &Path) -> Result<SecretKey> {
     let path = dir.join("key");
     if let Ok(bytes) = std::fs::read(&path) {
@@ -510,6 +557,46 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn migrated_identity_keeps_peer_id_without_leaving_the_raw_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("key");
+        let expected = SecretKey::from_bytes(&[7; 32]).public();
+        std::fs::write(&legacy, [7; 32]).unwrap();
+        assert_eq!(load_key(dir.path()).unwrap().public(), expected);
+        assert!(!legacy.exists());
+        assert_eq!(load_key(dir.path()).unwrap().public(), expected);
+    }
+
+    #[test]
+    fn migration_requires_protection_before_retiring_the_legacy_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("key");
+        let old = SecretKey::from_bytes(&[7; 32]);
+        std::fs::write(&legacy, old.to_bytes()).unwrap();
+        let result = migrate_identity(dir.path(), None, |_| Err(std::io::ErrorKind::PermissionDenied.into()));
+        assert!(result.is_err());
+        assert!(legacy.exists());
+        // An interrupted migration can finish cleanup without generating or writing another key.
+        let restored = migrate_identity(dir.path(), Some(old.to_bytes().to_vec()), |_| unreachable!()).unwrap();
+        assert_eq!(restored.public(), old.public());
+        assert!(!legacy.exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn damaged_vault_never_falls_back_to_raw_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        load_key(dir.path()).unwrap();
+        assert!(!dir.path().join("key").exists());
+        let path = dir.path().join("key.dpapi");
+        std::fs::write(&path, b"invalid").unwrap();
+        std::fs::write(dir.path().join("key"), [7; 32]).unwrap();
+        assert!(load_key(dir.path()).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), b"invalid");
+    }
 
     fn dev(id: &str) -> Device {
         Device { id: id.into(), name: id.into(), added_at: 1, last_seen: 1 }

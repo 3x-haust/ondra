@@ -38,6 +38,7 @@ import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
 import { isUseCall } from "./describe";
+import { absoluteFolder, folderKey, instructionFolders, leaf, slashes } from "./captainPaths";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
 export const chatKey = (space: SpaceId, project?: string) => (project ? `${space}~${project}` : space);
@@ -101,8 +102,8 @@ async function refreshRepos(space: SpaceId) {
   const root = spaceById(space).folder;
   // a space on the whole home folder: scanning it would walk ~/Library and the
   // folders macOS guards (and ask the user for access), so no list there
-  const home = expand("~").replace(/\/+$/, "");
-  const list = root && expand(root).replace(/\/+$/, "") !== home ? await fsRepos(expand(root)).catch(() => had?.list ?? []) : [];
+  const home = folderKey(expand("~"));
+  const list = root && folderKey(expand(root)) !== home ? await fsRepos(expand(root)).catch(() => had?.list ?? []) : [];
   reposOf.set(space, { at: Date.now(), list });
 }
 /** "own branch per task" choice of the request being routed, per space */
@@ -305,14 +306,14 @@ function userFollowUps(spaceId: SpaceId, jobIds: string[]): string[] {
  * folder outside it, is no project.
  */
 function projectForFolder(space: SpaceId, dir?: string) {
-  if (!dir?.startsWith("/") && !dir?.startsWith("~")) return undefined;
-  const base = expand(spaceById(space).folder || "").replace(/\/+$/, "");
-  const full = repoHome(expand(dir));
+  if (!dir || !absoluteFolder(expand(dir), engine.info.home)) return undefined;
+  const base = slashes(expand(spaceById(space).folder || "")).replace(/\/+$/, "");
+  const full = slashes(repoHome(expand(dir)));
   // a space on the whole home folder: its top folders are no repos (Documents, Downloads …)
-  if (!base || base === expand("~").replace(/\/+$/, "") || !full.startsWith(`${base}/`)) return undefined;
+  if (!base || folderKey(base) === folderKey(expand("~")) || !folderKey(full).startsWith(`${folderKey(base)}/`) || full.split("/").includes("..")) return undefined;
   const top = `${base}/${full.slice(base.length + 1).split("/")[0]}`;
   if (/^\./.test(top.split("/").pop() ?? "")) return undefined;
-  const have = projectsIn(space).find((p) => expand(p.folder).replace(/\/+$/, "") === top);
+  const have = projectsIn(space).find((p) => folderKey(expand(p.folder)) === folderKey(top));
   return have ?? projectById(addProject(space, top), space);
 }
 
@@ -584,15 +585,15 @@ const sigOf = new Map<string, string>();
 /** Main declares only use: its tools (jobs, skills, web, settings, read / bash) are called through it. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
-  const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts") || e.endsWith("/discord.ts") || e.endsWith("/use.ts")).flatMap((e) => ["--extension", e]);
+  const lazy = all.find((e) => leaf(e) === "lazy-core.ts");
+  const names = new Set(["web.ts", "skills.ts", "jobs.ts", "secrets.ts", "ondra.ts", "discord.ts", "use.ts"]);
+  const direct = all.filter((e) => names.has(leaf(e))).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
 }
 async function instructionSig(dir: string): Promise<string> {
-  const dirs: string[] = [];
-  for (let d = dir.replace(/\/$/, ""); d && d !== "/"; d = d.slice(0, d.lastIndexOf("/"))) dirs.push(d);
+  const dirs = instructionFolders(dir);
   dirs.push(`${engine.info.home}/.pi/agent`);
   const parts = await Promise.all(
     dirs.flatMap((d) => ["AGENTS.md", "CLAUDE.md"].map((f) => fsRead(`${d}/${f}`).then((r) => (r.text ? `${d}/${f}:${r.text}` : "")).catch(() => ""))),
@@ -1268,7 +1269,7 @@ const clampPriority = (p: unknown): Priority => (p === 0 || p === 1 || p === 2 |
 /** A message without its attached files' list and without any file path in it. */
 function spokenPart(text: string): string {
   const i = text.startsWith("첨부한 파일:\n") ? 0 : text.indexOf("\n\n첨부한 파일:\n");
-  return (i >= 0 ? text.slice(0, i) : text).replace(/(?:~|\/)[^\s"'`]*\/[^\s"'`]*/g, " ");
+  return (i >= 0 ? text.slice(0, i) : text).replace(/(?:[A-Za-z]:[\\/]|\\\\)[^\s"'`]+|(?:~|\/)[^\s"'`]*\/[^\s"'`]*/g, " ");
 }
 
 /**
@@ -1287,7 +1288,7 @@ function existingProject(space: SpaceId, r: any, original: string) {
   const words = low(spokenPart(original));
   const onlyInPaths = (p: Project) => !words.includes(low(p.name)) && low(original).includes(low(p.name));
   if (named) {
-    const hit = list.find((p) => low(p.name) === low(named) || p.id === named || low(p.folder.split("/").pop() ?? "") === low(named));
+    const hit = list.find((p) => low(p.name) === low(named) || p.id === named || low(leaf(p.folder)) === low(named));
     if (hit && !onlyInPaths(hit)) return hit;
     if (hit) return undefined;
   }
@@ -1299,7 +1300,7 @@ function existingProject(space: SpaceId, r: any, original: string) {
   // only what the user said and main's title: a brief names other things ("not an Ondra change")
   const said = low(`${spokenPart(original)} ${r.title ?? ""}`);
   const hits = list.filter((p) => {
-    const base = (p.folder.split("/").pop() ?? "").toLowerCase();
+    const base = leaf(p.folder).toLowerCase();
     return said.includes(low(p.name)) || (base.length > 3 && said.includes(base));
   });
   return hits.length === 1 ? hits[0] : undefined;
@@ -1386,18 +1387,18 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       // a new project in a folder with nothing in it yet: the app is started from nothing (0→1)
       let fresh = false;
       // main starting something new: make its folder and project chat first
-      if (!proj && r.project && typeof r.project.folder === "string" && r.project.folder.startsWith("/")) {
+      if (!proj && absoluteFolder(r.project?.folder, engine.info.home)) {
         // a project is the repo, never one of its branch/worktree folders
-        const wt = r.project.folder.match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
-        if (wt) r.project = { name: wt[2], folder: `${wt[1]}/projects/${wt[2]}` };
-        fresh = !(await fsFiles(r.project.folder).then((f) => f.length > 0).catch(() => false));
-        const folder = await ensureDir(r.project.folder).catch(() => "");
-        if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined), sp(space));
+        const repo = repoHome(r.project.folder);
+        const name = repo === r.project.folder ? String(r.project.name ?? "") : leaf(repo);
+        fresh = !(await fsFiles(repo).then((f) => f.length > 0).catch(() => false));
+        const folder = await ensureDir(repo).catch(() => "");
+        if (folder) proj = projectById(addProject(sp(space), folder, name || undefined), sp(space));
       }
       // work in a folder of this space with no project yet ("ondra 에 넣어줘"): that folder is the project
       if (!proj && !projectOf(space)) proj = projectForFolder(sp(space), typeof r.cwd === "string" && r.cwd ? r.cwd : cwd);
       // the repo the user or the task names comes first; the project's folder is the fallback
-      const named = typeof r.cwd === "string" && /^[/~]/.test(r.cwd) ? r.cwd : undefined;
+      const named = typeof r.cwd === "string" && (absoluteFolder(r.cwd, proj?.host ? proj.folder : engine.info.home) || r.cwd.startsWith("~")) ? r.cwd : undefined;
       const dir = named ?? (proj && !projectOf(space) ? proj.folder : cwd || proj?.folder);
       // carrying on a job: a finished one hands over now; one still going wraps up first and this waits for it
       const from = job(r.from) && !job(r.from)!.parentId ? job(r.from) : undefined;
@@ -1444,7 +1445,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
     } else if (r?.kind === "remember" && r.text && state.settings.learn) {
       const scope = r.scope === "global" || r.scope === "project" ? r.scope : "space";
       // project memory is filed by folder (that's how jobs find it)
-      const folder = scope === "project" ? (typeof r.project === "string" && r.project.startsWith("/") ? r.project : projectOf(space)?.folder) : undefined;
+      const folder = scope === "project" ? (absoluteFolder(r.project, engine.info.home) ? r.project : projectOf(space)?.folder) : undefined;
       const id = addMemory(String(r.text), folder || scope !== "project" ? scope : "space", {
         space: sp(space),
         project: folder,

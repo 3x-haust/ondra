@@ -17,7 +17,14 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
+#[cfg(windows)]
+mod prompt_files;
+#[cfg(windows)]
+mod windows_bash;
+
 struct Proc {
+    #[cfg(windows)]
+    _prompt_files: Vec<tempfile::NamedTempFile>,
     child: Child,
     stdin: ChildStdin,
     /// Tells a process apart from the one it replaced under the same id.
@@ -25,6 +32,17 @@ struct Proc {
 }
 
 impl Proc {
+    #[cfg(windows)]
+    fn terminate(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            // Stop the commands still attached to this job, not just its RPC reader.
+            let _ = system_command("taskkill.exe").args(["/T", "/F", "/PID", &self.child.id().to_string()]).output();
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    #[cfg(not(windows))]
     fn terminate(&mut self) {
         // What its shell is running right then (a wait loop, a build, a crawl of a
         // dev server) would run on with nobody reading it, while the resumed job
@@ -107,6 +125,21 @@ struct PsRow {
     command: String,
 }
 
+#[cfg(windows)]
+fn ps_rows() -> Vec<PsRow> {
+    // Only for stopping one selected shell command. Image names stay separate
+    // from their quoted command lines (the executable may live in Program Files).
+    let script = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,CommandLine | Select-Object ProcessId,ParentProcessId,Name,CommandLine)";
+    let Ok(out) = system_command(r"WindowsPowerShell\v1.0\powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", script]).output() else { return vec![] };
+    let Ok(rows) = serde_json::from_slice::<Vec<Value>>(&out.stdout) else { return vec![] };
+    rows.iter().filter_map(|r| Some(PsRow {
+        pid: r["ProcessId"].as_i64()?.try_into().ok()?,
+        ppid: r["ParentProcessId"].as_i64()?.try_into().ok()?,
+        command: format!("{} {}", r["Name"].as_str()?.trim_end_matches(".exe"), r["CommandLine"].as_str().unwrap_or_default()),
+    })).collect()
+}
+
+#[cfg(not(windows))]
 fn ps_rows() -> Vec<PsRow> {
     let Ok(out) = std::process::Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid=,command="]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output() else {
         return vec![];
@@ -150,13 +183,47 @@ fn stop_plan(rows: &[PsRow], running: &[i32]) -> (Vec<i32>, Vec<i32>, Vec<i32>) 
     (now, helpers, theirs)
 }
 
+#[cfg(windows)]
+fn signal(_sig: &str, pid: i32) {
+    let _ = system_command("taskkill.exe").args(["/F", "/PID", &pid.to_string()]).output();
+}
+
+#[cfg(not(windows))]
 fn signal(sig: &str, pid: i32) {
     let _ = std::process::Command::new("/bin/kill").args([sig, &pid.to_string()]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+}
+
+/// An RPC, git or helper command with pipes is not an interactive terminal window.
+pub(crate) fn background_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new(program);
+        cmd.creation_flags(0x08000000) // CREATE_NO_WINDOW; credential prompts must not open a window either
+            .env("GCM_INTERACTIVE", "never").env("GIT_TERMINAL_PROMPT", "0").env("GH_PROMPT_DISABLED", "1");
+        cmd
+    }
+    #[cfg(not(windows))]
+    { Command::new(program) }
+}
+
+#[cfg(windows)]
+pub(crate) fn system_command(name: &str) -> Command {
+    let root = std::env::var_os("SystemRoot").expect("Windows system directory");
+    background_command(PathBuf::from(root).join("System32").join(name))
+}
+
+#[cfg(windows)]
+fn login_env() -> &'static HashMap<String, String> {
+    static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
+    ENV.get_or_init(|| ["PATH", "LANG"].iter().chain(crate::LOGIN_VARS)
+        .filter_map(|&k| std::env::var(k).ok().map(|v| (k.to_owned(), v))).collect())
 }
 
 /// GUI apps start with a bare environment, but the user's tools (git, node,
 /// editors) live wherever their shell puts them. Ask a login shell once for
 /// the variables we care about.
+#[cfg(not(windows))]
 fn login_env() -> &'static HashMap<String, String> {
     static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
     ENV.get_or_init(|| {
@@ -183,7 +250,7 @@ fn login_env() -> &'static HashMap<String, String> {
 
 /// The user's login-shell PATH.
 pub fn user_path() -> &'static str {
-    login_env().get("PATH").map(String::as_str).unwrap_or("/usr/bin:/bin")
+    login_env().get("PATH").map(String::as_str).unwrap_or_default()
 }
 
 /// A variable from the user's login shell (falls back to this process's env).
@@ -191,8 +258,28 @@ pub fn user_var(name: &str) -> Option<String> {
     login_env().get(name).cloned().or_else(|| std::env::var(name).ok()).filter(|v| !v.is_empty())
 }
 
+pub(crate) fn user_home() -> Option<PathBuf> {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).filter(|h| !h.is_empty()).map(PathBuf::from)
+}
+
 pub fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
+    user_home().unwrap_or_else(|| if cfg!(windows) { std::env::temp_dir() } else { PathBuf::from("/") })
+}
+
+pub(crate) const PATH_SEPARATOR: &str = if cfg!(windows) { ";" } else { ":" };
+
+pub(crate) fn is_path_key(key: &str) -> bool {
+    if cfg!(windows) { key.eq_ignore_ascii_case("PATH") } else { key == "PATH" }
+}
+
+/// PATH additions are already path lists (e.g. the space's shims and CLI bin).
+/// Keep their order, quoted entries and drive letters intact.
+fn path_with_prefixes<'a>(prefixes: impl Iterator<Item = &'a str>, base: &'a str) -> String {
+    prefixes.chain(std::iter::once(base)).filter(|v| !v.is_empty()).collect::<Vec<_>>().join(PATH_SEPARATOR)
+}
+
+pub(crate) fn scoped_path(env: &[(String, String)], base: &str) -> String {
+    path_with_prefixes(env.iter().filter(|(k, _)| is_path_key(k)).map(|(_, v)| v.as_str()), base)
 }
 
 /// The engine component's folder: the binary and the support files it reads (see components.rs).
@@ -203,6 +290,9 @@ fn engine_dir(app: &AppHandle) -> Option<PathBuf> {
 /// The engine binary: the engine component, or (an app built before components) next to the app executable.
 /// While the component is still coming in, where it will be: a job's start waits for it (`components_wait`).
 pub fn engine_bin(app: &AppHandle) -> Option<PathBuf> {
+    #[cfg(windows)]
+    { engine_dir(app).map(|d| d.join("ondra-engine.exe")) }
+    #[cfg(not(windows))]
     engine_dir(app)
         .map(|d| d.join("ondra-engine"))
         .or_else(|| crate::tools::sidecar("ondra-engine"))
@@ -218,7 +308,7 @@ fn engine_assets(app: &AppHandle) -> Option<PathBuf> {
 /// the user's own pi setup never leaks in or breaks a run.
 pub fn engine_command(app: &AppHandle) -> Result<Command, String> {
     let bin = engine_bin(app).filter(|b| b.is_file()).ok_or("엔진 파일이 앱에 없습니다. 앱을 다시 설치하세요.")?;
-    let mut cmd = Command::new(bin);
+    let mut cmd = background_command(bin);
     for (k, v) in engine_env(app) {
         cmd.env(k, v);
     }
@@ -247,7 +337,7 @@ pub fn engine_env(app: &AppHandle) -> Vec<(String, String)> {
 /// PATH with the bundled tools (ondra-browser, ondra-cuhost) first.
 pub fn with_sidecars(path: &str) -> String {
     match crate::tools::sidecar_dir() {
-        Some(dir) => format!("{}:{path}", dir.display()),
+        Some(dir) => path_with_prefixes(std::iter::once(dir.to_string_lossy().as_ref()), path),
         None => path.to_string(),
     }
 }
@@ -372,26 +462,27 @@ fn spawn_engine(
     let cwd = if cwd.is_empty() { home().display().to_string() } else { cwd };
     std::fs::create_dir_all(&cwd).map_err(|e| format!("폴더를 만들 수 없습니다: {e}"))?;
 
+    #[cfg(windows)]
+    let (args, prompt_files) = {
+        let mut args = args;
+        let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+        let files = prompt_files::prepare(&mut args, &dir).map_err(|e| format!("엔진 지침 파일을 준비하지 못했습니다: {e}"))?;
+        (args, files)
+    };
     cmd.arg("--mode").arg("rpc").args(&args).current_dir(&cwd);
     // several parts may add to PATH (bundled tools, a space's CLI shims): all of them go first, in order
-    let mut path_parts: Vec<&str> = Vec::new();
     for (k, v) in &env {
-        if k == crate::secrets::MARKER {
-            continue;
-        }
-        if k == "PATH" {
-            path_parts.push(v);
-        } else {
+        if k != crate::secrets::MARKER && !is_path_key(k) {
             cmd.env(k, v);
         }
     }
-    if !path_parts.is_empty() {
-        cmd.env("PATH", format!("{}:{}", path_parts.join(":"), with_sidecars(user_path())));
-    }
+    cmd.env("PATH", scoped_path(&env, &with_sidecars(user_path())));
     // a job's engine: the saved secrets, read here and never sent to the page
     crate::secrets::inject(&app, &mut cmd, &env);
     // and the client secrets its space's connected services name
     crate::mcp::inject(&mut cmd, &env);
+    #[cfg(windows)]
+    windows_bash::check(&cmd, &args, std::path::Path::new(&cwd), &home())?;
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -406,6 +497,8 @@ fn spawn_engine(
         return Err("엔진 입출력 파이프를 열지 못했습니다".into());
     };
     engine.procs.lock().unwrap().insert(id.clone(), Proc {
+        #[cfg(windows)]
+        _prompt_files: prompt_files,
         child, stdin, generation,
     });
 
@@ -503,7 +596,7 @@ fn matching_below(rows: &[PsRow], root: i32, program: &str, arg: Option<&str>) -
 /// job: only processes under that job's engine whose command line is `program`
 /// with `arg`. SIGTERM, then SIGKILL after 2s for the ones still there. Returns
 /// how many were signalled.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_stop_command(engine: State<'_, Engine>, id: String, program: String, arg: Option<String>) -> Result<usize, String> {
     let root = engine.procs.lock().unwrap().get(&id).map(|p| p.child.id() as i32).ok_or("에이전트가 실행 중이 아닙니다")?;
     if program.trim().is_empty() || program.contains('/') {
@@ -518,6 +611,7 @@ pub fn agent_stop_command(engine: State<'_, Engine>, id: String, program: String
     for pid in &pids {
         signal("-TERM", *pid);
     }
+    #[cfg(not(windows))] // Windows already forcibly stopped these PIDs.
     if !pids.is_empty() {
         let first = pids.clone();
         std::thread::spawn(move || {
@@ -598,6 +692,13 @@ pub async fn engine_models(app: AppHandle, account_id: String) -> Result<Vec<Str
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_jobs_path_keeps_each_prefix_in_order_and_then_the_user_path() {
+        let entries = if cfg!(windows) { [r"D:\팀\bin", r"C:\Program Files\Git\cmd", r"C:\Windows"] } else { ["/팀/bin", "/a b/git", "/bin"] };
+        let env = vec![("PATH".to_string(), entries[0].to_string()), ("PATH".to_string(), entries[1].to_string())];
+        assert_eq!(std::env::split_paths(&scoped_path(&env, entries[2])).collect::<Vec<_>>(), entries.map(PathBuf::from));
+    }
+
     fn rows(list: &[(i32, i32, &str)]) -> Vec<PsRow> {
         list.iter().map(|(pid, ppid, c)| PsRow { pid: *pid, ppid: *ppid, command: c.to_string() }).collect()
     }
@@ -662,6 +763,7 @@ mod tests {
         assert_eq!(gone, vec![200, 201, 300]);
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn a_stopped_engine_takes_its_running_commands_along() {
         // an "engine" whose shell runs a command, and a server an earlier call left behind

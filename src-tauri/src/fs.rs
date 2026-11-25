@@ -3,14 +3,14 @@
 
 use crate::engine::user_path;
 use serde::Serialize;
-use std::{path::Path, process::Command};
+use std::path::Path;
 
 const MAX_FILES: usize = 20_000;
 const MAX_READ: u64 = 2 * 1024 * 1024;
 const SKIP: &[&str] = &[".git", ".ondra", "node_modules", "target", ".next", "dist", "build", ".venv", "__pycache__", ".DS_Store"];
 
 fn git_files(cwd: &str) -> Option<Vec<String>> {
-    let out = Command::new("git")
+    let out = crate::engine::background_command("git")
         .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         .current_dir(cwd)
         .env("PATH", user_path())
@@ -27,7 +27,14 @@ fn git_files(cwd: &str) -> Option<Vec<String>> {
     Some(v)
 }
 
-fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+/// Resolve a file at the point of use, inside the canonical directory given to the panel.
+pub(crate) fn scoped_file(root: &Path, rel: &Path) -> Option<std::path::PathBuf> {
+    if rel.components().any(|p| !matches!(p, std::path::Component::Normal(_))) { return None; }
+    let file = root.join(rel).canonicalize().ok()?;
+    (file.starts_with(root) && file.is_file()).then_some(file)
+}
+
+fn walk(root: &Path, dir: &Path, out: &mut Vec<String>, scoped: bool) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     let mut entries: Vec<_> = rd.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
@@ -42,21 +49,29 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
         let p = e.path();
         let Ok(ft) = e.file_type() else { continue };
         if ft.is_dir() {
-            walk(root, &p, out);
+            // Do not descend through reparse points (including Windows junctions).
+            if !scoped || p.canonicalize().is_ok_and(|real| real == p) {
+                walk(root, &p, out, scoped);
+            }
         } else if ft.is_file() {
             if let Ok(rel) = p.strip_prefix(root) {
-                out.push(rel.display().to_string());
+                // The file tree and git both use '/' for relative paths on every host.
+                out.push(rel.iter().map(|part| part.to_string_lossy()).collect::<Vec<_>>().join("/"));
             }
         }
     }
 }
 
-fn list(cwd: &str) -> Vec<String> {
-    if let Some(v) = git_files(cwd) {
-        return v;
+fn list(cwd: &str, root: Option<&Path>) -> Vec<String> {
+    let mut out = git_files(cwd).unwrap_or_else(|| {
+        let mut out = Vec::new();
+        let dir = root.unwrap_or(Path::new(cwd));
+        walk(dir, dir, &mut out, root.is_some());
+        out
+    });
+    if let Some(root) = root {
+        out.retain(|rel| scoped_file(root, Path::new(rel)).is_some());
     }
-    let mut out = Vec::new();
-    walk(Path::new(cwd), Path::new(cwd), &mut out);
     out
 }
 
@@ -95,14 +110,17 @@ const MAX_HITS: usize = 500;
 
 /// Every line in the folder's files that contains `query` (case-insensitive),
 /// like an editor's find in files. Binary and very large files are skipped.
-fn grep(cwd: &str, query: &str) -> Vec<Hit> {
+fn grep(cwd: &str, query: &str, root: Option<&Path>) -> Vec<Hit> {
     let q = query.to_lowercase();
     let mut out = Vec::new();
     if q.trim().is_empty() {
         return out;
     }
-    for rel in list(cwd) {
-        let path = Path::new(cwd).join(&rel);
+    for rel in list(cwd, root) {
+        let path = if let Some(root) = root {
+            let Some(file) = scoped_file(root, Path::new(&rel)) else { continue };
+            file
+        } else { Path::new(cwd).join(&rel) };
         let Ok(meta) = std::fs::metadata(&path) else { continue };
         if meta.len() > MAX_READ {
             continue;
@@ -133,13 +151,19 @@ fn grep(cwd: &str, query: &str) -> Vec<Hit> {
 }
 
 #[tauri::command]
-pub async fn fs_grep(cwd: String, query: String) -> Vec<Hit> {
-    tauri::async_runtime::spawn_blocking(move || grep(&cwd, &query)).await.unwrap_or_default()
+pub async fn fs_grep(cwd: String, query: String, scoped: Option<bool>) -> Vec<Hit> {
+    tauri::async_runtime::spawn_blocking(move || match scoped {
+        Some(true) => Path::new(&cwd).canonicalize().map(|root| grep(&cwd, &query, Some(&root))).unwrap_or_default(),
+        _ => grep(&cwd, &query, None),
+    }).await.unwrap_or_default()
 }
 
 #[tauri::command]
-pub async fn fs_files(cwd: String) -> Vec<String> {
-    tauri::async_runtime::spawn_blocking(move || list(&cwd)).await.unwrap_or_default()
+pub async fn fs_files(cwd: String, scoped: Option<bool>) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || match scoped {
+        Some(true) => Path::new(&cwd).canonicalize().map(|root| list(&cwd, Some(&root))).unwrap_or_default(),
+        _ => list(&cwd, None),
+    }).await.unwrap_or_default()
 }
 
 /// Git repositories in a space's folder, one or two levels down
@@ -193,8 +217,8 @@ mod repo_tests {
         for d in ["top/.git", "projects/acme/.git", "projects/notes", "worktrees/acme/feat/.git", ".hidden/.git", "projects/acme/sub/.git"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
-        let found: Vec<String> = repos(&root).into_iter().map(|p| p.trim_start_matches(&root.display().to_string()).to_string()).collect();
-        assert_eq!(found, vec!["/projects/acme", "/top"]);
+        let found: Vec<_> = repos(&root).into_iter().map(std::path::PathBuf::from).collect();
+        assert_eq!(found, vec![root.join("projects/acme"), root.join("top")]);
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -228,6 +252,26 @@ pub async fn fs_read(path: String) -> Result<FileText, String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn shared_files_and_search_only_follow_links_within_the_project() {
+        let base = std::env::temp_dir().join(format!("ondra-search-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let project = base.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        assert!(std::process::Command::new("git").arg("init").arg("-q").current_dir(&project).status().unwrap().success());
+        std::fs::write(project.join("readme"), "project update").unwrap();
+        std::fs::write(base.join("notes"), "other update").unwrap();
+        std::os::unix::fs::symlink("readme", project.join("alias")).unwrap();
+        std::os::unix::fs::symlink("../notes", project.join("shared-notes")).unwrap();
+        let root = project.canonicalize().unwrap();
+        let dir = root.to_str().unwrap();
+        assert_eq!(list(dir, Some(&root)), ["alias", "readme"]);
+        let hits = grep(dir, "update", Some(&root));
+        assert_eq!(hits.iter().map(|h| (h.path.as_str(), h.text.as_str())).collect::<Vec<_>>(), [("alias", "project update"), ("readme", "project update")]);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn lists_and_reads() {
         let root = std::env::temp_dir().join(format!("fs-test-{}", std::process::id()));
@@ -237,13 +281,13 @@ mod tests {
         std::fs::write(root.join("src/a.ts"), "one\ntwo\n").unwrap();
         std::fs::write(root.join("node_modules/x/i.js"), "x").unwrap();
         std::fs::write(root.join("b.bin"), [0u8, 1, 2]).unwrap();
-        let files = list(&root.display().to_string());
+        let files = list(&root.display().to_string(), None);
         assert_eq!(files, vec!["b.bin".to_string(), "src/a.ts".to_string()]);
         let t = read(&root.join("src/a.ts").display().to_string()).unwrap();
         assert_eq!(t.text.as_deref(), Some("one\ntwo\n"));
         assert!(read(&root.join("b.bin").display().to_string()).unwrap().binary);
         assert!(read(&root.join("nope").display().to_string()).is_err());
-        let hits = grep(&root.display().to_string(), "TWO");
+        let hits = grep(&root.display().to_string(), "TWO", None);
         assert_eq!(hits.len(), 1);
         assert_eq!((hits[0].path.as_str(), hits[0].line), ("src/a.ts", 2));
         let a = root.join("src/a.ts").display().to_string();
@@ -321,14 +365,14 @@ pub fn copy_image(bytes: Vec<u8>) -> Result<(), String> {
 /// Make a new project folder (main can start a project somewhere new). Only inside home.
 #[tauri::command]
 pub fn ensure_dir(path: String) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let p = if let Some(rest) = path.strip_prefix("~/") { format!("{home}/{rest}") } else { path };
-    let pb = std::path::PathBuf::from(&p);
+    let home = crate::engine::user_home().ok_or("홈 폴더를 찾지 못했어요")?;
+    let input = Path::new(&path);
+    let pb = input.strip_prefix("~").map(|rest| home.join(rest)).unwrap_or_else(|_| input.to_owned());
     if !pb.is_absolute() || !pb.starts_with(&home) || pb.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
         return Err("홈 폴더 안의 절대 경로만 만들 수 있어요".into());
     }
     std::fs::create_dir_all(&pb).map_err(|e| e.to_string())?;
-    Ok(p)
+    Ok(pb.display().to_string())
 }
 
 /// Save a picture the user asked for into ~/Downloads (a free name), and return its path.
@@ -364,7 +408,7 @@ pub async fn space_logs(app: tauri::AppHandle, space: String, ids: Vec<String>) 
         let key = crate::browser::space_key(&space);
         let dest = data.join("spaces").join(&key).join("logs");
         std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-        let ok = |s: &str| !s.is_empty() && !s.contains('/') && !s.contains("..");
+        let ok = |s: &str| Path::new(s).file_name().is_some_and(|n| n == s) && !s.contains("..") && !(cfg!(windows) && s.contains(':'));
         let mut keep: std::collections::HashSet<String> = ids.into_iter().filter(|s| ok(s)).collect();
         // main chats of this space: captain-<space> and captain-<space>-<project>
         let sessions = data.join("sessions");

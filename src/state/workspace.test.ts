@@ -1,6 +1,6 @@
 import { reconcile } from "solid-js/store";
 import { beforeEach, describe, expect, it } from "vitest";
-import { freshState, setState, state } from "./store";
+import { addProject, freshState, projectFor, setState, state } from "./store";
 import type { Task } from "./types";
 import { setView, view } from "./ui";
 import { carried, switchSpace } from "./workspace";
@@ -17,6 +17,14 @@ beforeEach(() => {
   setState("tasks", [job("thome00000001", "home"), job("twork00000001", "work")]);
   setState("projects", [{ id: "site", space: "home", name: "site", folder: "~/site" }]);
   setView({ name: "main" });
+});
+
+it("uses the picked Windows folder's name and recognizes jobs inside it", () => {
+  const folder = String.raw`C:\Work\Design`;
+  const id = addProject("home", folder);
+  expect(state.projects?.find((p) => p.id === id)).toMatchObject({ name: "Design", folder });
+  expect(addProject("home", "C:/Work/Design/")).toBe(id);
+  expect(projectFor("home", String.raw`C:\Work\Design\src`)).toBe(id);
 });
 
 describe("switching workspace", () => {

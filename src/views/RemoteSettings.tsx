@@ -59,7 +59,7 @@ function HostRow(props: { id: string; name: string }) {
             <span class="muted cn-count">· {t("프로젝트 {n}개", { n: linked().length })}</span>
           </Show>
           <Show when={off()}>
-            <span class="cn-ver" title={t("두 Mac의 Ondra 버전이 달라요: 이 Mac {a}, 그 Mac {b}", { a: mine()!, b: theirs()! })}>{t("버전 다름")}</span>
+            <span class="cn-ver" title={t("두 기기의 Ondra 버전이 달라요: 이 기기 {a}, 다른 기기 {b}", { a: mine()!, b: theirs()! })}>{t("버전 다름")}</span>
           </Show>
         </div>
         <div class="set-value">
@@ -112,7 +112,7 @@ function LeavingRow(props: { name: string }) {
         <span class="cn-dot is-off" aria-hidden="true" />
         <Icon name="monitor" size={16} class="muted" />
         <span class="muted">{props.name}</span>
-        <span class="muted">{t("연결되면 그 Mac에서도 이 Mac을 제거해요")}</span>
+        <span class="muted">{t("연결되면 다른 기기에서도 이 기기를 제거해요")}</span>
       </div>
     </div>
   );
@@ -133,7 +133,7 @@ function AddHost() {
       fallback={
         <button class="set-row cn-add" onClick={() => setOpen(true)}>
           <Icon name="plus" size={15} />
-          <span>{t("Mac 추가")}</span>
+          <span>{t("기기 추가")}</span>
         </button>
       }
     >
@@ -143,13 +143,13 @@ function AddHost() {
           <button class="btn sm primary" type="submit" disabled={!link().trim()}>{t("연결")}</button>
           <button class="btn sm ghost" type="button" onClick={() => setOpen(false)}>{t("취소")}</button>
         </form>
-        <span class="muted cn-hint">{t("그 Mac의 Ondra에서 설정 › 연결 › 연결 링크 복사를 누르고, 여기에 붙여 넣어요.")}</span>
+        <span class="muted cn-hint">{t("작업할 기기에서 설정 › 연결 › 연결 링크 복사를 누르고 여기에 붙여 넣어요.")}</span>
       </div>
     </Show>
   );
 }
 
-function ThisMac() {
+function ThisDevice() {
   const [now, setNow] = createSignal(Date.now());
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
@@ -167,17 +167,19 @@ function ThisMac() {
   const live = (id: string) => Object.values(remote().live).some((d) => d.id === id);
   return (
     <div class="set-group">
-      <Row title={t("다른 Mac에서 이 Mac 쓰기")} desc={t("켜 두면 내 다른 Mac이 이 Mac의 프로젝트로 작업을 시킬 수 있어요")}>
-        <Switch_ on={!!state.settings.remote} set={(v) => void setRemoteOn(v)} label={t("다른 Mac에서 이 Mac 쓰기")} />
+      <Row title={t("다른 기기에서 이 기기 쓰기")} desc={t("허용한 기기에서 이 기기의 프로젝트를 보고 작업을 시작할 수 있어요")}>
+        <Switch_ on={!!state.settings.remote} set={(v) => void setRemoteOn(v)} label={t("다른 기기에서 이 기기 쓰기")} />
       </Row>
       <Show when={state.settings.remote}>
-        <Row title={t("잠자기 방지")} desc={t("전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요")}>
-          <Switch_ on={!!state.settings.remoteAwake} set={(v) => (setState("settings", "remoteAwake", v), keepAwake())} label={t("잠자기 방지")} />
-        </Row>
+        <Show when={/Macintosh|Windows/.test(navigator.userAgent)}>
+          <Row title={t("잠자기 방지")} desc={/Windows/.test(navigator.userAgent) ? t("원격 연결을 켜 두면 이 PC가 자동으로 잠들지 않아요") : t("전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요")}>
+            <Switch_ on={!!state.settings.remoteAwake} set={(v) => (setState("settings", "remoteAwake", v), keepAwake())} label={t("잠자기 방지")} />
+          </Row>
+        </Show>
         <div class="set-row">
           <div class="set-label cn-stack">
             <b>{t("연결 링크")}</b>
-            <span class="muted cn-hint">{left() ? t("한 번만 쓸 수 있어요 · {t} 뒤 만료", { t: mmss() }) : t("다른 Mac에서 이 링크로 이 Mac을 추가해요")}</span>
+            <span class="muted cn-hint">{left() ? t("한 번만 쓸 수 있어요 · {t} 뒤 만료", { t: mmss() }) : t("연결할 기기에 이 링크를 붙여 넣어요")}</span>
           </div>
           <div class="set-value">
             <button class="btn sm" disabled={!remote().id} onClick={() => void copy()}>
@@ -229,7 +231,7 @@ function deviceMenu(id: string, name: string): MenuEntry[] {
   const n = jobsFrom(state.tasks, id).length;
   const groups: MenuItem[][] = [
     state.spaces.length > 1 ? state.spaces.map((s) => ({ id: `space:${s.id}`, label: s.label, icon: "folder", checked: may.includes(s.id), run: () => toggle(s.id) })) : [],
-    n ? [{ id: "jobs", label: t("그 Mac에서 시킨 작업 {n}개 정리", { n }), icon: "archive", run: () => askStopJobs(id, name) }] : [],
+    n ? [{ id: "jobs", label: t("그 기기에서 시킨 작업 {n}개 정리", { n }), icon: "archive", run: () => askStopJobs(id, name) }] : [],
     [{ id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askForgetDevice(id) }],
   ];
   return groups.filter((g) => g.length).flatMap((g, i): MenuEntry[] => (i ? ["sep", ...g] : g));
@@ -239,14 +241,14 @@ export function RemoteSettings() {
   return (
     <>
       <PageHead tab="remote" />
-      <GroupTitle title={t("다른 Mac")} />
+      <GroupTitle title={t("다른 기기")} />
       <div class="set-group">
         <For each={state.settings.hosts ?? []}>{(h) => <HostRow id={h.id} name={h.name} />}</For>
         <For each={state.settings.leaving ?? []}>{(l) => <LeavingRow name={l.name} />}</For>
         <AddHost />
       </div>
-      <GroupTitle title={t("이 Mac")} />
-      <ThisMac />
+      <GroupTitle title={t("이 기기")} />
+      <ThisDevice />
     </>
   );
 }
@@ -260,8 +262,8 @@ export function PairAskDialog() {
         <div class="rc-ask" role="alertdialog" aria-label={t("연결 요청")}>
           <Icon name="monitor" size={18} />
           <div class="rc-ask-main">
-            <b>{t("{name}에서 이 Mac을 쓰려고 해요", { name: a().device.name })}</b>
-            <span class="muted">{t("허용하면 그 Mac에서 이 Mac의 프로젝트로 작업을 시킬 수 있어요")}</span>
+            <b>{t("{name}에서 이 기기를 쓰려고 해요", { name: a().device.name })}</b>
+            <span class="muted">{t("허용하면 이 기기의 프로젝트를 보고 작업을 시작할 수 있어요")}</span>
           </div>
           <button class="btn sm ghost" onClick={() => answerPair(a().conn, false)}>{t("거절")}</button>
           <button class="btn sm primary" onClick={() => answerPair(a().conn, true)}>{t("허용")}</button>

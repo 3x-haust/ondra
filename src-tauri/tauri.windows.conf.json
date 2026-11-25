@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "externalBin": ["binaries/ondra-remote"],
+    "resources": {
+      "binaries/ondra-bgguard.dylib": null,
+      "dmg/background.tiff": null,
+      "resources/components.json": null,
+      "resources/windows/engine/": "engine/"
+    }
+  }
+}

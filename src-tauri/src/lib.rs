@@ -24,6 +24,8 @@ mod engine;
 pub mod focus;
 mod keychain;
 mod secrets;
+#[cfg(windows)]
+mod winvault;
 mod mcp;
 mod discord;
 mod providers;
@@ -220,6 +222,11 @@ pub fn plugin_mode() -> Option<i32> {
 /// `.env`). Variables already set win. Jobs inherit them.
 fn load_env() {
     let mut files = vec![];
+    #[cfg(windows)]
+    if let Some(dir) = dirs::data_dir() {
+        files.push(dir.join("dev.3xhaust.ondra/.env"));
+    }
+    #[cfg(not(windows))]
     if let Some(home) = std::env::var_os("HOME") {
         files.push(std::path::PathBuf::from(home).join("Library/Application Support/dev.3xhaust.ondra/.env"));
     }
@@ -252,6 +259,7 @@ pub(crate) const LOGIN_VARS: &[&str] = &[
     "AWS_PROFILE", "CLOUDSDK_CONFIG", "DOCKER_CONFIG", "KUBECONFIG", "ONDRA_CLI_HOME",
 ];
 
+#[cfg(not(windows))]
 fn drop_launcher_logins() {
     for k in LOGIN_VARS {
         // SAFETY: runs first thing in `run`, before any other thread exists
@@ -260,9 +268,13 @@ fn drop_launcher_logins() {
 }
 
 pub fn run() {
+    #[cfg(not(windows))]
     drop_launcher_logins();
     load_env();
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| show_main(app)));
+    let app = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -285,6 +297,7 @@ pub fn run() {
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
             // background apps a killed Mac-app helper left running (a crash, a forced quit) go now
+            #[cfg(target_os = "macos")]
             std::thread::spawn(|| {
                 if let Some(host) = tools::sidecar("ondra-cuhost") {
                     let _ = std::process::Command::new(host).arg("--reap").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
@@ -604,6 +617,7 @@ pub fn run() {
         .expect("error while building the app");
 
     app.run(|app, event| match event {
+        #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(app),
         // a file double-clicked in Finder (a shared pet, <name>.ondrapet)
         #[cfg(target_os = "macos")]

@@ -1,14 +1,14 @@
-# Connections: working on another Mac
+# Connections: working on another computer
 
-Another Mac's projects show in this app's sidebar. Jobs in those projects run on that Mac, with its files, tools and accounts. They show up here like any other job.
+A connected computer's projects show in this app's sidebar. Jobs in those projects run on the host, with its files, tools and accounts. You don't need a remote desktop session.
 
 ## Setting it up
 
-1. On the Mac that does the work, open Settings › 연결 and turn on **다른 Mac에서 이 Mac 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
-2. On the other Mac, open Settings › 연결, press **Mac 추가** and paste the link. The first Mac then asks **허용 / 거절**.
-3. Once it's allowed, every project of that Mac shows in the sidebar by itself, in the workspace tab of the same name, with the Mac's name beside it. A project made there later shows up too, and one removed there goes.
+1. On the computer that will run the jobs, open Settings › 연결 and turn on **다른 기기에서 이 기기 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
+2. On the computer you're connecting from, open Settings › 연결, press **기기 추가** and paste the link. The host then asks **허용 / 거절**. Older Mac versions label these controls **다른 Mac에서 이 Mac 쓰기** and **Mac 추가**.
+3. Once allowed, the host's projects appear automatically in the sidebar, in the workspace tab of the same name, with the host's name beside them. A project added there later shows up too, and one removed there disappears.
 
-After that the Macs find each other again on their own, with no new link needed.
+The two devices reconnect on their own, with no new link needed. To run jobs in the other direction, repeat setup with their roles reversed.
 
 ## Hiding a project
 
@@ -49,7 +49,7 @@ Everything a job's panels read comes from the Mac it runs on: the changes and th
 - **What the other Mac may reach.** Only paths inside the folders of the projects it added and of the jobs it sees (folder, worktree, results folder) and its own attachments folder, after following links. A file one of those jobs named itself (a screenshot in a reply) can be read on its own, but not listed around. A folder as wide as the home folder never counts, so a job started in `~` shows no files. Jobs and projects in a call must be ones the Mac sees. The rules are in `src/engine/farPaths.ts`.
 - **Sizes.** A diff or a trace comes in one answer of at most 3 MB (the changes bar says 일부만 when cut); a file to read is at most 2 MB, as here. Pictures, videos and pages are fetched in 512 KB pieces into `<data dir>/remote/cache` (by path and version, dropped after a week unused), up to 48 MB each. An HTML page comes with every file it links to (pictures, styles, scripts, fonts, other pages, followed through styles and scripts too; at most 400 files and 200 MB), laid out as there under `<data dir>/remote/sites/<mac>/…` so its relative links work; it is copied again when the page changes there, and a file that Mac won't share is left out. Attachments go the other way the same way, into `<data dir>/attachments/remote` there, up to 100 MB each; the message then names the paths there.
 - **Terminal.** A job's terminal tab opens a shell there in the app (`far.ptyOpen`). Keys go as `{t:"pty-in"}` and size changes as `{t:"pty-size"}`, with no answer. The output comes back as `{t:"pty",id,data}` every 40 ms at most, then `{t:"pty",id,exit}`. A Mac may keep six open, and they close when it goes.
-- **On that Mac's screen.** 편집기 / Finder for those jobs open on that Mac (`far.editor`, `far.reveal`).
+- **On that computer's screen.** 편집기 / Finder for those jobs open on the host (`far.editor`, `far.reveal`); a Windows host opens File Explorer and its editor.
 - **Memory.** The Memory page lists the other Macs' projects under 다른 Mac; their pieces are read, added, edited and forgotten there (`far.mem*`).
 - **Older Ondra.** A Mac whose Ondra doesn't know a `far.*` call answers `unknown: …`, and the panel says to update it. The new message kinds are ignored by older versions, and the helper carries them as any other line.
 

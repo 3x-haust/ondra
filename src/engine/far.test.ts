@@ -12,6 +12,7 @@ vi.mock("../lib/native", async (orig) => {
     fsFiles: vi.fn(async () => ["here"]),
     gitChanges: vi.fn(async () => ({ isRepo: true, branch: null, files: [], patch: "" })),
     revealPath: vi.fn(async () => {}),
+    openInEditor: vi.fn(async () => {}),
     farStat: vi.fn(async (p: string) => (p.endsWith("/dir") ? { size: 0, modified: 1, dir: true } : { size: 700_000, modified: 1, dir: false })),
     // 700 000 bytes: a 512 KB piece, then the rest
     farPiece: vi.fn(async (_p: string, off: number) => ({ data: btoa("\0".repeat(Math.min(512 << 10, 700_000 - off))), size: 700_000, modified: 1 })),
@@ -19,9 +20,9 @@ vi.mock("../lib/native", async (orig) => {
 });
 
 import { askHost, tellHost } from "./hosts";
-import { farPiece, fsFiles, gitChanges, revealPath } from "../lib/native";
-import { changesIn, farError, farTerm, listFiles, onMac, revealOn, sendFiles, srcOf } from "./far";
-import { refreshEngine } from "./rpc";
+import { farPiece, fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
+import { changesIn, editorOn, farError, farTerm, listFiles, onMac, revealOn, sendFiles, srcOf } from "./far";
+import { engine, refreshEngine } from "./rpc";
 
 beforeAll(async () => {
   // outside the app: home /Users/me
@@ -37,6 +38,8 @@ describe("where a thing is done", () => {
     expect(gitChanges).toHaveBeenCalledWith("/Users/me/work/app", "main");
     await revealOn(undefined, "/Users/me/x");
     expect(revealPath).toHaveBeenCalledWith("/Users/me/x");
+    await editorOn(undefined, "/Users/me/x");
+    expect(openInEditor).toHaveBeenCalledWith("/Users/me/x");
     expect(askHost).not.toHaveBeenCalled();
   });
 
@@ -47,6 +50,9 @@ describe("where a thing is done", () => {
     expect(askHost).toHaveBeenCalledWith("H", "far.changes", ["/Users/other/app", null, true]);
     await revealOn("H", "~/x");
     expect(askHost).toHaveBeenCalledWith("H", "far.reveal", ["~/x"]);
+    await editorOn("H", "~/x");
+    expect(askHost).toHaveBeenCalledWith("H", "far.editor", ["~/x"]);
+    expect(openInEditor).not.toHaveBeenCalled();
     expect(fsFiles).not.toHaveBeenCalled();
     expect(revealPath).not.toHaveBeenCalled();
   });
@@ -71,6 +77,17 @@ describe("attachments for another Mac", () => {
     expect(vi.mocked(farPiece)).toHaveBeenCalledTimes(2);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatch(/^\/there\/[0-9a-z]+-[0-9a-z]+-shot\.png$/);
+  });
+  it("sends a Windows attachment under its basename, not its local drive or folder", async () => {
+    const info = vi.spyOn(engine, "info", "get").mockReturnValue({ ...engine.info, home: String.raw`C:\Users\viewer` });
+    try {
+      const p = String.raw`D:\private folder\photo.png`;
+      const out = await sendFiles("Mac", [p]);
+      expect(out).toEqual([expect.stringMatching(/^\/there\/[0-9a-z]+-[0-9a-z]+-photo\.png$/)]);
+      expect(farPiece).toHaveBeenCalledWith(p, 512 << 10, 512 << 10);
+    } finally {
+      info.mockRestore();
+    }
   });
   it("can't be folders", async () => {
     await expect(sendFiles("H", ["/Users/me/dir"])).rejects.toThrow();

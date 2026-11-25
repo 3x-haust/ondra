@@ -67,7 +67,16 @@ fn piece(path: &str, offset: u64, len: u64) -> Result<Piece, String> {
 fn safe_name(name: &str) -> Option<String> {
     let s: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')).take(120).collect();
     let s = s.trim_start_matches('.').to_string();
-    (!s.is_empty()).then_some(s)
+    (!s.is_empty() && local_name(&s)).then_some(s)
+}
+
+/// Win32 drops trailing dots/spaces and treats device names specially even with an extension.
+fn local_name(name: &str) -> bool {
+    if !cfg!(windows) { return true; }
+    let stem = name.split('.').next().unwrap_or_default().trim_end_matches(' ').to_ascii_uppercase();
+    !name.ends_with(['.', ' ']) && !name.contains([':', '<', '>', '"', '|', '?', '*']) && !name.chars().any(char::is_control)
+        && !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        && !stem.strip_prefix("COM").or_else(|| stem.strip_prefix("LPT")).is_some_and(|n| matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"))
 }
 
 fn dir_for(data: &Path, kind: &str) -> Result<PathBuf, String> {
@@ -89,7 +98,7 @@ fn safe_rel(name: &str) -> Option<PathBuf> {
     }
     let mut out = PathBuf::new();
     for p in parts {
-        if p == "." || p == ".." || p.len() > 255 {
+        if p == "." || p == ".." || p.len() > 255 || !local_name(p) {
             return None;
         }
         out.push(p);
@@ -217,6 +226,16 @@ mod tests {
         // past the end: nothing, no error
         assert_eq!(piece(&s, 9999, 10).unwrap().data, "");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn site_components_are_regular_windows_names() {
+        for name in ["C:", "aux.png", "image:other", ".. ", "COM1.txt", "LPT²"] {
+            assert!(safe_rel(&format!("host/{name}/index.html")).is_none());
+        }
+        assert!(safe_name("NUL.log").is_none());
+        assert!(safe_rel("host/C/site/img.png").is_some());
     }
 
     #[test]

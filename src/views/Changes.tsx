@@ -130,12 +130,13 @@ function Body(props: { t: Task }) {
   const w = () => props.t.worktree;
   const gone = () => discarded(props.t);
   const merged = () => w()?.state === "merged";
+  const mergedRoot = () => props.t.host && w()!.sub ? `${w()!.repo}/${w()!.sub}` : w()!.repo;
 
   // still working (or never had a worktree): its folder against where it started, refreshed as it edits
   const [live, refetch] = useChanges(() => props.t, () => !gone() && !merged());
   // merged: what the merge brought in, from the repo
   const [mergedData] = createResource(
-    () => (merged() && w() ? ([w()!.repo, w()!.branch, w()!.into, w()!.base, props.t.host] as const) : false),
+    () => (merged() && w() ? ([mergedRoot(), w()!.branch, w()!.into, w()!.base, props.t.host] as const) : false),
     // a job of another Mac: from its repo there
     ([repo, branch, into, base, host]) => mergedIn(host, repo, branch, into, base).catch(() => null),
   );
@@ -144,13 +145,13 @@ function Body(props: { t: Task }) {
     if (merged()) {
       const m = mergedData();
       if (m === undefined) return undefined;
-      return m && { cwd: w()!.repo, root: w()!.repo, from: m.from, to: m.to, files: changedFiles(m.changes.files, m.changes.patch) };
+      return m && { cwd: mergedRoot(), root: mergedRoot(), from: m.from, to: m.to, files: changedFiles(m.changes.files, m.changes.patch) };
     }
     const d = live();
     if (!d) return undefined;
     if (!d.isRepo) return null;
     const open = w()?.state === "open";
-    return { cwd: expand(props.t.cwd), root: open ? expand(w()!.path) : expand(props.t.cwd), from: open ? w()!.base : "HEAD", to: null, files: changedFiles(d.files, d.patch) };
+    return { cwd: expand(props.t.cwd), root: open && !props.t.host ? expand(w()!.path) : expand(props.t.cwd), from: open ? w()!.base : "HEAD", to: null, files: changedFiles(d.files, d.patch) };
   });
   const why = () =>
     gone() ? t("버린 작업이라 볼 변경 사항이 없어요") : merged() ? t("병합된 변경을 찾지 못했어요") : live()?.isRepo === false ? t("git 저장소가 아니라 비교할 수 없어요") : "";

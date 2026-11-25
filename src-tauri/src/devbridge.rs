@@ -26,12 +26,16 @@ pub fn dev_report(id: u64, value: String) {
 }
 
 pub fn start(app: AppHandle) {
-    let token = format!("{:x}{:x}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let Ok(token) = crate::bridge::token() else { return };
     let dir = crate::engine::data_dir(&app);
-    let _ = std::fs::write(dir.join("devbridge.token"), &token);
     std::thread::spawn(move || {
         let port = std::env::var("ONDRA_DEVBRIDGE_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(17321);
         let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) else { return };
+        #[cfg(windows)]
+        let saved = crate::winvault::write(&dir.join("devbridge.token.dpapi"), token.as_bytes());
+        #[cfg(not(windows))]
+        let saved = std::fs::write(dir.join("devbridge.token"), &token);
+        if saved.is_err() { return; }
         let mut seq = 0u64;
         for stream in listener.incoming().flatten() {
             seq += 1;

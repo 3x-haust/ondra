@@ -5,6 +5,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 use tauri::AppHandle;
 
@@ -100,16 +101,16 @@ pub fn logs_recent(app: AppHandle, max_bytes: usize) -> String {
 /// The macOS version (the web view's user agent is frozen at 10.15.7).
 #[tauri::command(async)]
 pub fn os_version() -> String {
+    #[cfg(not(target_os = "macos"))]
+    { return std::env::consts::OS.to_string() }
+    #[cfg(target_os = "macos")]
     Command::new("sw_vers").arg("-productVersion").output().ok().map(|o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim())).unwrap_or_else(|| "macOS".into())
 }
 
 /// "2026-11-11 10:20:01" and "2026-11-11" in local time, the way the app side writes them.
 fn now() -> (String, String) {
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    let t = unsafe { libc::time(std::ptr::null_mut()) };
-    unsafe { libc::localtime_r(&t, &mut tm) };
-    let day = format!("{:04}-{:02}-{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
-    (format!("{day} {:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec), day)
+    let local = chrono::Local::now();
+    (local.format("%Y-%m-%d %H:%M:%S").to_string(), local.format("%Y-%m-%d").to_string())
 }
 
 /// One line in the app's format; the home folder's name never reaches the file.
@@ -122,7 +123,7 @@ fn line(at: &str, level: &str, src: &str, msg: &str, home: &str) -> String {
 /// A native panic goes to the log as well (where and what), for a feedback report.
 pub fn install_panic_hook(app: &AppHandle) {
     let d = dir(app);
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = crate::engine::home().to_string_lossy().into_owned();
     let was = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let (at, day) = now();
