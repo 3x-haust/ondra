@@ -1,11 +1,11 @@
-// Working on another Mac (Settings › 연결): its projects
+// Working on another device (Settings › 연결): its projects
 // added here show in the sidebar beside this Mac's, and their jobs run over there. This Mac
 // keeps a live copy of those jobs (state/mirror.ts) and sends what the user does with them
-// (a message, stop, merge…) to that Mac's Ondra, which does it. The other side is
+// (a message, stop, merge…) to that device's Ondra, which does it. The other side is
 // engine/remote.ts; the network is the ondra-remote helper.
 //
 // Two ways to stop: 연결 끊기 (disconnect for now: kept, not dialed until 다시 연결) and 제거
-// (remove: everything of that Mac goes from here, and that Mac is told to forget this one; when it
+// (remove: everything of that device goes from here, and that device is told to forget this one; when it
 // can't be reached it's told the next time it can, see `leaving`).
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
@@ -50,12 +50,12 @@ export function reconnect(host: string) {
   void startHosts().then(() => dial(host));
 }
 
-/** the calls still waiting on that Mac: they won't be answered */
+/** the calls still waiting on that device: they won't be answered */
 function dropPending(host: string) {
   for (const [n, p] of pending) if (p.host === host) (pending.delete(n), p.no(new Error(t("{name} 연결이 끊겼어요", { name: hostName(host) }))));
 }
 
-/** 연결 끊기: stop connecting to that Mac for now. Its projects stay; 다시 연결 brings it back. */
+/** 연결 끊기: stop connecting to that device for now. Its projects stay; 다시 연결 brings it back. */
 export function disconnectHost(host: string) {
   clearTimeout(retry.get(host)?.timer);
   retry.delete(host);
@@ -65,7 +65,7 @@ export function disconnectHost(host: string) {
   status(host, "off");
 }
 
-/** ask that Mac's Ondra to do something; its answer (or why not) comes back */
+/** ask that device's Ondra to do something; its answer (or why not) comes back */
 export function viaHost<T = unknown>(host: string, fn: string, args: unknown[]): Promise<T> {
   if (mirror.hosts[host]?.status !== "ok") {
     toast(t("{name}에 연결되지 않았어요", { name: hostName(host) }), "bad");
@@ -81,9 +81,9 @@ export function viaHost<T = unknown>(host: string, fn: string, args: unknown[]):
   });
 }
 
-// ───────── files, folders and terminals of that Mac (engine/far.ts; its side is engine/farHost.ts)
+// ───────── files, folders and terminals of that device (engine/far.ts; its side is engine/farHost.ts)
 
-/** Ask that Mac quietly (a panel reading a file says what went wrong itself, no toast), and give up
+/** Ask that device quietly (a panel reading a file says what went wrong itself, no toast), and give up
  *  after a while: a Mac whose Ondra is older doesn't know the newer calls and says so, but one
  *  that went quiet must not hold a panel forever. */
 export function askHost<T = unknown>(host: string, fn: string, args: unknown[], wait = 30_000): Promise<T> {
@@ -97,28 +97,28 @@ export function askHost<T = unknown>(host: string, fn: string, args: unknown[], 
   });
 }
 
-/** a message to that Mac that wants no answer (keys typed in its terminal) */
+/** a message to that device that wants no answer (keys typed in its terminal) */
 export const tellHost = (host: string, data: Record<string, unknown>) => void sendTo(host, data).catch(() => {});
 
-/** what that Mac sends of its own accord beyond the jobs (a terminal's output): by its "t";
+/** what that device sends of its own accord beyond the jobs (a terminal's output): by its "t";
  *  "@closed" hears the connection go */
 const peerKinds = new Map<string, (host: string, d: Record<string, unknown>) => void>();
 export const onPeerKind = (kind: string, f: (host: string, d: Record<string, unknown>) => void) => void peerKinds.set(kind, f);
 
-/** an action on a job: when the job is another Mac's, it goes there (and this says so) */
+/** an action on a job: when the job is another device's, it goes there (and this says so) */
 export function far(id: string, fn: string, args: unknown[]): Promise<unknown> | undefined {
   for (const [host, h] of Object.entries(mirror.hosts)) if (h.tasks.some((x) => x.id === id)) return viaHost(host, fn, args).catch(() => undefined);
   return undefined;
 }
 
-/** a new job in another Mac's project: shown here at once, made and run there */
+/** a new job in another device's project: shown here at once, made and run there */
 export function startFar(host: string, task: Task, ask: FarAsk) {
   if (!mirror.hosts[host]) status(host, "lost");
   setMirror("hosts", host, "tasks", (l) => [...l, task]);
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
 }
 
-/** the space and name a job of that Mac takes here: those of the project it was added to */
+/** the space and name a job of that device takes here: those of the project it was added to */
 function place(host: string, t: Task, list: Task[]) {
   t.host = host;
   if (t.project && !t.project.startsWith("r:")) t.project = remoteProjectId(host, t.project);
@@ -178,7 +178,7 @@ export function apply(host: string, patches: Patch[], gone: string[] = [], all =
         const i = list.findIndex((y) => y.id === id);
         if (i >= 0) list.splice(i, 1);
       }
-      // jobs this Mac started in a project hidden since still come (that Mac sends what it asked for)
+      // jobs this Mac started in a project hidden since still come (that device sends what it asked for)
       for (let i = list.length - 1; i >= 0; i--) if (hiddenHere(host, list[i], list)) list.splice(i, 1);
     }),
   );
@@ -189,13 +189,13 @@ export function apply(host: string, patches: Patch[], gone: string[] = [], all =
 }
 
 const endedHooks: ((t: Task) => void)[] = [];
-/** another Mac's job was seen to end (done or failed): main hears it as it hears this Mac's own */
+/** another device's job was seen to end (done or failed): main hears it as it hears this Mac's own */
 export const onFarEnded = (f: (t: Task) => void) => void endedHooks.push(f);
 
-/** the questions that Mac's jobs (those kept here) wait on */
+/** the questions that device's jobs (those kept here) wait on */
 const applyDecisions = (host: string, list: Decision[]) => mirror.hosts[host] && setMirror("hosts", host, "decisions", list);
 
-/** opened here: its dot goes here until it says more (that Mac's own dot is left alone) */
+/** opened here: its dot goes here until it says more (that device's own dot is left alone) */
 export function markFarRead(id: string) {
   for (const [host, h] of Object.entries(mirror.hosts)) {
     const i = h.tasks.findIndex((x) => x.id === id);
@@ -205,7 +205,7 @@ export function markFarRead(id: string) {
   }
 }
 
-/** answer another Mac's question there; its card goes now and comes back if that Mac can't take it */
+/** answer another device's question there; its card goes now and comes back if that device can't take it */
 export async function farDecide(d: Decision, optionId: string, values?: FormValues) {
   const host = Object.keys(mirror.hosts).find((h) => mirror.hosts[h].decisions?.some((x) => x.id === d.id));
   if (!host) return;
@@ -267,7 +267,7 @@ function onBye(host: string, s: string, reason: unknown) {
   if (s === "bye" || (s === "denied" && (reason === "unknown" || reason === "revoked"))) return byeDone(host);
   if (s === "ok") {
     // an older Ondra there let it in as a visit (the helper left at once): this Mac stays in its list
-    toast(t("{name}의 Ondra가 이전 버전이라, 그 Mac에서도 이 Mac을 제거해야 해요", { name: hostName(host) }), "info", undefined, { stay: true });
+    toast(t("{name}의 Ondra가 이전 버전이라, 그 기기에서도 이 기기를 제거해야 해요", { name: hostName(host) }), "info", undefined, { stay: true });
     return byeDone(host);
   }
   // not reachable, or connections are off there: try again later
@@ -276,7 +276,7 @@ function onBye(host: string, s: string, reason: unknown) {
 
 /**
  * That Mac said no. Connections off there is for now: tried again later. Removed there, refused,
- * or a link that no longer works is for good, so that Mac goes from here too (nothing but a new
+ * or a link that no longer works is for good, so that device goes from here too (nothing but a new
  * link could bring it back) and the user is told why.
  */
 function denied(host: string, reason: string) {
@@ -289,7 +289,7 @@ function denied(host: string, reason: string) {
   const why =
     reason === "refused" ? t("{name}에서 연결을 거절했어요", { name })
     : reason === "unknown" && hostOf(host)?.pair ? t("연결 링크가 만료됐거나 이미 쓰였어요")
-    : reason === "unknown" || reason === "revoked" ? t("{name}에서 이 Mac을 제거했어요", { name })
+    : reason === "unknown" || reason === "revoked" ? t("{name}에서 이 기기를 제거했어요", { name })
     : undefined;
   if (!why) return status(host, "denied", reason);
   forgetHost(host);
@@ -367,7 +367,7 @@ export function onPeer(ev: Record<string, unknown>) {
   }
 }
 
-/** a link from another Mac (its 연결 링크 복사): ondra://connect/<id>?code=…&name=… */
+/** a link from another device (its 연결 링크 복사): ondra://connect/<id>?code=…&name=… */
 function parseLink(text: string): { id: string; code: string; name: string } | undefined {
   const m = text.trim().match(/ondra:\/\/connect\/([0-9a-f]{64})\?([^\s]+)/i);
   if (!m) return undefined;
@@ -376,7 +376,7 @@ function parseLink(text: string): { id: string; code: string; name: string } | u
   return code ? { id: m[1].toLowerCase(), code, name: q.get("name") || "Mac" } : undefined;
 }
 
-/** add a Mac from its link: connects at once (that Mac asks its user to allow this one) */
+/** add a Mac from its link: connects at once (that device asks its user to allow this one) */
 export async function addHost(text: string): Promise<boolean> {
   const l = parseLink(text);
   if (!l) return false;
@@ -392,7 +392,7 @@ export async function addHost(text: string): Promise<boolean> {
 
 /**
  * The workspace tabs: this Mac's, and those of the Macs added here, matched by name. A workspace
- * only another Mac has gets a tab of its own here (its work runs on that Mac); it goes when no
+ * only another device has gets a tab of its own here (its work runs on that device); it goes when no
  * added Mac has it anymore, unless something of this Mac's was put in it since.
  */
 function syncSpaces() {
@@ -407,7 +407,7 @@ function syncSpaces() {
   setState("spaces", (l) => [...l.filter((s) => !drop.includes(s.id)), ...add.map((label) => ({ id: uid("sp"), label, folder: "~", rules: "", only: true }))]);
 }
 
-/** the view leaves what was that Mac's (its project's chat, one of its jobs) */
+/** the view leaves what was that device's (its project's chat, one of its jobs) */
 function leaveViewOf(host: string) {
   const v = view();
   const shown = v.name === "main" ? splitProjectId(v.project)?.host : "id" in v && typeof v.id === "string" ? hostOfTask(v.id) : undefined;
@@ -415,8 +415,8 @@ function leaveViewOf(host: string) {
 }
 
 /**
- * Everything of that Mac goes from here: its entry, its projects and jobs shown here, a run
- * location on it, and a workspace tab only it had. Nothing is said to that Mac (see removeHost).
+ * Everything of that device goes from here: its entry, its projects and jobs shown here, a run
+ * location on it, and a workspace tab only it had. Nothing is said to that device (see removeHost).
  */
 function forgetHost(id: string) {
   clearTimeout(retry.get(id)?.timer);
@@ -434,7 +434,7 @@ function forgetHost(id: string) {
   syncSpaces();
 }
 
-/** 제거: that Mac goes from here, and it is told to forget this one (now, or once it can be reached) */
+/** 제거: that device goes from here, and it is told to forget this one (now, or once it can be reached) */
 export function removeHost(id: string) {
   const name = hostName(id);
   forgetHost(id);
@@ -444,8 +444,8 @@ export function removeHost(id: string) {
 }
 
 /**
- * Every project of that Mac shows here by itself, as it would there: in the tab of its workspace's
- * name (made by syncSpaces when only that Mac has it). One gone there, or hidden here, goes here too.
+ * Every project of that device shows here by itself, as it would there: in the tab of its workspace's
+ * name (made by syncSpaces when only that device has it). One gone there, or hidden here, goes here too.
  */
 function linkAll(host: string) {
   const list = mirror.hosts[host]?.projects ?? [];
@@ -459,7 +459,7 @@ function linkAll(host: string) {
   watch(host);
 }
 
-/** 목록에서 숨기기: one of that Mac's projects off the list here (it stays there; 다시 보이기 brings it back) */
+/** 목록에서 숨기기: one of that device's projects off the list here (it stays there; 다시 보이기 brings it back) */
 export function hideHostProject(host: string, id: string) {
   const pid = remoteProjectId(host, id);
   const v = view();
@@ -476,7 +476,7 @@ export function showHostProject(host: string, id: string) {
   linkAll(host);
 }
 
-/** that Mac's projects hidden here, with their names as last known */
+/** that device's projects hidden here, with their names as last known */
 export function hiddenProjects(host: string): { id: string; name: string }[] {
   return (hostOf(host)?.hidden ?? []).map((id) => ({ id, name: mirror.hosts[host]?.projects.find((p) => p.id === id)?.name ?? id }));
 }

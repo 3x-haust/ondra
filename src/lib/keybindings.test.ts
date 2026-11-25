@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setState, state } from "../state/store";
 import { assign, changed, chordOf, conflictOf, moveTo, refusal, reset } from "./keybindings";
 import {
   binding, chordLabel, chordText, dispatchShortcut, matchesShortcut, parseChord, shortcutHint, shortcutLabel, shortcuts, UNBOUND,
-  type Shortcut, type ShortcutCommand,
+  type Shortcut, type ShortcutCommand, type ShortcutId,
 } from "./shortcuts";
 
 function press(s: Shortcut): KeyboardEvent {
@@ -190,5 +190,60 @@ describe("keys that weren't commands", () => {
     setState("settings", { keybindings: next });
     expect(matchesShortcut(press(chord("cmd+Slash")), "keys")).toBe(true);
     expect(matchesShortcut(press(shortcuts.keys), "keys")).toBe(false);
+  });
+});
+
+describe("on Windows", () => {
+  beforeEach(() => vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/131.0" }));
+  afterEach(() => vi.unstubAllGlobals());
+  const ids = Object.keys(shortcuts) as ShortcutId[];
+
+  it("puts Ctrl where macOS has ⌘, every default still its own and none on the Win key", () => {
+    const pressed = ids.filter((id) => id !== "hints").map((id) => binding(id)!);
+    expect(pressed.filter((s) => s.meta)).toEqual([]);
+    const texts = pressed.map(chordText);
+    expect(new Set(texts).size).toBe(texts.length);
+    expect(binding("hints")).toEqual({ code: "", ctrl: true });
+  });
+
+  it("keeps the defaults clear of the keys Windows and text editing use", () => {
+    for (const id of ids) {
+      if (id === "hints") continue;
+      const s = binding(id)!;
+      // asked as another command, so a default isn't let through as its own
+      const why = refusal(s, id === "sidebar" ? "search" : "sidebar");
+      expect([id, why]).not.toEqual([id, "Windows가 쓰는 단축키예요"]);
+      expect([id, why]).not.toEqual([id, "글을 고칠 때 쓰는 단축키예요"]);
+    }
+  });
+
+  it("writes chords as Windows does", () => {
+    expect(shortcutLabel("search")).toBe("Ctrl+K");
+    expect(shortcutLabel("commands")).toBe("Ctrl+Shift+P");
+    expect(shortcutLabel("resizePaneLeft")).toBe("Ctrl+Alt+Shift+←");
+    expect(shortcutLabel("closeTab")).toBe("Ctrl+F4");
+    expect(shortcutLabel("mac1")).toBe("Alt+1");
+    expect(shortcutLabel("zoomPane")).toBe("Ctrl+Shift+Enter");
+    expect(shortcutLabel("keys")).toBe("?");
+    expect(chordLabel({ code: "", ctrl: true, alt: true })).toBe("Ctrl+Alt");
+  });
+
+  it("answers Ctrl+K, not the Win key", () => {
+    expect(matchesShortcut(press(chord("ctrl+KeyK")), "search")).toBe(true);
+    expect(matchesShortcut(press(chord("cmd+KeyK")), "search")).toBe(false);
+  });
+
+  it("refuses Windows' own and editing keys, in its own words", () => {
+    expect(refusal(chord("alt+F4"), "sidebar")).toBe("Windows가 쓰는 단축키예요");
+    expect(refusal(chord("ctrl+KeyC"), "sidebar")).toBe("글을 고칠 때 쓰는 단축키예요");
+    expect(refusal(chord("ctrl+ArrowLeft"), "sidebar")).toBe("글을 고칠 때 쓰는 단축키예요");
+    expect(refusal(chord("KeyD"))).toBe("Ctrl, Alt 중 하나와 함께 눌러 주세요");
+    // ⌘H is macOS's; nothing keeps Ctrl+H on Windows
+    expect(refusal(chord("ctrl+KeyH"), "sidebar")).toBeUndefined();
+  });
+
+  it("stores the Windows default as no change", () => {
+    expect(assign({}, "search", chord("ctrl+KeyK"))).toEqual({});
+    expect(assign({}, "search", chord("cmd+KeyK"))).toEqual({ search: "cmd+KeyK" });
   });
 });

@@ -19,7 +19,7 @@ import { parseNowKey, projectNow } from "../engine/journal";
 import { tidying, tidyMemory } from "../engine/tidy";
 import { absorbing, absorbNotes, findNotes, notesPending } from "../engine/absorb";
 import { expand } from "../engine/rpc";
-import { fsRead, memoryFolder, revealPath } from "../lib/native";
+import { fsRead, memoryFolder, revealPath, revealLabel } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
 import { state } from "../state/store";
 import type { Memory, MemoryKind, ProjectNow } from "../state/types";
@@ -218,7 +218,7 @@ export function MemoryView() {
         <button class="btn sm ghost" classList={{ on: sel() === VERSIONS }} onClick={() => setSel(sel() === VERSIONS ? "" : VERSIONS)} aria-pressed={sel() === VERSIONS} aria-label={t("버전")}>
           <Icon name="history" size={14} /><span class="mem-act">{t("버전")}</span>
         </button>
-        <button class="btn sm ghost" onClick={() => void openFolder()} title={t("Finder에서 보기")} aria-label={t("폴더 열기")}><Icon name="folder" size={14} /><span class="mem-act">{t("폴더 열기")}</span></button>
+        <button class="btn sm ghost" onClick={() => void openFolder()} title={revealLabel()} aria-label={t("폴더 열기")}><Icon name="folder" size={14} /><span class="mem-act">{t("폴더 열기")}</span></button>
         <div class="mem-search">
           <Icon name="search" size={14} />
           <input placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => {
@@ -232,7 +232,7 @@ export function MemoryView() {
       <div class="mem-body" style={{ "--mt-w": `${widths().tree}px`, "--md-w": `${widths().detail}px` }}>
         <MemTree model={tree()} full={model()} sel={sel()} onSel={setSel} searching={!!match()} />
         <Graph graph={graph()} sel={graphSel()} hover={hover()} onSel={setSel} onHover={setHover} />
-        {/* another Mac's project: its memory is there */}
+        {/* another device's project: its memory is there */}
         <Show when={sel().startsWith("rp:")} fallback={<Detail model={model()} sel={sel()} onSel={setSel} />}>
           <RemoteMemory id={sel()} />
         </Show>

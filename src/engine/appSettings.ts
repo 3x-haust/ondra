@@ -57,7 +57,7 @@ export const SETTINGS: Record<string, Entry> = {
   browserPip: { where: "일반 › 알림과 미리보기 › 작업 브라우저 작게 띄우기", kind: { type: "bool" }, missing: true, get: () => state.settings.browserPip !== false, set: (v: boolean) => setState("settings", "browserPip", v) },
   jobSound: { where: "일반 › 알림과 미리보기 › 알림 소리", kind: { type: "bool" }, missing: true, get: () => state.settings.jobSound !== false, set: (v: boolean) => setState("settings", "jobSound", v) },
   remote: {
-    where: "연결 › 다른 Mac에서 이 Mac 쓰기 (my other Macs may give this one work)",
+    where: "연결 › 다른 기기에서 이 기기 쓰기 (my other Macs may give this one work)",
     kind: { type: "bool" },
     get: () => !!state.settings.remote,
     set: async (v: boolean) => (await import("./remote")).setRemoteOn(v),

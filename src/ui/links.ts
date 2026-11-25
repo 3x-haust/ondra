@@ -9,6 +9,7 @@ import { openBrowser, previewFile, toast, view } from "../state/ui";
 import { expand } from "../engine/rpc";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 import { t } from "../i18n";
+import { primaryKey } from "../lib/shortcuts";
 
 interface OpenLinkOpts {
   /** the click (or key) that opened it: ⌘ or ⌥ held sends it to the default browser */
@@ -24,7 +25,7 @@ const panelHere = () => view().name === "main" || view().name === "task";
 const linkRoute = (url: string, opts: OpenLinkOpts = {}): LinkRoute =>
   routeLink(url, {
     setting: state.settings.links,
-    outsideKey: !!(opts.event?.metaKey || opts.event?.altKey),
+    outsideKey: !!opts.event && (primaryKey(opts.event) || !!opts.event.altKey),
     outside: opts.outside,
     panel: panelHere(),
   });
@@ -35,8 +36,8 @@ export function openLink(url: string, opts: OpenLinkOpts = {}): LinkRoute {
   if (r.to === "inside") openBrowser(r.target);
   else if (r.to === "outside") void openExternal(r.target);
   else if (r.to === "file") {
-    // ⌘/⌥: in Finder; otherwise the app's own viewer
-    if (opts.event?.metaKey || opts.event?.altKey) void revealPath(expand(r.target.replace(/^file:\/\//, "").replace(/:\d+(:\d+)?$/, "")));
+    // ⌘ (Ctrl on Windows) or ⌥: in Finder; otherwise the app's own viewer
+    if (opts.event && (primaryKey(opts.event) || opts.event.altKey)) void revealPath(expand(r.target.replace(/^file:\/\//, "").replace(/:\d+(:\d+)?$/, "")));
     else previewFile(r.target);
   }
   return r;

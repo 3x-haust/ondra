@@ -265,6 +265,10 @@ describe("disagreements", () => {
     expect(disagreements("- P1 `a.ts:10` — x\n- P2 `b.ts:5` — y", "- P3 `a.ts:12` — x\n- P2 `b.ts:5` — y\n- P1 `c.ts:1` — z")).toEqual(["- `a.ts:10` — 설계 P1 · 코드 P3"]);
     expect(disagreements("P1·P2 없음", "- P1 `a.ts:1` — x")).toEqual([]);
   });
+
+  it("reads finding lines that carry a kind after the place", () => {
+    expect(disagreements("- P1 `a.ts:10` [데이터] — x", "- P3 `a.ts:11` [유지보수] nit: x")).toEqual(["- `a.ts:10` — 설계 P1 · 코드 P3"]);
+  });
 });
 
 describe("a resumed job sees both lenses", () => {

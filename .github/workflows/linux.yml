@@ -2,6 +2,9 @@ name: Linux packages
 
 on:
   pull_request:
+  # Builds on main leave the Rust cache that pull requests start from.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +23,6 @@ jobs:
     env:
       ENGINE_REV: 3311ed88dc6c5c403db2ce4edc762b734acbfb25
       TARGET: x86_64-unknown-linux-gnu
-      CARGO_INCREMENTAL: '0'
       RUSTUP_TOOLCHAIN: 1.95.0
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -46,6 +48,39 @@ jobs:
           echo "$RUNNER_TEMP/pnpm/bin" >> "$GITHUB_PATH"
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
 
+      # Restores the compiled dependencies of both crates and the cargo registry; only the app and
+      # the remote helper themselves are compiled again. The key follows the toolchain and Cargo.lock.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            src-tauri -> target
+            remote/host -> target
+
+      # The app crate is compiled again on every run (the checkout makes its sources new), so the
+      # incremental state of the last build here or on main is kept: rustc then redoes only the code
+      # that changed. Saved under each commit; the newest one of this pull request or main comes back.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src-tauri/target/${{ env.TARGET }}/release/incremental
+          key: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ github.sha }}
+          restore-keys: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
+      # The remote helper (fat LTO) takes one to two minutes and rarely changes. Its build is kept
+      # under the hash of its sources and this file; on an exact match those sources are dated back, so cargo
+      # finds the kept build up to date and uses it instead of compiling it again.
+      - id: remote
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            remote/host/target/${{ env.TARGET }}/release/ondra?remote*
+            remote/host/target/${{ env.TARGET }}/release/deps/ondra?remote*
+            remote/host/target/${{ env.TARGET }}/release/.fingerprint/ondra-remote-*
+          key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**', '.github/workflows/linux.yml') }}
+
+      - name: Use the kept remote helper build
+        if: steps.remote.outputs.cache-hit == 'true'
+        run: git ls-files -z remote/host | xargs -0 touch -d 2000-01-01
+
       - name: Build the pinned coding agent
         run: |
           engine="$RUNNER_TEMP/engine"
@@ -61,7 +96,11 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build packages
-        run: pnpm tauri build --target "$TARGET" --bundles deb,rpm --ci -- --locked
+        # rust-cache turns incremental builds off; the release profile's own setting (on for the app,
+        # off for the remote helper) applies here, as in a release build.
+        run: |
+          unset CARGO_INCREMENTAL
+          pnpm tauri build --target "$TARGET" --bundles deb,rpm --ci -- --locked
 
       - name: Verify the installed package
         run: |

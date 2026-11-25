@@ -484,7 +484,7 @@ export function MacBar() {
   });
   return (
     <>
-      <div class="mbar" role="toolbar" aria-label={t("Mac")}>
+      <div class="mbar" role="toolbar" aria-label={t("기기")}>
         <For each={macs()}>
           {(m, i) => (
             <button

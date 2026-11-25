@@ -62,7 +62,7 @@ function Spark(props: { values: number[] }) {
 }
 
 function Shot(props: { path?: string; caption: string }) {
-  // a job of another Mac: its picture is fetched from there
+  // a job of another device: its picture is fetched from there
   const host = useHost();
   return (
     <figure class="shot">

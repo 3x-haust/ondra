@@ -58,7 +58,7 @@ function useTrace(t: () => Task) {
     try {
       let text = "";
       for (const id of ids()) {
-        // a job of another Mac: its trace is there
+        // a job of another device: its trace is there
         const r = await traceOf(t().host, id, offsets.get(id) ?? 0).catch(() => ({ text: "", end: offsets.get(id) ?? 0 }));
         if (r.end < (offsets.get(id) ?? 0)) setTrace(emptyTrace()), offsets.clear();
         offsets.set(id, r.end);

@@ -1,4 +1,5 @@
 // A picture, big. ← → moves between the pictures it was opened with, Esc closes.
+import { revealLabel } from "../lib/native";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { revealOn, srcOf, type Where } from "../engine/far";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
@@ -27,7 +28,7 @@ function BigBoard(props: { src: string; ask?: (text: string) => void }) {
   return <div class="lb-board" ref={host} onClick={(e) => e.stopPropagation()} />;
 }
 
-/** `host`: the pictures are another Mac's (a job running there) */
+/** `host`: the pictures are another device's (a job running there) */
 export function openImage(path: string, list: string[] = [path], host?: Where) {
   const l = list.includes(path) ? list : [path, ...list];
   setShown({ list: l, i: l.indexOf(path), host });
@@ -80,7 +81,7 @@ export function Lightbox() {
                 <button class="icon-btn sm" title={`${t("이전")} ←`} aria-label={t("이전")} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                 <button class="icon-btn sm" title={`${t("다음")} →`} aria-label={t("다음")} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
               </Show>
-              <button class="icon-btn sm" title={s().host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealOn(s().host, path())}><Icon name="open" size={14} /></button>
+              <button class="icon-btn sm" title={s().host ? t("그 기기에서 위치 보기") : revealLabel()} aria-label={revealLabel()} onClick={() => void revealOn(s().host, path())}><Icon name="open" size={14} /></button>
               <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setShown(null)}><Icon name="x" size={14} /></button>
             </div>
           </div>

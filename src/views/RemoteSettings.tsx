@@ -217,7 +217,7 @@ function ThisDevice() {
   );
 }
 
-/** may that Mac use every workspace here (none picked out) */
+/** may that device use every workspace here (none picked out) */
 const allSpaces = (id: string) => !state.settings.deviceSpaces?.[id];
 
 /** one Mac allowed in: the workspaces it may use, its jobs here, 제거 */

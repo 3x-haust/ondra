@@ -2,7 +2,7 @@
 // override map after a change. Pure; Settings › 단축키 writes the result to
 // state.settings.keybindings. Ids come from the `shortcuts` table, so a new
 // entry there is listed, matched and rebindable without anything added here.
-import { binding, chordText, isShortcutId, modifierHold, parseChord, sameChord, shortcuts, UNBOUND, type Overrides, type Shortcut, type ShortcutId } from "./shortcuts";
+import { binding, chordText, defaultChord, isShortcutId, modifierHold, onWindows, parseChord, sameChord, shortcuts, UNBOUND, type Overrides, type Shortcut, type ShortcutId } from "./shortcuts";
 
 const MODIFIER_CODES = /^(Meta|Control|Alt|Shift|OS|CapsLock|Fn)(Left|Right)?$/;
 /** a press that is only a modifier: recording waits for the key */
@@ -32,21 +32,31 @@ const EDITING = [
   "cmd+Backspace", "alt+Backspace", "cmd+Delete", "alt+Delete",
   ...["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].flatMap((k) => [`cmd+${k}`, `alt+${k}`, `shift+cmd+${k}`, `alt+shift+${k}`]),
 ].map(c);
+/** Windows keeps these for itself */
+const WINDOWS_SYSTEM = ["alt+Tab", "alt+shift+Tab", "alt+F4", "alt+Space", "ctrl+Escape", "ctrl+shift+Escape", "ctrl+alt+Delete"].map(c);
+/** and text editing these: ⌘'s by Ctrl, Ctrl+Y for redo, Ctrl+arrows by word */
+const WINDOWS_EDITING = [
+  "ctrl+KeyA", "ctrl+KeyC", "ctrl+KeyV", "ctrl+KeyX", "ctrl+KeyZ", "ctrl+KeyY", "ctrl+shift+KeyZ", "ctrl+shift+KeyV",
+  "ctrl+Backspace", "ctrl+Delete", "ctrl+Home", "ctrl+End",
+  ...["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].flatMap((k) => [`ctrl+${k}`, `ctrl+shift+${k}`]),
+].map(c);
 const FUNCTION_KEY = /^F([1-9]|1[0-9]|20)$/;
 
 /** why a command can't take this chord (a Korean key for t()), or undefined if it can */
 export function refusal(s: Shortcut, id?: string): string | undefined {
   // hints: modifiers held on their own, one of them more than ⇧ (held while typing a capital)
+  const win = onWindows();
+  const withOne = win ? "Ctrl, Alt 중 하나와 함께 눌러 주세요" : "⌘, ⌃, ⌥ 중 하나와 함께 눌러 주세요";
   if (id && modifierHold(id)) {
-    if (!modifierOnly(s.code)) return "⌘, ⌃, ⌥만 길게 눌러 주세요";
-    return s.meta || s.ctrl || s.alt ? undefined : "⌘, ⌃, ⌥ 중 하나와 함께 눌러 주세요";
+    if (!modifierOnly(s.code)) return win ? "Ctrl, Alt만 길게 눌러 주세요" : "⌘, ⌃, ⌥만 길게 눌러 주세요";
+    return s.meta || s.ctrl || s.alt ? undefined : withOne;
   }
   if (modifierOnly(s.code)) return "키를 함께 눌러 주세요";
   // a command can always have its own default back (⌘W included)
-  if (id && isShortcutId(id) && sameChord(shortcuts[id], s)) return undefined;
-  if (!s.meta && !s.ctrl && !s.alt && !FUNCTION_KEY.test(s.code)) return "⌘, ⌃, ⌥ 중 하나와 함께 눌러 주세요";
-  if (SYSTEM.some((x) => sameChord(x, s))) return "macOS가 쓰는 단축키예요";
-  if (EDITING.some((x) => sameChord(x, s))) return "글을 고칠 때 쓰는 단축키예요";
+  if (id && isShortcutId(id) && sameChord(defaultChord(id), s)) return undefined;
+  if (!s.meta && !s.ctrl && !s.alt && !FUNCTION_KEY.test(s.code)) return withOne;
+  if ((win ? WINDOWS_SYSTEM : SYSTEM).some((x) => sameChord(x, s))) return win ? "Windows가 쓰는 단축키예요" : "macOS가 쓰는 단축키예요";
+  if ((win ? WINDOWS_EDITING : EDITING).some((x) => sameChord(x, s))) return "글을 고칠 때 쓰는 단축키예요";
   return undefined;
 }
 
@@ -63,7 +73,7 @@ export function conflictOf(s: Shortcut, id: string, o: Overrides): ShortcutId | 
 export function assign(o: Overrides, id: string, s: Shortcut | null): Record<string, string> {
   const next = clean(o);
   if (!isShortcutId(id)) return next;
-  if (s && sameChord(s, shortcuts[id])) delete next[id];
+  if (s && sameChord(s, defaultChord(id))) delete next[id];
   else next[id] = s ? chordText(s) : UNBOUND;
   return next;
 }

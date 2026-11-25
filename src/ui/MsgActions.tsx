@@ -60,7 +60,7 @@ export function MsgActions(props: { text: string; at?: number; mine?: boolean; o
 /** A user message: grey bubble on the right, time / copy / edit on hover. */
 export function UserMsg(props: { text: string; at?: number; from?: string; id?: string; onEdit?: (text: string) => void }) {
   const open = () => !!props.id && editing() === props.id;
-  // a job of another Mac: what was attached was sent there, and is shown from there
+  // a job of another device: what was attached was sent there, and is shown from there
   const host = useHost();
   /** "…\n\n첨부한 파일:\n- a\n- b" → text and files */
   const split = () => {

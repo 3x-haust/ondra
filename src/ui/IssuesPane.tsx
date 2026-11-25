@@ -38,7 +38,7 @@ const FILTERS = [
 ] as const;
 
 /** the folder whose repo we show: the open job's, else the project in view, else the space's first
- *  (`host`: it is on another Mac, and gh runs there) */
+ *  (`host`: it is on another device, and gh runs there) */
 function folderOf(t?: Task): { dir: string; space: Task["space"]; project?: string; host?: string } | undefined {
   if (t) return { dir: expand(t.cwd), space: t.space, project: t.project, host: t.host };
   const v = view();

@@ -2,7 +2,7 @@
 // throwing one away, sharing one as a file (and taking one in), and a new pet made by a job from a character's
 // name (skills/pet-maker).
 import { createResource, createSignal, For, Show } from "solid-js";
-import { fileSrc, petDelete, petExport, petImport, petList, pickFiles, revealPath } from "../lib/native";
+import { fileSrc, petDelete, petExport, petImport, petList, pickFiles, revealPath, revealLabel } from "../lib/native";
 import { PET_SIZE, petConfig, pickPet, wearPet } from "../engine/pet";
 import { BUILTIN, parseSpec, type PetSpec } from "../pet/spec";
 import { setState, state } from "../state/store";
@@ -50,7 +50,7 @@ export function PetSettings() {
   const share = async (p: PetSpec) => {
     try {
       const path = await petExport(p.id);
-      toast(t("다운로드 폴더에 저장했어요: {file}", { file: path.split("/").pop() ?? path }), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
+      toast(t("다운로드 폴더에 저장했어요: {file}", { file: path.split("/").pop() ?? path }), "info", { label: revealLabel(), run: () => void revealPath(path) });
     } catch (e) {
       toast(String(e), "bad");
     }

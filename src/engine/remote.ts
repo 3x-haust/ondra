@@ -1,4 +1,4 @@
-// Letting other Macs work on this one (Settings › 연결 › 이 Mac): a Mac the user allowed
+// Letting other Macs work on this one (Settings › 연결 › 이 기기): a Mac the user allowed
 // adds this Mac's projects to its sidebar and runs jobs in them here. Its Ondra keeps a
 // live copy of those jobs (engine/hosts.ts); this side sends what changed and does what it
 // asks, as if the user had done it here.
@@ -96,7 +96,7 @@ function spacesOf(device: string): Set<string> | undefined {
   return l ? new Set(l) : undefined;
 }
 const reach = (c: Pick<Conn, "device" | "watch">): Reach => ({ device: c.device, watch: c.watch, spaces: spacesOf(c.device) });
-/** what that Mac keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
+/** what that device keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
 const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
 function flush() {
@@ -143,7 +143,7 @@ function flush() {
   projectsDirty = false;
 }
 
-/** the questions the jobs that Mac keeps wait on (its cards, "내 차례"), sent when they change.
+/** the questions the jobs that device keeps wait on (its cards, "내 차례"), sent when they change.
  *  A Mac too old to know {t:"decisions"} passes it by. */
 export function decisionsFor(device: string, watch: Set<string>): Decision[] {
   const c = { device, watch } as Conn;
@@ -200,19 +200,19 @@ async function sendProjects(conn: number) {
 
 // ───────── what it asks
 
-/** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
- *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
+/** a new job here, from another device (it chose the id): in one of this Mac's projects (its workspace),
+ *  or in the workspace that device picked; on the account it picked there, else that workspace's choice */
 export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
   if (!f || typeof f !== "object" || typeof f.ask !== "string") throw new Error("bad request");
   // this Mac's own project only (never one shown here from a third Mac)
   const p = f.project && !f.project.startsWith("r:") ? projectById(f.project) : undefined;
-  if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  if (f.project && !p) throw new Error("그 프로젝트가 이 기기에 없어요");
   const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
   const access = reach(c);
   if (!spaceAllowed(access.spaces, space)) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const from = { device: c.device, space: f.space ?? "" };
   const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
-  // ids it builds on must be jobs of this Mac in that workspace (the ones that Mac was shown)
+  // ids it builds on must be jobs of this Mac in that workspace (the ones that device was shown)
   const mine = (id: unknown) => {
     const t = typeof id === "string" ? taskById(id) : undefined;
     return t && t.space === space && mayReach(access, t, taskById) ? t.id : undefined;
@@ -232,7 +232,7 @@ export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
     ...(f.issue && typeof f.issue.n === "number" ? { issue: f.issue } : {}),
     ...(typeof f.by === "string" && f.by ? { by: f.by } : {}),
   });
-  // asked with a permission of its own (that Mac's default, or the one picked there)
+  // asked with a permission of its own (that device's default, or the one picked there)
   // an older Mac still says "edits" for auto
   const perm = permissionOf(f.permission);
   if (perm) updateTask(id, (x) => (x.permission = perm));
@@ -244,7 +244,7 @@ export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
 export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean }
 const projectFolder = (id: unknown) => {
   const p = typeof id === "string" ? projectById(id) : undefined;
-  if (!p || p.host) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  if (!p || p.host) throw new Error("그 프로젝트가 이 기기에 없어요");
   return p;
 };
 const namesOf = (s: SavedSecrets, project: string): string[] => s.projects[project] ?? [];
@@ -265,7 +265,7 @@ export const secretCalls = {
       noteSecrets(s, state.projects ?? []);
       return { items: namesOf(s, p.id) };
     } catch (e) {
-      // .env isn't ignored by git there: that Mac's user is asked first, as here
+      // .env isn't ignored by git there: that device's user is asked first, as here
       if (String(e instanceof Error ? e.message : e).startsWith("ENV_NOT_IGNORED")) return { items: namesOf(await secretList(), p.id), notIgnored: true };
       throw e;
     }
@@ -291,7 +291,7 @@ function addProjectFor(c: Conn, folder: unknown, label?: unknown) {
   return pr.id;
 }
 
-/** what another Mac may do with a job here: the same the user does (checked by checkCall first) */
+/** what another device may do with a job here: the same the user does (checked by checkCall first) */
 const JOBS: Record<JobCall, (...a: never[]) => unknown> = {
   tell: jobs.tell,
   stopTask: jobs.stopTask,
@@ -321,11 +321,11 @@ const JOBS: Record<JobCall, (...a: never[]) => unknown> = {
 };
 
 /** calls about one of this Mac's projects (its id first, or in the first argument's `project`):
- *  only a project that Mac keeps, in a workspace it may use */
+ *  only a project that device keeps, in a workspace it may use */
 const PROJECT_CALLS: Record<string, (...a: never[]) => unknown> = {
   // a project's secrets (Settings › 시크릿): names come back, never a value
   ...secretCalls,
-  // 루틴 on another Mac: a routine there that watches one of this Mac's projects looks at its GitHub
+  // 루틴 on another device: a routine there that watches one of this Mac's projects looks at its GitHub
   // repo here, as this Mac's GitHub login (only a project this Mac has, never a path)
   ghWatch: async (project: string, event: string, search: string) => {
     const p = projectById(project)!;
@@ -374,7 +374,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
         if (fn === "create") value = create(c, args[0] as Parameters<typeof create>[1]);
         else if (fn === "addProject") value = addProjectFor(c, args[0], args[1]);
         else if (fn === "decide") {
-          // a question of a job that Mac may reach
+          // a question of a job that device may reach
           const d = state.decisions.find((x: Decision) => x.id === args[0]);
           if (!d || !mayReach(reach(c), taskById(d.taskId), taskById)) throw new Error("그 작업은 쓸 수 없어요");
           value = await jobs.decide(String(args[0]), String(args[1]), args[2] && typeof args[2] === "object" ? (args[2] as FormValues) : undefined);
@@ -391,10 +391,10 @@ async function handle(conn: number, msg: Record<string, unknown>) {
           mayUseProject(c, projectOfArgs(args));
           value = await (PROJECT_CALLS[fn] as (...a: unknown[]) => unknown)(...args);
         } else {
-          // only a job that Mac may reach, and only the calls a job has
+          // only a job that device may reach, and only the calls a job has
           const ok = checkCall(reach(c), fn, args, taskById);
           value = await (JOBS[fn as JobCall] as (...a: unknown[]) => unknown)(...ok);
-          // the copy is that Mac's too: it sees it like the one it copied
+          // the copy is that device's too: it sees it like the one it copied
           const was = taskById(String(ok[0]));
           if (fn === "duplicateTask" && typeof value === "string") updateTask(value, (x) => (x.from = { device: c.device, space: was?.from?.space ?? "" }));
         }
@@ -410,7 +410,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
 
 // ───────── letting Macs in
 
-/** a link another Mac can add this one with, good for ten minutes and one Mac */
+/** a link another device can add this one with, good for ten minutes and one Mac */
 export async function connectLink(): Promise<string | undefined> {
   const id = remote().id;
   if (!id) return undefined;
@@ -428,12 +428,12 @@ export function answerPair(conn: number, ok: boolean) {
 
 const deviceName = (id: string) => remote().devices.find((d) => d.id === id)?.name ?? Object.values(remote().live).find((d) => d.id === id)?.name ?? "Mac";
 
-/** 연결 끊기 (this side): that Mac's connection ends now; it stays allowed and may come back */
+/** 연결 끊기 (this side): that device's connection ends now; it stays allowed and may come back */
 export function dropDevice(id: string) {
   remoteCmd({ cmd: "drop", id }).catch((e) => toast(t("연결을 끊지 못했어요: {error}", { error: String(e) }), "bad"));
 }
 
-/** 제거 (this side): that Mac may no longer come in. Works with the helper running or not. */
+/** 제거 (this side): that device may no longer come in. Works with the helper running or not. */
 export async function forgetDevice(id: string) {
   const name = deviceName(id);
   try {
@@ -455,7 +455,7 @@ function forgotten(id: string, name: string, said: string) {
   toast(t("{name}에서 시킨 작업 {n}개는 계속 돌아요", { name, n: left.length }), "info", { label: t("정리|jobs"), run: () => askStopJobs(id, name) }, { stay: true });
 }
 
-/** stop and archive the jobs that Mac asked for here, after asking (named, so it's plain which) */
+/** stop and archive the jobs that device asked for here, after asking (named, so it's plain which) */
 export function askStopJobs(id: string, name: string) {
   const left = jobsFrom(state.tasks, id);
   if (!left.length) return;
@@ -552,9 +552,9 @@ export function initRemote() {
         if (ev.data && typeof ev.data === "object") void handle(Number(ev.conn), ev.data as Record<string, unknown>);
         break;
       case "bye": {
-        // that Mac removed this one on its side: it's gone from the list here too (the helper did it)
+        // that device removed this one on its side: it's gone from the list here too (the helper did it)
         const d = ev.device as { id?: string; name?: string } | undefined;
-        if (d?.id) forgotten(d.id, d.name || "Mac", t("{name}에서 이 Mac 연결을 제거했어요", { name: d.name || "Mac" }));
+        if (d?.id) forgotten(d.id, d.name || "Mac", t("{name}에서 이 기기 연결을 제거했어요", { name: d.name || "Mac" }));
         break;
       }
       case "peer":

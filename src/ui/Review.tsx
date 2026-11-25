@@ -7,7 +7,7 @@ import type { Task } from "../state/types";
 import { openChanges, panelFile, previewFile, previewPath, previewPlace, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { pdfSrc, type GitChanges } from "../lib/native";
+import { pdfSrc, type GitChanges, fileManager, revealLabel } from "../lib/native";
 import { changesIn, editorOn, farError, grepFiles, HostCtx, listFiles, localCopy, pageSrcOf, pageTooBig, readText, revealOn, srcOf, tooBig, writeText, type Cut, type Where } from "../engine/far";
 import { taskById } from "../state/store";
 import { splitProjectId } from "../state/mirror";
@@ -17,7 +17,7 @@ import { Icon } from "./Icon";
 import { GlyphMark } from "../views/Sidebar";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
-import { withHint } from "../lib/shortcuts";
+import { chordLabel, primaryChord, withHint } from "../lib/shortcuts";
 import { discarded, rememberDiff } from "../state/progress";
 
 // ───────────── diff model (diffModel.ts) ─────────────
@@ -32,7 +32,7 @@ const STATUS: Record<DiffFile["status"], string> = { A: "새 파일", M: "수정
 
 /** Changes of a task, refreshed when its tools finish (only while `enabled` says so). */
 export function useChanges(t: () => Task, enabled: () => boolean = () => true) {
-  // a job of another Mac: its diff comes from there (one that can't be read reads as no repo: its own edits show)
+  // a job of another device: its diff comes from there (one that can't be read reads as no repo: its own edits show)
   const [data, { refetch }] = createResource(
     () => enabled() && ([expand(t().cwd), t().worktree?.state === "open" ? t().worktree!.base : undefined, t().host] as const),
     ([cwd, base, host]): Promise<GitChanges & Cut> =>
@@ -369,7 +369,7 @@ export function PreviewPane() {
     return /\.(html?|pdf)$/.test(p) ? "page" : IMG.test(p) ? "image" : /\.(mp4|mov|webm)$/.test(p) ? "video" : /\.(md|markdown)$/.test(p) ? "md" : "code";
   };
   const [md] = createResource(() => (kind() === "md" ? ([full(), host()] as const) : false), ([p, h]) => readText(h, p).then((r) => r.text ?? "").catch(() => ""));
-  // a PDF of another Mac: the copy fetched here; a page: copied with the files it uses
+  // a PDF of another device: the copy fetched here; a page: copied with the files it uses
   const here = () => (host() ? localCopy(full(), host()) : full());
   const pdf = () => /\.pdf$/i.test(full());
   const dir = () => full().split("/").slice(0, -1).join("/");
@@ -384,13 +384,13 @@ export function PreviewPane() {
             <Show when={kind() === "image"}>
               <button class="icon-btn sm" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(full(), [full()], host())}><Icon name="zoom" size={14} /></button>
             </Show>
-            <button class="btn sm ghost" title={host() ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(host(), full())}><Icon name="external" size={14} />{tr("편집기")}</button>
-            <button class="btn sm ghost" title={host() ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(host(), full())}><Icon name="folder" size={14} />Finder</button>
+            <button class="btn sm ghost" title={host() ? tr("그 기기의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(host(), full())}><Icon name="external" size={14} />{tr("편집기")}</button>
+            <button class="btn sm ghost" title={host() ? tr("그 기기에서 위치 보기") : revealLabel()} onClick={() => void revealOn(host(), full())}><Icon name="folder" size={14} />{fileManager()}</button>
           </div>
         </Show>
         <div class="pv-body">
           <Switch>
-            <Match when={kind() !== "code" && kind() !== "md" && (tooBig(full(), host()) || (kind() === "page" && pageTooBig(full(), host())))}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
+            <Match when={kind() !== "code" && kind() !== "md" && (tooBig(full(), host()) || (kind() === "page" && pageTooBig(full(), host())))}><div class="pane-empty">{tr("파일이 너무 커서 그 기기에서 가져오지 않았어요")}</div></Match>
             <Match when={kind() === "page"}>
               <Show when={pdf()} fallback={
                 <Show when={pageSrcOf(full(), host())} fallback={<div class="pane-empty" />}>
@@ -512,11 +512,11 @@ function Viewer(props: { root: string; path: string; host?: Where; changed?: Dif
             </>
           }
         >
-          <button class="btn sm primary" disabled={!dirty()} title="⌘S" onClick={() => editor?.save()}>{tr("저장")}</button>
+          <button class="btn sm primary" disabled={!dirty()} title={chordLabel(primaryChord("KeyS"))} onClick={() => editor?.save()}>{tr("저장")}</button>
           <button class="btn sm ghost" onClick={leave}>{tr("닫기")}</button>
         </Show>
-        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>
-        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.host, full())}><Icon name="folder" size={14} /></button>
+        <button class="icon-btn sm" title={props.host ? tr("그 기기의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>
+        <button class="icon-btn sm" title={props.host ? tr("그 기기에서 위치 보기") : revealLabel()} onClick={() => void revealOn(props.host, full())}><Icon name="folder" size={14} /></button>
       </div>
       <div class="fv-body" classList={{ editing: mode() === "edit" }}>
         <Show when={mode() !== "edit"} fallback={
@@ -533,7 +533,7 @@ function Viewer(props: { root: string; path: string; host?: Where; changed?: Dif
               {(t) => (
                 <Show
                   when={t().text !== null}
-                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? tr("바이너리 파일") : props.host ? tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요") : tr("파일이 너무 커요"))}</div>}
+                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? tr("바이너리 파일") : props.host ? tr("파일이 너무 커서 그 기기에서 가져오지 않았어요") : tr("파일이 너무 커요"))}</div>}
                 >
                   <div class="code" ref={(el) => props.line && queueMicrotask(() => el.querySelector(".code-row.hit")?.scrollIntoView({ block: "center" }))}>
                     <For each={lines()}>

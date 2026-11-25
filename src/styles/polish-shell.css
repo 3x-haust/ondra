@@ -1656,7 +1656,7 @@
   font-size: var(--fs-xs);
 }
 
-/* a project of another Mac (Settings › 연결): the Mac's name after its own, quieter */
+/* a project of another device (Settings › 연결): the Mac's name after its own, quieter */
 .sb-host {
   display: inline-flex;
   align-items: center;

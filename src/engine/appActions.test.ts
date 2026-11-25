@@ -71,7 +71,7 @@ describe("ondra_app: what the user could press, main and a job press too", () =>
     expect((await app("project.move", { id: a, to: 0 })).error).toMatch(/from 1/);
   });
 
-  it("another Mac's link needs this Mac open to others first, and a link to add one", async () => {
+  it("another device's link needs this Mac open to others first, and a link to add one", async () => {
     expect((await app("remote.link")).error).toMatch(/ondra_settings \{"remote": true\}/);
     expect((await app("remote.add", { link: "hello" })).error).toMatch(/isn't a connect link/);
     expect((await app("remote.add")).error).toBe("remote.add takes link");

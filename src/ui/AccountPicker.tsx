@@ -121,10 +121,10 @@ export function AccountPicker(props: {
   );
 }
 
-/** another Mac's account, as that Mac sent it (Settings › 연결) */
+/** another device's account, as that device sent it (Settings › 연결) */
 export interface FarAccount { id: string; name: string; email?: string; services: string[]; usage: string }
 
-/** The same picker for work on another Mac: that workspace's accounts there, picked here. */
+/** The same picker for work on another device: that workspace's accounts there, picked here. */
 export function FarAccountPicker(props: { accounts: FarAccount[]; current?: FarAccount; auto: boolean; onPick: (id: string | undefined) => void; onManage: () => void; title?: string }) {
   const [open, setOpen] = usePop();
   const [room, setRoom] = createSignal<{ up: boolean; max: number }>({ up: true, max: 480 });

@@ -8,9 +8,9 @@ import { goMain, openPanel, openTask, shownIn, splitPane, toast, view } from "..
 import { archiveTask, duplicateTask, finishTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 import { expand } from "../engine/rpc";
 import { discarded } from "../state/progress";
-import { openInEditor, revealPath } from "../lib/native";
+import { openInEditor, revealPath, revealLabel } from "../lib/native";
 import { editorOn, revealOn, setFarShell } from "../engine/far";
-import { ignoredKey, noModifiers } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, onWindows } from "../lib/shortcuts";
 import { anyPop, closePops } from "./ModelPicker";
 import { Icon } from "./Icon";
 import { t } from "../i18n";
@@ -45,7 +45,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
   const groups: MenuItem[][] = [
     [
       ...(isOpen(id) ? [] : [{ id: "open", label: t("열기"), icon: "arrow", run: () => openTask(id) }]),
-      ...(shownIn({ name: "task", id }, "") ? [] : [{ id: "split", label: t("옆 창에 열기"), icon: "splitRight", kbd: t("⌥ 클릭"), run: () => void splitPane("right", { view: { name: "task", id } }) }]),
+      ...(shownIn({ name: "task", id }, "") ? [] : [{ id: "split", label: t("옆 창에 열기"), icon: "splitRight", kbd: onWindows() ? t("Alt 클릭") : t("⌥ 클릭"), run: () => void splitPane("right", { view: { name: "task", id } }) }]),
       { id: "rename", label: t("이름 바꾸기"), icon: "pencil", kbd: "F2", run: () => (openTask(id), startRename(id)) },
       { id: "pin", label: x.pinned ? t("고정 해제") : t("고정"), icon: "pin", run: () => togglePin(id) },
     ],
@@ -64,7 +64,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
         id: "rerun",
         label: t("다시 실행"),
         icon: "refresh",
-        // another Mac's job: its new id comes back from there
+        // another device's job: its new id comes back from there
         run: () => void Promise.resolve(duplicateTask(id)).then((n) => n && openTask(n)),
       }]),
       {
@@ -81,16 +81,16 @@ export function taskMenuItems(id: string): MenuEntry[] {
     discarded(x)
       ? []
       : x.host
-        ? // a job of another Mac: its folder is there; the editor and Finder open on that Mac's screen,
+        ? // a job of another device: its folder is there; the editor and Finder open on that device's screen,
           // the terminal is a shell there inside this app
           [
-            { id: "editor", label: t("그 Mac의 편집기에서 열기"), icon: "external", run: () => void editorOn(x.host, expand(x.cwd)) },
-            { id: "finder", label: t("그 Mac의 Finder에서 보기"), icon: "folder", run: () => void revealOn(x.host, expand(x.cwd)) },
+            { id: "editor", label: t("그 기기의 편집기에서 열기"), icon: "external", run: () => void editorOn(x.host, expand(x.cwd)) },
+            { id: "finder", label: t("그 기기에서 위치 보기"), icon: "folder", run: () => void revealOn(x.host, expand(x.cwd)) },
             { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (setFarShell(id), openTask(id), openPanel("terminal")) },
           ]
         : [
           { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void openInEditor(expand(x.cwd)) },
-          { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(x.cwd)) },
+          { id: "finder", label: revealLabel(), icon: "folder", run: () => void revealPath(expand(x.cwd)) },
           { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (openTask(id), openPanel("terminal")) },
         ],
     [

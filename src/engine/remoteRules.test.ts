@@ -28,7 +28,7 @@ describe("what a Mac allowed in may reach", () => {
   it("sees the jobs of the projects it keeps and the ones it asked for, with their subagents", () => {
     for (const id of ["inApp", "kid", "mine", "mineKid", "work"]) expect(mayReach(reach, byId(id), byId), id).toBe(true);
   });
-  it("not a project it doesn't keep, another Mac's job, a job of a third Mac, or nothing", () => {
+  it("not a project it doesn't keep, another device's job, a job of a third Mac, or nothing", () => {
     for (const id of ["inSecret", "theirs", "far", "missing"]) expect(mayReach(reach, byId(id), byId), id).toBe(false);
   });
   it("only in the workspaces it may use", () => {
@@ -39,7 +39,7 @@ describe("what a Mac allowed in may reach", () => {
   });
 });
 
-describe("a call from another Mac", () => {
+describe("a call from another device", () => {
   it("goes ahead on a job it may reach", () => {
     expect(checkCall(reach, "removeTask", ["inApp"], byId)).toEqual(["inApp"]);
     expect(checkCall(reach, "renameTask", ["kid", "new"], byId)).toEqual(["kid", "new"]);

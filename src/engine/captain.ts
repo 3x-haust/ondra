@@ -63,17 +63,17 @@ const inOpen = (r: any): { room?: string; quiet?: boolean; shots?: boolean } => 
   ...(r?.shots === false ? { shots: false } : {}),
 });
 const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
-// a project added from another Mac has its own chat here too (its jobs run there)
+// a project added from another device has its own chat here too (its jobs run there)
 const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
   pid(key) ? (worlds.get(key)?.projects ?? projectsShown(sp(key))).find((p) => p.id === pid(key) && p.space === sp(key)) : undefined;
-/** the folder main runs in: a project's, unless it is another Mac's (or made up): then the space's */
+/** the folder main runs in: a project's, unless it is another device's (or made up): then the space's */
 const localFolder = (key: string) => {
   const p = projectOf(key);
   return isSim(key) || p?.host ? undefined : p?.folder;
 };
 /** this message belongs to this chat */
 export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) && (m.project ?? undefined) === pj(key);
-// (another Mac's project is "r:<host>:<id>": every colon goes, not just the first)
+// (another device's project is "r:<host>:<id>": every colon goes, not just the first)
 const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace(/[~:]/g, "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
 const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
@@ -883,7 +883,7 @@ async function ensureCaptain(space: string) {
     ...[simSystem.get(space) ?? forHost(CAPTAIN_SYSTEM), instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
-  // a simulated project's folder is made up, another Mac's isn't on this one: main runs in the space's folder then
+  // a simulated project's folder is made up, another device's isn't on this one: main runs in the space's folder then
   const cwd = expand(localFolder(space) || space0.folder || "~");
   const signature = await startSig(cwd, skills.signature, space);
   // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
@@ -1085,11 +1085,11 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   ].join("\n");
   const space0 = spaceById(sp(space));
   const proj = projectOf(space);
-  const far = proj?.host ? `Its folder is on ${proj.hostName ?? "another Mac"}, another Mac: its jobs run there, and you can't read its files from here (a job there can).` : "";
+  const far = proj?.host ? `Its folder is on ${proj.hostName ?? "another device"}, another device: its jobs run there, and you can't read its files from here (a job there can).` : "";
   const rules = [spaceRules(space0), proj ? [projectRules(proj), far].filter(Boolean).join("\n") : ""].filter(Boolean).join("\n\n");
-  // projects added from other Macs (Settings › 연결) are listed too: a job there runs on that Mac
+  // projects added from other Macs (Settings › 연결) are listed too: a job there runs on that device
   const projs = w ? w.projects : projectsShown(sp(space));
-  const projects = projs.map((p) => `- ${p.name}: ${p.folder}${"hostName" in p && p.hostName ? ` (on ${p.hostName}, another Mac: its jobs run there)` : ""}`).join("\n") || "(none)";
+  const projects = projs.map((p) => `- ${p.name}: ${p.folder}${"hostName" in p && p.hostName ? ` (on ${p.hostName}, another device: its jobs run there)` : ""}`).join("\n") || "(none)";
   const taken = new Set(projs.map((p) => expand(p.folder).replace(/\/+$/, "")));
   const repos = ((w?.repos ?? reposOf.get(sp(space))?.list) ?? []).filter((r) => !taken.has(r)).map((r) => `- ${r}`).join("\n");
   // no always-on memory: a few pieces recalled for this message alone
@@ -1551,7 +1551,7 @@ export async function stopMain(space: string) {
 }
 
 onJobEnded(jobEnded);
-// a job main started on another Mac: its end comes over with that Mac's copy of it
+// a job main started on another device: its end comes over with that device's copy of it
 onFarEnded(jobEnded);
 
 // ───────────────────────────── simulation (evals/main-sim.mjs)

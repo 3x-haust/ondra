@@ -1,10 +1,10 @@
-// A job of another Mac (Settings › 연결), read and handled as if it were here: its files,
+// A job of another device (Settings › 연결), read and handled as if it were here: its files,
 // its git diff, its pictures and results, PRs and issues, a terminal in its folder, its
-// skills and memory all come from that Mac, which runs it. Each helper takes where the thing
-// is (`host`: that Mac's id, undefined for this one) and does the same either way, so a panel
+// skills and memory all come from that device, which runs it. Each helper takes where the thing
+// is (`host`: that device's id, undefined for this one) and does the same either way, so a panel
 // asks once and doesn't care. That Mac's side is engine/farHost.ts.
 //
-// Paths go there in that Mac's terms: this Mac's home turned back into "~" (it has its own).
+// Paths go there in that device's terms: this Mac's home turned back into "~" (it has its own).
 // Its files are cached here by path and version (src-tauri/src/farfs.rs) so a picture or a
 // page shows like a local one (a page with the files it links to, laid out as there); anything
 // bigger than MAX_MEDIA isn't fetched.
@@ -40,17 +40,17 @@ import { askHost, onPeerKind, tellHost } from "./hosts";
 import { engine } from "./rpc";
 import { t } from "../i18n";
 
-/** the Mac a thing is on: another Mac's id, or undefined for this one */
+/** the Mac a thing is on: another device's id, or undefined for this one */
 export type Where = string | undefined;
 
-/** what a view shows is another Mac's (a remote job's thread and panels): pictures in it come from there */
+/** what a view shows is another device's (a remote job's thread and panels): pictures in it come from there */
 export const HostCtx = createContext<() => Where>(() => undefined);
 export const useHost = () => useContext(HostCtx);
 
-/** a path as that Mac reads it */
+/** a path as that device reads it */
 export const there = (p: string) => asHostPath(p, engine.info.home);
 
-/** The one switch: on another Mac it is asked there, here it is done here. */
+/** The one switch: on another device it is asked there, here it is done here. */
 export function onMac<T>(host: Where, fn: string, args: unknown[], here: () => Promise<T>): Promise<T> {
   return host ? askHost<T>(host, fn, args) : here();
 }
@@ -71,15 +71,15 @@ export const mergedIn = (host: Where, repo: string, branch: string, into: string
   onMac<(Merged & { changes: Cut }) | null>(host, "far.merged", [there(repo), branch, into ?? null, base], () => gitMerged(repo, branch, into, base));
 export const artifactsOf = (host: Where, id: string) => onMac<ArtifactFile[]>(host, "far.artifacts", [id], () => artifactsList(id));
 export const traceOf = (host: Where, id: string, from: number) => onMac<{ text: string; end: number }>(host, "far.trace", [id, from], () => reverseTrace(id, from));
-/** Finder there (on that Mac's own screen) */
+/** Finder there (on that device's own screen) */
 export const revealOn = (host: Where, path: string) => onMac<void>(host, "far.reveal", [there(path)], () => revealPath(path)).catch(() => {});
 export const editorOn = (host: Where, path: string) => onMac<void>(host, "far.editor", [there(path)], () => openInEditor(path)).catch(() => {});
 
 /** an error from there, in words for a panel: an older Ondra there doesn't know the call */
 export function farError(e: unknown): string {
   const s = e instanceof Error ? e.message : String(e);
-  // that Mac says why in Korean (as a job's error is kept there): in this Mac's language here
-  return /^unknown: far\./.test(s) ? t("그 Mac의 Ondra를 업데이트해야 볼 수 있어요") : s.includes("|") ? s : t(s);
+  // that device says why in Korean (as a job's error is kept there): in this Mac's language here
+  return /^unknown: far\./.test(s) ? t("그 기기의 Ondra를 업데이트해야 볼 수 있어요") : s.includes("|") ? s : t(s);
 }
 
 // ───────── pictures, videos and pages: fetched once per version, kept here
@@ -93,7 +93,7 @@ const [local, setLocal] = createStore<Record<string, { path?: string; big?: bool
 const looked = new Map<string, { at: number; seen: number; wait: number; busy?: boolean }>();
 let ticking: ReturnType<typeof setInterval> | undefined;
 
-/** Fetch a file of that Mac into the cache here (in pieces, one at a time). */
+/** Fetch a file of that device into the cache here (in pieces, one at a time). */
 async function fetchTo(host: string, path: string, name: string, size: number, kind: "cache" | "site" = "cache"): Promise<string> {
   let out = "";
   for (let off = 0; off < size || off === 0; ) {
@@ -127,7 +127,7 @@ async function look(host: string, path: string, key: string) {
   }
 }
 
-/** The file here for a file of that Mac, once it is fetched (reactive; "" until then). Looked at
+/** The file here for a file of that device, once it is fetched (reactive; "" until then). Looked at
  *  again every few seconds while shown: a screenshot is written over in place. */
 export function localCopy(path: string, host: Where): string {
   if (!host || !path) return path;
@@ -146,17 +146,17 @@ export function localCopy(path: string, host: Where): string {
   return local[key]?.path ?? "";
 }
 
-/** too big to fetch from that Mac */
+/** too big to fetch from that device */
 export const tooBig = (path: string, host: Where) => !!host && !!local[`${host}|${path}`]?.big;
 
-/** an <img>/<video> src for a file here or on that Mac */
+/** an <img>/<video> src for a file here or on that device */
 export function srcOf(path: string, host: Where): string {
   if (!host) return fileSrc(path);
   const p = localCopy(path, host);
   return p ? fileSrc(p) : "";
 }
 
-// ───────── a page of that Mac, with what it uses
+// ───────── a page of that device, with what it uses
 
 /** a page brings at most this many files with it, and this much in all */
 const SITE_FILES = 400;
@@ -181,9 +181,9 @@ const siteState = new Map<string, Site>();
 let siteTick: ReturnType<typeof setInterval> | undefined;
 
 /**
- * Copy a page of that Mac here with every file it links to (its pictures, styles, scripts,
+ * Copy a page of that device here with every file it links to (its pictures, styles, scripts,
  * fonts, other pages, followed through those too), laid out as there so the page's relative
- * links find them. Files that Mac doesn't let this one read, or that are gone, are left out.
+ * links find them. Files that device doesn't let this one read, or that are gone, are left out.
  */
 async function syncSite(host: string, page: string, s: Site): Promise<boolean> {
   let changed = false;
@@ -248,8 +248,8 @@ async function lookSite(host: string, page: string, key: string) {
   }
 }
 
-/** An <iframe> src for a page here or on that Mac (reactive; "" until it is copied here). A page of
- *  that Mac comes with the files it uses, and shows again when it changes there. */
+/** An <iframe> src for a page here or on that device (reactive; "" until it is copied here). A page of
+ *  that device comes with the files it uses, and shows again when it changes there. */
 export function pageSrcOf(path: string, host: Where): string {
   if (!host || !path) return pageSrc(path);
   // Views may have expanded the remote '~' with the viewer's local drive.
@@ -271,10 +271,10 @@ export function pageSrcOf(path: string, host: Where): string {
   const x = sites[key];
   return x?.path ? `${pageSrc(x.path)}?v=${x.v}` : "";
 }
-/** too big to copy from that Mac */
+/** too big to copy from that device */
 export const pageTooBig = (path: string, host: Where) => !!host && !!sites[`${host}|${there(path)}`]?.big;
 
-// ───────── attachments: sent to that Mac, its paths given back
+// ───────── attachments: sent to that device, its paths given back
 
 /** the biggest attachment sent */
 const MAX_UPLOAD = 100 << 20;
@@ -286,7 +286,7 @@ export async function sendFiles(host: string, files: string[]): Promise<string[]
     const st = await farStat(f);
     const base = uploadBase(f, engine.info.home);
     if (!st) throw new Error(t("파일이 없어요 · {name}", { name: base }));
-    if (st.dir) throw new Error(t("폴더는 다른 Mac에 보낼 수 없어요 · {name}", { name: base }));
+    if (st.dir) throw new Error(t("폴더는 다른 기기에 보낼 수 없어요 · {name}", { name: base }));
     if (st.size > MAX_UPLOAD) throw new Error(t("파일이 너무 커요 · {name}", { name: base }));
     const name = uploadName(base, Date.now(), Math.random().toString(36).slice(2, 8));
     let at = "";
@@ -304,7 +304,7 @@ export async function sendFiles(host: string, files: string[]): Promise<string[]
 
 // ───────── a terminal there
 
-/** a job of another Mac whose terminal should open (its ⋯ menu's 터미널 열기): the panel's terminal tab takes it */
+/** a job of another device whose terminal should open (its ⋯ menu's 터미널 열기): the panel's terminal tab takes it */
 export const [farShell, setFarShell] = createSignal<string | null>(null);
 
 export interface TermIO {
@@ -332,7 +332,7 @@ function hear() {
   });
 }
 
-/** A shell in a job's folder on that Mac; keys go there in small batches, the output comes back the same way. */
+/** A shell in a job's folder on that device; keys go there in small batches, the output comes back the same way. */
 export function farTerm(host: string, task: string, id: string): TermIO {
   hear();
   const key = `${host}|${id}`;
