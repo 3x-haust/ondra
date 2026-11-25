@@ -10,7 +10,7 @@ import { createEffect, createMemo, createRoot, createSignal, For, Match, onClean
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
-import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead, allTasks } from "../state/store";
+import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
@@ -70,7 +70,7 @@ const followers = createRoot(() =>
   createMemo(() => {
     const m = new Map<string, Task[]>();
     for (const x of allTasks()) {
-      const up = listed(x) ? carriedOn(x) : undefined;
+      const up = listed(x) || agentListed(x) ? carriedOn(x) : undefined;
       if (!up) continue;
       const l = m.get(up.id);
       if (l) l.push(x);
@@ -463,10 +463,14 @@ function DoneFold(props: { id: string; tasks: Task[] }) {
   );
 }
 
-export function Sidebar() {
-  const [showArchived, setShowArchived] = createSignal(false);
+/**
+ * A list of jobs as the sidebar shows it: a job with its follow-ups under it, pinned first, then by
+ * the newest of its line; one finished a while ago folds away (its group's "완료 n개"), archived
+ * ones apart. The sidebar's (the user's jobs) and the agent's 작업 (its own) are both this.
+ */
+function jobList(all: () => readonly Task[], inList: (t: Task) => boolean) {
   // every job in the list, follow-ups too (counts go by these)
-  const every = createMemo(() => tasksShown(state.space).filter(listed));
+  const every = createMemo(() => all().filter(inList));
   // the rows: a job with its follow-ups under it, placed by the newest of its line
   const latest = (t: Task) => Math.max(...lineOf(t).map((x) => x.startedAt ?? x.createdAt));
   const pinned = (t: Task) => lineOf(t).some((x) => x.pinned);
@@ -475,7 +479,8 @@ export function Sidebar() {
       .filter((t) => !carriedOn(t))
       .sort((a, b) => Number(pinned(b)) - Number(pinned(a)) || latest(b) - latest(a)),
   );
-  const archived = createMemo(() => tasksShown(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
+  const inArchive = (t: Task) => !t.parentId && t.archived && inList({ ...t, archived: false });
+  const archived = createMemo(() => all().filter(inArchive).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs fold away under their group after a few minutes; opening one
   // doesn't move it back up: it shows where it is, in its group's done fold
   // a job paused and left for days folds away with them: nothing will pick it up by itself
@@ -484,6 +489,87 @@ export function Sidebar() {
   const olds = createMemo(() => new Set(roots().filter(old).map((t) => t.id)));
   const isOld = (t: Task) => olds().has(t.id);
   const shown = createMemo(() => roots().filter((t) => !isOld(t)));
+  return { every, roots, archived, isOld, shown };
+}
+
+/**
+ * The Discord agent's own jobs (its 작업), shown the way the sidebar shows the user's: by project,
+ * what is going first, finished ones folded away under each, then those of no project and the archive.
+ */
+export function AgentJobs(props: { space: Task["space"] }) {
+  const [showArchived, setShowArchived] = createSignal(false);
+  const [opened, setOpened] = createSignal<Record<string, boolean>>({});
+  const { roots, archived, isOld, shown } = jobList(() => state.tasks.filter((t) => t.space === props.space), agentListed);
+  const filed = (t: Task) => !!t.project && projectsShown(props.space).some((p) => p.id === t.project);
+  const projects = createMemo(() => projectsShown(props.space).filter((p) => roots().some((t) => t.project === p.id)));
+  const loose = createMemo(() => shown().filter((t) => !filed(t)));
+  const looseDone = createMemo(() => roots().filter((t) => isOld(t) && !filed(t)));
+  return (
+    <div class="sidebar sb-embed">
+      <div class="sb-scroll">
+        <Show when={roots().length || archived().length} fallback={<p class="agent-empty">{tr("아직 한 작업이 없어요")}</p>}>
+          <div class="sb-projects">
+            <For each={projects()}>
+              {(p) => {
+                const jobs = createMemo(() => shown().filter((t) => t.project === p.id));
+                const done = createMemo(() => roots().filter((t) => isOld(t) && t.project === p.id));
+                const live = () => jobs().filter((t) => t.status === "running").length;
+                const all = () => jobs().length + done().length;
+                const open = () => opened()[p.id] ?? (jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));
+                return (
+                  <>
+                    <button class="sb-row sb-proj" classList={{ has: all() > 0, open: open() }} title={p.folder} onClick={() => setOpened((m) => ({ ...m, [p.id]: !open() }))}>
+                      <span class="sb-proj-ic">
+                        <ProjectBadge name={p.name} class="ic-folder" />
+                        <Icon name="chevron" size={12} class="ic-chev" />
+                      </span>
+                      <span class="sb-title">{p.name}</span>
+                      <span class="sb-trail">
+                        <span class="sb-meta">
+                          <Show when={live()} fallback={<Show when={!open()}>{all()}</Show>}>
+                            <span class="sb-live" title={tr("진행 중 {n}개", { n: live() })}><span class="spin xs" />{live()}</span>
+                          </Show>
+                        </span>
+                      </span>
+                    </button>
+                    <Fold open={open()}>
+                      <div class="sb-proj-jobs">
+                        <For each={jobs()}>{(t, i) => <Row t={t} index={i()} />}</For>
+                        <DoneFold id={`agent:${p.id}`} tasks={done()} />
+                      </div>
+                    </Fold>
+                  </>
+                );
+              }}
+            </For>
+          </div>
+          <Show when={loose().length || looseDone().length || archived().length}>
+            <Head id="agent-jobs" label={projects().length ? tr("프로젝트 없음") : tr("작업")} count={loose().length} />
+            <Fold open={!fold("agent-jobs")}>
+              <div class="sb-list">
+                <For each={loose()}>{(t, i) => <Row t={t} index={i()} />}</For>
+                <DoneFold id="agent:loose" tasks={looseDone()} />
+                <Show when={archived().length}>
+                  <button class="sb-older" classList={{ open: showArchived() }} onClick={() => setShowArchived(!showArchived())}>
+                    <Icon name="chevron" size={12} class="sb-older-chev" />
+                    {tr("보관함 {n}개", { n: archived().length })}
+                  </button>
+                  <Show when={showArchived()}>
+                    <For each={archived()}>{(t, i) => <Row t={t} index={i()} />}</For>
+                  </Show>
+                </Show>
+              </div>
+            </Fold>
+          </Show>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  const [showArchived, setShowArchived] = createSignal(false);
+  const { every, roots, archived, isOld, shown } = jobList(() => tasksShown(state.space), listed);
   const filed = (t: Task) => !!t.project && projectsShown(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
