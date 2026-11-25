@@ -68,16 +68,16 @@ jobs:
           restore-keys: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
 
       # The remote helper (fat LTO) takes one to two minutes and rarely changes. Its build is kept
-      # under the hash of its sources; on an exact match those sources are dated back, so cargo
+      # under the hash of its sources and this file; on an exact match those sources are dated back, so cargo
       # finds the kept build up to date and uses it instead of compiling it again.
       - id: remote
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            remote/host/target/${{ env.TARGET }}/release/ondra-remote*
+            remote/host/target/${{ env.TARGET }}/release/ondra?remote*
             remote/host/target/${{ env.TARGET }}/release/deps/ondra_remote-*
             remote/host/target/${{ env.TARGET }}/release/.fingerprint/ondra-remote-*
-          key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**') }}
+          key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**', '.github/workflows/windows.yml') }}
 
       - name: Use the kept remote helper build
         if: steps.remote.outputs.cache-hit == 'true'
