@@ -637,6 +637,12 @@ pub fn open_url(url: String) {
     }
 }
 
+/// A page of Windows Settings (`privacy-microphone`): one the app names, never an agent's link.
+#[cfg(windows)]
+pub(crate) fn open_windows_settings(page: &str) {
+    windows::open_url(&format!("ms-settings:{page}"));
+}
+
 /// Opens the licenses of the open-source software in the app (Settings › 정보) in the default text app.
 #[tauri::command]
 pub fn open_notices(app: tauri::AppHandle) -> Result<(), String> {

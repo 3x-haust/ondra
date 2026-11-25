@@ -28,7 +28,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentStopCommand
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
-import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
+import { answeredNo, commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
 import { causeFooting, checkEvidence, isBugFix, isCodeFile, leftovers, promisesLater, readUnverified, reproGap, reviewUnresolved, riskyChange, unbackedChecked, unbackedClaim, uncheckedLine, unreasoned } from "./proof";
 import { checksCovering, checksFor, checksOwed, loadLocalChecks } from "./localChecks";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
@@ -36,12 +36,15 @@ import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
+import { hostedToolEvents } from "./hostedSearch";
 import { handoffPrompt, playbookOf, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
 import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request as rpcRequest, stderrOf } from "./rpc";
 
 const KIND_IDS: unknown[] = KINDS.map((k) => k.id);
 
 interface Run {
+  /** searches the provider ran itself, still open (hostedSearch.ts) */
+  hosted?: Set<string>;
   text: string;
   cursor: number;
   streaming: boolean;
@@ -460,6 +463,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     case "skill":
       return { name, kind: "read", target: String(args?.query ?? ""), detail: String(args?.query ?? ""), now: "스킬 읽는 중" };
     case "web_search":
+    case "web_lookup":
       return { name, kind: "search", target: String(args?.query ?? ""), detail: JSON.stringify(args ?? {}), now: "웹 검색 중" };
     case "web_fetch": {
       const url = String(args?.url ?? "");
@@ -1556,13 +1560,15 @@ function fail(id: string, message: string) {
 function handlers(id: string, run: Run) {
   const agent = agentOf(id);
   const ui = extensionUi(id, agent, () => runs.get(id) === run);
-  return {
+  const self = {
     event(ev: any) {
       if (runs.get(id) !== run) return;
       run.heardAt = Date.now();
       ui.event(ev);
       // `use` only carries a call: the tool it called shows (its own events, parentToolCallId set)
       if (isUseCall(ev)) return;
+      // a search its provider ran itself: a step like any tool's
+      for (const x of hostedToolEvents(ev, (run.hosted ??= new Set()))) self.event(x);
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
@@ -1683,7 +1689,9 @@ function handlers(id: string, run: Run) {
           run.tools.delete(ev.toolCallId);
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
-          if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
+          // a search that found nothing (exit 1) is an answer, not a failed step
+          const failed = !!ev.isError && !(done?.kind === "tool" && done.tool.name === "bash" && answeredNo(done.tool.target ?? "", out));
+          if (done?.kind === "tool") loopGuard(id, run, done.tool, !failed);
           // a fork's plan that stopped moving: ask where it is. Subagents and reviews
           // aren't asked (their list is short-lived), and a fork at most twice a session:
           // 225 reminders in 312 sessions bought a status line, not a fix.
@@ -1709,7 +1717,7 @@ function handlers(id: string, run: Run) {
           updateTask(id, (t) => {
             const e = t.entries.find((x) => x.id === entryId);
             if (e?.kind === "tool") {
-              e.tool.ok = !ev.isError;
+              e.tool.ok = !failed;
               // a click names its element once the call returns ("클릭함 ‘보내기’")
               const label = ev.result?.details?.label;
               if (e.tool.name === "computer" && !e.tool.target && typeof label === "string" && label.trim()) e.tool.target = computerLabel(label) ?? "";
@@ -1723,7 +1731,7 @@ function handlers(id: string, run: Run) {
             const sh = t.shells.find((s) => s.id === ev.toolCallId);
             if (sh) {
               sh.endedAt = Date.now();
-              sh.ok = !ev.isError;
+              sh.ok = !failed;
               if (typeof out === "string") sh.tail = out.slice(-TAIL);
             }
           });
@@ -1780,6 +1788,7 @@ function handlers(id: string, run: Run) {
       }
     },
   };
+  return self;
 }
 
 /**

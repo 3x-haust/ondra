@@ -547,13 +547,21 @@ export class ComputerHostSession {
     return { ...rest, ref: this.obs.refOf(got.id) };
   }
 
-  /** wait {for, gone?, seconds?}: until that text is on screen (or gone), read again and again. */
+  /**
+   * wait {for, gone?, seconds?}: until that text is on screen (or gone), read again and again.
+   * wait {seconds} alone pauses (a remote screen redrawing, an app settling): jobs waited for a
+   * text that never comes instead, and every such pause ended as a failed step.
+   */
   private async waitFor(action: HostAction, signal?: AbortSignal): Promise<HostResult> {
     const phrase = typeof action.for === "string" ? action.for.trim() : "";
-    if (!phrase || phrase.length > 120) throw new Error("wait needs for: a short text to wait for on screen");
-    const gone = action.gone === true;
     const ms = Math.min(WAIT_MAX_MS, Math.max(200, typeof action.seconds === "number" ? action.seconds * 1000 : WAIT_MS));
     const t0 = Date.now();
+    if (!phrase && action.for === undefined && typeof action.seconds === "number") {
+      await this.until(() => undefined, ms, signal);
+      return { kind: "wait", wait: { paused: true, after: Math.round((Date.now() - t0) / 100) / 10 } };
+    }
+    if (!phrase || phrase.length > 120) throw new Error("wait needs for (a short text to wait for on screen), or seconds alone to pause");
+    const gone = action.gone === true;
     await this.refresh(signal);
     const ok = await this.until(() => (this.obs.has(phrase) !== gone ? true : undefined), ms, signal);
     if (!ok) throw new Error(`WAIT_TIMEOUT: “${phrase}” ${gone ? "still on screen" : "not on screen"} after ${Math.round(ms / 100) / 10} s`);

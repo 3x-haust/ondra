@@ -1606,6 +1606,63 @@
   color: var(--ink-3);
 }
 
+/* a step that waits on CI: the run's jobs under its row, at the row's text (icon 14 + gap 10),
+   each with the step it is on and its time; a thin bar against the usual time when one is known */
+.ci-jobs {
+  display: grid;
+  gap: var(--s-4);
+  min-width: 0;
+  padding-left: 24px;
+}
+.ci-jobs:not(:empty) {
+  margin: 2px 0 var(--s-8);
+}
+.ci-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s-8);
+  row-gap: 3px;
+  align-items: center;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.ci-what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ci-name {
+  color: var(--ink-2);
+}
+.ci-time {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ci-bar {
+  grid-column: 1 / -1;
+  height: 2px;
+  border-radius: var(--r-bar);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  overflow: hidden;
+}
+.ci-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-text);
+}
+.ci-failed .ci-time {
+  color: var(--bad-ink);
+}
+.ci-done .ci-name,
+.ci-skipped .ci-name,
+.ci-cancelled .ci-name {
+  color: var(--ink-3);
+}
+
 /* ═════════════ work lines: a command reads as code, cut at the row's end ═════════════ */
 .tool-row .tool-target.cmd {
   font-family: var(--mono);

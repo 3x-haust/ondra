@@ -22,7 +22,7 @@ export type ComputerAction =
   /** Clicks a point of the latest look. */
   | { kind: "click-at"; x: number; y: number; button?: "left" | "right"; count?: 1 | 2 }
   /** Holds until a text is on screen (or gone), reading the screen again and again. */
-  | { kind: "wait"; for: string; gone?: boolean; seconds?: number };
+  | { kind: "wait"; for?: string; gone?: boolean; seconds?: number };
 
 export type ComputerInput = {
   action: "start" | "observe" | "look" | "act" | "targets" | "target" | "resume" | "stop" | "save" | "run";
@@ -57,9 +57,9 @@ const step = {
   properties: {
     kind: { type: "string", enum: ["click", "set-value", "fill-secret", "type", "press", "scroll", "drag", "click-at", "action", "menu", "wait"] },
     find: { type: "string", description: "instead of ref: the element's name as on screen (its title or the text in it), found when the step runs and waited for up to 3 s; for an element an earlier step brings up" },
-    for: { type: "string", description: "wait: a text to wait for on screen" },
+    for: { type: "string", description: "wait: a text to wait for on screen (leave it out, with seconds, to just pause)" },
     gone: { type: "boolean", description: "wait: until that text is gone instead" },
-    seconds: { type: "number", minimum: 0.2, maximum: 15, description: "wait: how long at most, default 5" },
+    seconds: { type: "number", minimum: 0.2, maximum: 15, description: "wait: how long at most, default 5; alone (no for), how long to pause" },
     path: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6, description: "menu: titles from the menu bar down, e.g. [\"Format\", \"Font\", \"Bold\"]; a path that stops at a menu lists its items" },
     ref,
     secret: { type: "string", description: "fill-secret: saved secret name from Settings, never the password itself; requires a fresh in-app confirmation" },
@@ -161,7 +161,8 @@ function screenBlock(r: Record<string, unknown>): string {
 /** One action's outcome in a line: "click [5] “Save”: done (ax), screen changed". */
 function stepLine(r: Record<string, unknown>): string {
   if (r.kind === "wait") {
-    const w = (r.wait ?? {}) as { for?: string; gone?: boolean; after?: number };
+    const w = (r.wait ?? {}) as { for?: string; gone?: boolean; after?: number; paused?: boolean };
+    if (w.paused) return `paused ${w.after} s`;
     return `wait “${w.for}”: ${w.gone ? "gone" : "on screen"} after ${w.after} s`;
   }
   const a = (r.action ?? {}) as Record<string, unknown>;
@@ -172,7 +173,7 @@ function stepLine(r: Record<string, unknown>): string {
     ? "sent, but nothing on screen changed: in this app a drag can start but cannot drop in the background. Don't drag again; use the app's other ways (menu items, buttons, keys, set-value)"
     : a.effect === "no_change" ? "sent, but nothing on screen changed: it probably did nothing, try another way (keys, or the app's menu bar: act menu)"
     : a.effect === "changed" ? "screen changed" : "no window to check";
-  const front = a.selfActivated ? (a.restored ? "; the app came forward and the user's app was put back in front" : "; the app came forward")
+  const front = a.selfActivated ? (a.restored ? "; the app came forward and the user's app was put back in front: from here click by ref in this app, by position only when a ref click did nothing" : "; the app came forward")
     : a.raisedOverUser ? (a.orderRestored ? "; this app lifts its window when clicked with the pointer, and the helper put the user's window back on top at once (nothing to undo, carry on); from here prefer refs, keys and menu commands to pointer clicks in this app" : "; this app lifted its window over the user's and it could not be put back: avoid pointer clicks in this app") : "";
   const again = typeof a.pressAgain === "string"
     ? `. “${a.pressAgain}” is on screen again, as before the prompt it brought up: that earlier press was probably swallowed. Unless the screen shows its result, press “${a.pressAgain}” again`
@@ -311,16 +312,22 @@ export default function (pi: any) {
       const pid = typeof r.pid === "number" ? `, pid ${r.pid}` : "";
       // which copy it opened: a name or bundle ID can open the installed app, not the job's build
       const from = typeof r.path === "string" && r.path !== app.replace(/\/+$/, "") ? `, from ${r.path}` : "";
+      // without Ondra's guard in it (a sandboxed app, the real app), the app can take the front when clicked by position
+      const unguarded = typeof r.mode === "string" && !r.mode.includes("+guard");
+      const pointer = !unguarded ? "" : "\nOndra can't keep this app from coming forward: a click by position (click-at, or click with pointer) can take the user's focus. Click by ref first; click by position only when a ref click did nothing.";
       sessionApp = app;
       const saved = Object.entries(readFlows()[appKey(app)] ?? {}).map(([n, f]) => flowLine(n, f));
       const flows = saved.length ? `\nSaved flows for this app (run {app, flow, values} does one in a single call): ${saved.join("; ")}` : "";
-      return `Opened ${app} in the background${how}${pid}${from}.${menus}${flows}\n${screenBlock(r)}`;
+      return `Opened ${app} in the background${how}${pid}${from}.${pointer}${menus}${flows}\n${screenBlock(r)}`;
     }
     catch (error) { try { await stopHost(); } catch { /* already gone */ } throw error; }
   }
 
-  const confirmOf = (ctx?: ComputerContext) => ctx?.hasUI === true && ctx.ui ? (summary: string, signal?: AbortSignal) =>
-    ctx.ui!.confirm("보안 동작을 허용할까요?", summary, { signal, timeout: 120_000 }) : undefined;
+  // full access: the user gave the job everything, so a confirmation card would only stop it.
+  // The helper still runs only the action it held for approval, and still hides the pixels.
+  const confirmOf = (ctx?: ComputerContext) => process.env.ONDRA_PERMISSION === "full" ? async () => true
+    : ctx?.hasUI === true && ctx.ui ? (summary: string, signal?: AbortSignal) =>
+      ctx.ui!.confirm("보안 동작을 허용할까요?", summary, { signal, timeout: 120_000 }) : undefined;
 
   /** Several actions in order on the open session: a line each, the screen once. */
   async function runSteps(steps: ComputerAction[], signal?: AbortSignal, ctx?: ComputerContext) {
@@ -407,7 +414,7 @@ export default function (pi: any) {
       "Operate one Mac app in the background on the user's own Mac. The real cursor never moves and the user's front app stays in front: events go to the target app's window only, and a small pointer of its own shows where you act. If the app brings itself forward, the helper hands the front back at once.",
       "The screen is one line per element: `[12] button \"Save\"`, indented under its parent, with its value (= \"…\"), state (focused, disabled, checked, settable) and any extra actions (actions=Increment,…). The number is the element's ref, the same for the whole session while it stays on screen. After the first full screen you get only what changed since you last saw it: `~` changed, `+` new (in [parent]), `-` gone; or unchanged.",
       "start {app} opens the app without activating it and shows its screen. observe shows what changed; full=true the whole screen; query=\"phrase\" only the matching lines with their parents (refs from it work too). look captures a PNG of the app's own window, when you need pixels. act runs one action (input) or several in order (steps, up to 20), then shows the screen once: click (ref; count 2 double-clicks, button right opens its menu, pointer true skips the accessibility action), set-value (a settable field or pop-up: the text or the item to choose), type (ref, or the focused field without ref), press (a key with modifiers), scroll (ref, or x/y), action (ref + one of its actions=…), menu (path: a menu bar command, pressed without opening the menu or bringing the app forward; [\"Edit\"] lists that menu's items), click-at (x/y), drag (from/to: both refs, or both x/y). x/y are pixels of the latest look, refused if there was none or the window moved. For a password field use fill-secret (ref, secret: a saved secret NAME, never its value); the user must confirm in the app each time. Native sheets, dialogs and background approval agents also require confirmation regardless of how they were opened. Secure targets support only ref-based accessibility click/action/set-value/fill-secret, with no pointer, key or clipboard fallback. Revealed password fields still refuse ordinary input. Ordinary dialogs permit confirmed typing/keys only with verified focus inside the dialog. The host app cannot be controlled to answer its own cards. stop ends the session.",
-      "Act like a person who knows the app: do the whole stretch you can foresee in one act with steps, and look again only where the outcome is uncertain. Each of your turns costs seconds; steps run in milliseconds. A step can name an element that only appears after an earlier step with find (its name as on screen: find \"보내기\") instead of a ref, and wait {for} holds until a text is on screen (gone: true, until it goes), so a flow like open a chat, wait for its input, type, press return, wait for your message goes in one act. find with several matches, or none within 3 s, stops there and says which; use a ref then. A step that fails stops the rest; the result says which, and shows the screen as it is.",
+      "Act like a person who knows the app: do the whole stretch you can foresee in one act with steps, and look again only where the outcome is uncertain. Each of your turns costs seconds; steps run in milliseconds. A step can name an element that only appears after an earlier step with find (its name as on screen: find \"보내기\") instead of a ref, and wait {for} holds until a text is on screen (gone: true, until it goes; wait {seconds} alone just pauses, never a made-up text), so a flow like open a chat, wait for its input, type, press return, wait for your message goes in one act. find with several matches, or none within 3 s, stops there and says which; use a ref then. A step that fails stops the rest; the result says which, and shows the screen as it is.",
       "Delivery is not success. A step that says nothing on screen changed probably did nothing: try the next way (pointer true, count 2, keys like return or cmd+f, the app's own menu command, set-value, a look and click-at) rather than stopping. Most things a control does, the app's menus also do (switching a sheet or tab, Go To, Find, a dialog for a cell or record), and keys move within lists and grids. In a spreadsheet, click the cell's own ref (its textfield \"B4\"), type, then press return to commit; a cell out of view: arrows from a visible one, or the app's Go To; another sheet: its menu (Sheet › Navigate). Say you are blocked only after the menus and keys have failed too, naming what you tried. The helper keeps the user's app in front by itself; a note that it put something back is not a reason to stop. Unknown results must not be blindly retried. USER_ACTIVE means the user is working in that app: wait and observe, then continue. A dialog, sheet or consent prompt that comes up in answer to a button can swallow that press: once you have answered it, look for the button's own result (a confirmation, a new page, a changed status). If the screen is back as it was before the press with no such sign, the press did not happen, so press it again. Report done only once the screen shows the task's end state.",
       "Saved flows: what you will do again in an app, once it worked, save {app, flow, about, steps} keeps it: steps naming elements with find (no refs or pixels), {placeholders} for what changes each time (the room, the text), never a message's contents or a secret. run {app, flow, values} then does it in one call, opening the app if needed; one that stops hands you the screen there, so carry on by hand and save it again. Saved flows are listed with your first words and when the app starts.",
       "targets {app} lists windows/sheets of one exactly named running app (including background security agents), without launching it. target {ref} attaches to that listing's opaque ref while keeping the original app alive. resume returns to the original app; stop releases it at the end. A target ref expires on the next listing or selection. Observations and actions stay within the selected window/sheet; a disappeared or changed confirmation target is refused.",

@@ -5,6 +5,7 @@ import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
+import { inSpace, kept } from "../state/viewState";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 import { answeredIn, type Answered } from "../state/answered";
 // Every reply carries one row for each job it started or relayed to, kept up to
@@ -244,7 +245,8 @@ function Thinking(props: { m: CaptainMessage }) {
   const steps = () => props.m.steps ?? [];
   const has = () => !!thought() || steps().length > 0;
   const time = () => short(soon() - props.m.at);
-  const [open, setOpen] = createSignal(false);
+  // opened, it stays open when the chat is opened again
+  const [open, setOpen] = kept(() => `fold/think/${props.m.id}`, false, { many: true });
   let box: HTMLDivElement | undefined;
   // it follows the newest line while the reader is at the end of it
   let atEnd = true;
@@ -276,7 +278,7 @@ function Thinking(props: { m: CaptainMessage }) {
 
 /** an answered reply that looked things up: one quiet line above it ("살펴봄 · 12초"), opened, each step */
 function Worked(props: { m: CaptainMessage }) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = kept(() => `fold/worked/${props.m.id}`, false, { many: true });
   const steps = () => props.m.steps ?? [];
   const label = () => [stepsSummary(steps()), ...(props.m.took && props.m.took >= 1000 ? [short(props.m.took)] : [])].join(" · ");
   return (
@@ -825,7 +827,16 @@ export function MainView() {
     ].filter(([, n]) => n);
   };
   const toBottom = () => queueMicrotask(() => box && (box.scrollTop = box.scrollHeight));
-  createEffect(on(() => [state.space, msgs().length, msgs()[msgs().length - 1]?.pending, asks().length], toBottom));
+  // a new message or question goes to the bottom; opening the chat, or another workspace's or
+  // project's chat coming into the box, is where it was left (keepBottom keeps that per chat)
+  let shown = key();
+  createEffect(
+    on(
+      () => [key(), msgs().length, msgs()[msgs().length - 1]?.pending, asks().length] as const,
+      ([k]) => (k === shown ? toBottom() : (shown = k)),
+      { defer: true },
+    ),
+  );
   // what the user sends always shows: it takes the chat to the bottom and holds it there a moment
   const sent = () => msgs().filter((m) => m.from === "me").length;
   createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(box))));
@@ -974,7 +985,7 @@ export function MainView() {
       >
         {/* a project's chat: all its tasks stay above the conversation (they include what it started) */}
         <Show when={project()}>{(p) => <ProjectStrip project={p().id} />}</Show>
-        <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el)); }}>
+        <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el, undefined, { key: () => inSpace(state.space, `main/${key()}`) })); }}>
           <div class="thread-inner convo">
             <For each={timeline()}>
               {(m) => (
@@ -1022,8 +1033,6 @@ const projectTasks = (project: string) =>
     .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 
-/** a long list folded or open, per project, while the app runs */
-const [stripOpen, setStripOpen] = createSignal<Record<string, boolean>>({});
 
 /**
  * A project's tasks above its conversation. Up to three are rows; more fold into one line like
@@ -1033,13 +1042,15 @@ const [stripOpen, setStripOpen] = createSignal<Record<string, boolean>>({});
 function ProjectStrip(props: { project: string; all?: boolean }) {
   const list = () => projectTasks(props.project);
   const fold = () => !props.all && list().length > 3;
-  const open = () => !fold() || !!stripOpen()[props.project];
+  // a long list folded or open, per project, as it was left
+  const [opened, setOpened] = kept(() => inSpace(state.space, `strip/${props.project}`), false);
+  const open = () => !fold() || opened();
   const lead = () => [...list()].sort((a, b) => toneRank(a) - toneRank(b))[0];
   return (
     <Show when={props.all || list().length}>
       <div class="req-board proj-board" classList={{ open: fold() && open(), folded: fold() }}>
         <Show when={fold()}>
-          <button class="req-head" onClick={() => setStripOpen({ ...stripOpen(), [props.project]: !open() })} aria-expanded={open()}>
+          <button class="req-head" onClick={() => setOpened(!open())} aria-expanded={open()}>
             <span class="req-sum">
               <span class="req-total">{t("작업 {n}|board", { n: list().length })}</span>
             </span>

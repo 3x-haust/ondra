@@ -27,7 +27,8 @@ pub struct Device {
     pub last_used: Option<i64>,
 }
 
-fn sdk() -> PathBuf {
+/// The SDK the user installed: ANDROID_HOME, else where Android Studio puts it on each system.
+fn user_sdk() -> PathBuf {
     std::env::var("ANDROID_HOME")
         .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
         .map(PathBuf::from)
@@ -40,6 +41,26 @@ fn sdk() -> PathBuf {
             #[cfg(target_os = "macos")]
             { dirs_home().join("Library/Android/sdk") }
         })
+}
+
+/// The SDK in use: the user's when it has the emulator (or Ondra's has none and it has adb);
+/// else Ondra's own (`sdk::managed`), used whole.
+fn sdk() -> PathBuf {
+    pick_sdk(user_sdk(), sdk::managed())
+}
+
+fn pick_sdk(user: PathBuf, ours: Option<PathBuf>) -> PathBuf {
+    let has = |d: &std::path::Path, rel: &str| d.join(format!("{rel}{}", std::env::consts::EXE_SUFFIX)).is_file();
+    let Some(ours) = ours else { return user };
+    if has(&user, "emulator/emulator") {
+        user
+    } else if has(&ours, "emulator/emulator") {
+        ours
+    } else if has(&user, "platform-tools/adb") || !has(&ours, "platform-tools/adb") {
+        user
+    } else {
+        ours
+    }
 }
 /// What makes an emulator light for testing: drawn on the Mac's GPU (headless,
 /// plain `-gpu auto` falls back to drawing in software on the CPU), no sound, no
@@ -92,7 +113,8 @@ pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
     let real = sdk();
     let real_emu = real.join("emulator/emulator");
     if !real_emu.exists() {
-        return None;
+        // adb alone (Ondra's own, before the emulator came in): nothing to make lean
+        return real.join("platform-tools/adb").is_file().then_some(real);
     }
     let dir = data.join("android-sdk");
     let emu = dir.join("emulator");
@@ -130,6 +152,19 @@ fn adb() -> PathBuf {
 }
 fn emulator() -> PathBuf {
     sdk().join(format!("emulator/emulator{}", std::env::consts::EXE_SUFFIX))
+}
+/// The emulator, told which SDK it belongs to (its images are found from there).
+fn emulator_command() -> Command {
+    let root = sdk();
+    let mut c = crate::engine::background_command(emulator());
+    c.env("ANDROID_HOME", &root).env("ANDROID_SDK_ROOT", &root);
+    c
+}
+/// The AVDs `emulator -list-avds` knows.
+fn avd_names() -> Vec<String> {
+    out(emulator_command().arg("-list-avds"))
+        .map(|txt| txt.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("INFO")).map(String::from).collect())
+        .unwrap_or_default()
 }
 
 fn out(cmd: &mut Command) -> Option<String> {
@@ -240,8 +275,8 @@ fn android(root: &std::path::Path) -> Vec<Device> {
             }
         }
     }
-    if let Some(txt) = out(crate::engine::background_command(emulator()).arg("-list-avds")) {
-        for avd in txt.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("INFO") && !internal(l)) {
+    {
+        for avd in avd_names().iter().map(String::as_str).filter(|l| !internal(l)) {
             let run = running.iter().find(|r| r.2 == "emulator" && r.1 == avd);
             list.push(Device {
                 id: avd.into(),
@@ -313,7 +348,7 @@ pub async fn device_boot(platform: String, id: String) -> Result<(), String> {
                 _ => Ok(()),
             }
         } else {
-            crate::engine::background_command(emulator())
+            emulator_command()
                 .args(["-avd", &id])
                 .args(LEAN)
                 .stdin(Stdio::null())
@@ -335,7 +370,7 @@ pub async fn device_shutdown(platform: String, id: String, serial: Option<String
             run(Command::new("xcrun").args(["simctl", "shutdown", &id]))
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            run(Command::new(adb()).args(["-s", &s, "emu", "kill"]))
+            run(crate::engine::background_command(adb()).args(["-s", &s, "emu", "kill"]))
         }
     })
     .await
@@ -350,10 +385,10 @@ pub async fn device_delete(platform: String, id: String) -> Result<(), String> {
         } else {
             let avdmanager = sdk().join(if cfg!(windows) { "cmdline-tools/latest/bin/avdmanager.bat" } else { "cmdline-tools/latest/bin/avdmanager" });
             if avdmanager.is_file() {
-                run(Command::new(avdmanager).args(["delete", "avd", "-n", &id]))
+                run(crate::engine::background_command(avdmanager).args(["delete", "avd", "-n", &id]))
             } else {
                 // without cmdline-tools: remove the AVD folder and its .ini
-                let dir = dirs_home().join(".android/avd");
+                let dir = avd_home();
                 std::fs::remove_dir_all(dir.join(format!("{id}.avd"))).map_err(|e| e.to_string())?;
                 std::fs::remove_file(dir.join(format!("{id}.ini"))).map_err(|e| e.to_string())
             }
@@ -377,7 +412,7 @@ pub async fn device_shot(app: AppHandle, platform: String, id: String, serial: O
             run(Command::new("xcrun").args(["simctl", "io", &id, "screenshot", "--type=jpeg", &p]))?;
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            let o = Command::new(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+            let o = crate::engine::background_command(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
             if !o.status.success() || o.stdout.is_empty() {
                 return Err("화면을 못 가져왔어요".into());
             }
@@ -445,7 +480,12 @@ fn within(cmd: &mut Command, secs: u64) -> Option<String> {
 /// it made. A device the user lent the job is only let go of, never shut down.
 fn release_owned(worker: &str, m: &Owned) {
     let session: String = format!("ondra-{worker}").chars().take(60).collect();
-    let _ = within(Command::new("agent-device").args(["close", "--session", &session]).env("PATH", crate::engine::user_path()), 20);
+    let mut close = Command::new("agent-device");
+    close.args(["close", "--session", &session]).env("PATH", crate::engine::user_path());
+    if let Some(state) = sdk::agent_device_state() {
+        close.env("AGENT_DEVICE_STATE_DIR", state);
+    }
+    let _ = within(&mut close, 20);
     if !m.made {
         return;
     }
@@ -456,12 +496,12 @@ fn release_owned(worker: &str, m: &Owned) {
         }
     } else if let Some(serial) = m.serial.as_deref() {
         // the port may belong to another emulator by now: only the one this job booted
-        let avd = within(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
+        let avd = within(crate::engine::background_command(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
         if avd.lines().next().map(str::trim) == Some(m.name.as_str()) {
-            let _ = within(Command::new(adb()).args(["-s", serial, "emu", "kill"]), 15);
+            let _ = within(crate::engine::background_command(adb()).args(["-s", serial, "emu", "kill"]), 15);
             // the emulator lets go of its files a moment after it's told to quit
             for _ in 0..20 {
-                if within(Command::new(adb()).args(["-s", serial, "get-state"]), 3).is_none_or(|s| !s.contains("device")) {
+                if within(crate::engine::background_command(adb()).args(["-s", serial, "get-state"]), 3).is_none_or(|s| !s.contains("device")) {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -507,9 +547,10 @@ fn release_in(root: &std::path::Path, keep: &[String]) -> Vec<String> {
 // in `live`, which takes fractions as they are.
 
 pub mod live;
+pub mod sdk;
 
 fn android_size(serial: &str) -> Option<(f64, f64)> {
-    let txt = out(Command::new(adb()).args(["-s", serial, "shell", "wm", "size"]))?;
+    let txt = out(crate::engine::background_command(adb()).args(["-s", serial, "shell", "wm", "size"]))?;
     // "Override size" wins over "Physical size"
     let line = txt.lines().find(|l| l.starts_with("Override")).or_else(|| txt.lines().find(|l| l.contains("size")))?;
     let (w, h) = line.rsplit(' ').next()?.split_once('x')?;
@@ -554,7 +595,7 @@ pub async fn device_input(
             "enter" => vec!["keyevent".into(), "66".into()],
             _ => return Err("모르는 조작이에요".into()),
         };
-        let mut cmd = Command::new(adb());
+        let mut cmd = crate::engine::background_command(adb());
         cmd.args(["-s", &s, "shell", "input"]).args(&args);
         run(&mut cmd)
     })
@@ -565,6 +606,31 @@ pub async fn device_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_users_sdk_first_and_ondras_whole_when_it_has_what_theirs_lacks() {
+        let root = std::env::temp_dir().join(format!("ondra-pick-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (user, ours) = (root.join("user"), root.join("ours"));
+        let put = |d: &std::path::Path, rel: &str| {
+            let f = d.join(format!("{rel}{}", std::env::consts::EXE_SUFFIX));
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(f, "").unwrap();
+        };
+        let pick = || pick_sdk(user.clone(), Some(ours.clone()));
+        // nothing anywhere: where the user's would be (as before)
+        assert_eq!(pick(), user);
+        put(&ours, "platform-tools/adb");
+        assert_eq!(pick(), ours);
+        put(&user, "platform-tools/adb");
+        assert_eq!(pick(), user);
+        put(&ours, "emulator/emulator");
+        assert_eq!(pick(), ours);
+        put(&user, "emulator/emulator");
+        assert_eq!(pick(), user);
+        assert_eq!(pick_sdk(user.clone(), None), user);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn jobs_share_one_xcode_cache_that_doesnt_care_which_folder_builds() {

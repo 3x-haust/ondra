@@ -10,11 +10,12 @@
 //   job_tell       → a message to one of them (queued, delivered, answered, resumed, carried on)
 //   settings_read / settings_write → the settings the user could switch themselves (engine/appSettings.ts)
 //   app            → what the user could press in Ondra, by name (engine/appActions.ts)
+//   android_sdk    → the Android SDK for the device tool (devices/sdk.rs): status, get adb / the emulator
 //   discord        → the Discord agent's hands: servers, channels, make or remove one, the work channel (main only)
 // Calls arrive as `bridge:call` {id, call:{op, worker, args}} and are answered
 // with bridge_reply. The worker id is the job's id: a job only sees its own memory.
 // Main (`captain:<space>[~<project>]`) may use the job ops for its chat's space; memory stays a job's.
-import { bridgeReply, onEvent, pathsExist } from "../lib/native";
+import { androidSdkGet, androidSdkStatus, bridgeReply, onEvent, pathsExist } from "../lib/native";
 import { homeDir, state, taskById } from "../state/store";
 import type { Memory, MemoryKind, Task } from "../state/types";
 import { addMemory, isLive, KINDS, kindLabel, kindOf, markUsed, pathMatches, recall, retireMemory, userOwned } from "./memory";
@@ -72,6 +73,11 @@ export async function handle(c: Call): Promise<unknown> {
   if (c.op?.startsWith("job")) return jobOp(c.op, c.worker, a);
   // the Discord agent's hands on the server (main only, engine/discordHands.ts)
   if (c.op === "discord") return (await import("./discordHands")).discordHands(c.worker, a);
+  // the Android SDK for the device tool: how it stands, adb unasked, the emulator after the user said yes
+  if (c.op === "android_sdk") {
+    if (a.get === "adb" || a.get === "emulator") await androidSdkGet(a.get);
+    return androidSdkStatus(a.full === true);
+  }
   // the app's buttons (connect link, projects, a job's pin or archive …): main or a job, in its space
   if (c.op === "app") return (await import("./appActions")).appHands(c.worker, a);
   // the space's connected services (Settings › 서비스): main's space, or the job's

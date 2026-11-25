@@ -99,12 +99,21 @@ pub fn request_accessibility() -> bool {
 
 #[tauri::command]
 pub fn open_privacy_settings(pane: String) -> Result<(), String> {
+    #[cfg(windows)]
+    if pane == "microphone" {
+        crate::store::open_windows_settings("privacy-microphone");
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    return Err(format!("no privacy settings page for {pane} here"));
+    #[cfg(target_os = "macos")]
     let anchor = match pane.as_str() {
         "screen" => "Privacy_ScreenCapture",
         "microphone" => "Privacy_Microphone",
         "speech" => "Privacy_SpeechRecognition",
         _ => "Privacy_Accessibility",
     };
+    #[cfg(target_os = "macos")]
     Command::new("/usr/bin/open")
         .arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}"))
         .spawn()
@@ -195,19 +204,41 @@ pub fn guard_dylib(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// The Chrome ondra-browser drives: the browser component (see components.rs), the
-/// one an older app kept in its Resources, else a system Chrome.
+/// one an older app kept in its Resources, else a system Chrome (the only one on Windows
+/// and Linux on ARM, which have no Chrome for Testing build).
 pub fn chrome_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(bin) = crate::components::path(app, "chrome").or_else(|| resource(app, "chrome")).and_then(|d| chrome_in(&d)) {
         return Some(bin);
     }
-    let system = PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
-    system.is_file().then_some(system)
+    system_chrome()
 }
 
-/// The Chrome for Testing program inside a folder of it (`<dir>/chrome-*-mac-*/…`).
+fn system_chrome() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    let found = Some(PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"));
+    #[cfg(target_os = "linux")]
+    let found = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+        .iter()
+        .flat_map(|name| ["/usr/bin", "/usr/local/bin", "/snap/bin", "/opt/google/chrome"].map(|dir| PathBuf::from(dir).join(name)))
+        .find(|p| p.is_file());
+    #[cfg(windows)]
+    let found = [
+        ("ProgramFiles", r"Google\Chrome\Application\chrome.exe"),
+        ("ProgramFiles(x86)", r"Google\Chrome\Application\chrome.exe"),
+        ("LOCALAPPDATA", r"Google\Chrome\Application\chrome.exe"),
+        ("ProgramFiles(x86)", r"Microsoft\Edge\Application\msedge.exe"),
+        ("ProgramFiles", r"Microsoft\Edge\Application\msedge.exe"),
+    ]
+    .iter()
+    .filter_map(|(var, rel)| std::env::var_os(var).map(|base| PathBuf::from(base).join(rel)))
+    .find(|p| p.is_file());
+    found.filter(|p| p.is_file())
+}
+
+/// The Chrome for Testing program inside a folder of it (`<dir>/chrome-*-<platform>/…`).
 pub fn chrome_in(dir: &Path) -> Option<PathBuf> {
     for e in std::fs::read_dir(dir).ok()?.flatten() {
-        let bin = e.path().join("chrome-headless-shell");
+        let bin = e.path().join(format!("chrome-headless-shell{}", std::env::consts::EXE_SUFFIX));
         if bin.is_file() {
             return Some(bin);
         }
@@ -280,6 +311,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     let mut env = Vec::new();
     // agent_spawn swaps this for the saved secrets (secrets.rs); the page only sees the flag
     env.push((crate::secrets::MARKER.into(), "1".into()));
+    // a Claude or Codex account searches the web with its own provider's built-in web_search
+    // (the engine adds it only for those, and drops it for a session the provider refuses it in)
+    env.push(("PI_HOSTED_WEB_SEARCH".into(), "1".into()));
     if let Some(dir) = sidecar_dir() {
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));
@@ -325,6 +359,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         let sdk = sdk.display().to_string();
         env.push(("ANDROID_HOME".into(), sdk.clone()));
         env.push(("ANDROID_SDK_ROOT".into(), sdk));
+    }
+    if let Some(state) = crate::devices::sdk::agent_device_state() {
+        env.push(("AGENT_DEVICE_STATE_DIR".into(), state.display().to_string()));
     }
     if let Some(xc) = crate::devices::xcode_cache() {
         env.push(("XCODE_XCCONFIG_FILE".into(), xc.display().to_string()));

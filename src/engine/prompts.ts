@@ -121,6 +121,28 @@ focus. When an action has no effect, take the skill's next way and keep going;
 after three ways fail on one action, ask the user to do that step if it takes
 them a moment; else report the limit, naming what you tried.`;
 
+const NO_BROWSER = `Browser: none on this computer. Read pages with web_fetch. A step that needs a browser
+(a sign-in, clicks, a screenshot of a page) is the user's to do, or unverified.`;
+/** In place of the lines about a tool this computer doesn't have (engine.info says which it has). */
+const WITHOUT: Record<"browser" | "computer", [string, string][]> = {
+  computer: [
+    ["a Mac app on this machine → computer-use; ", ""],
+    [COMPUTER, `Desktop apps: no tool drives another app's window on this computer. A step only
+an app's window can do is the user's: ask them for it (exact steps), or report it as unverified.`],
+  ],
+  browser: [
+    ["a site or web app → browser-use;\n  ", ""],
+    ["Browser: the browser-use skill (`browse` over the bundled ondra-browser; one\nshared browser, your own tab, logins kept; sign in only through the keychain).", NO_BROWSER],
+    ["Browser: the browser-use skill (`browse` over the bundled ondra-browser; shared browser, own tab).", NO_BROWSER],
+    ["site first; the shared browser only when memory has no way.", "site first; when it has none, ask the user for what the page says."],
+  ],
+};
+/** A role prompt with only the tools this computer has (Windows and Linux have no app helper; a build without ondra-browser has no browser). */
+export function forHost(prompt: string): string {
+  const missing = (Object.keys(WITHOUT) as (keyof typeof WITHOUT)[]).filter((k) => engine.info[k] === false);
+  return missing.flatMap((k) => WITHOUT[k]).reduce((p, [from, to]) => p.split(from).join(to), prompt);
+}
+
 const SCRATCH = `$APP_ARTIFACTS_DIR holds only what the user will look at. Builds, caches
 (CARGO_TARGET_DIR and the like when you build outside the project), unpacked
 copies and scratch work go in $APP_SCRATCH_DIR.`;
@@ -277,7 +299,8 @@ Other jobs of this space, running or past (a job the user names, what an
 earlier job did, work going on next to yours): jobs_search, job_read, and
 job_tell to send one a message (through use).
 ${COMPUTER}
-Web: web_search and web_fetch (through use); public pages need no browser. A page behind a
+Web: your built-in web_search when you have it (else web_lookup through use), web_fetch (through
+use) to read a page; public pages need no browser. A page behind a
 login (Notion, Google Docs, an admin): memory_search how this user reads that
 site first; the shared browser only when memory has no way.
 CLI logins (gh, aws, gcloud …) are this space's accounts: use them as they
@@ -307,7 +330,7 @@ result, without your code, is not that).
    never bring in a pattern the project doesn't use. Then the user's other
    projects, well-known open-source ones, official docs. What you would
    otherwise recall about something outside this folder (a library's API, a
-   CLI, a version, a product, a name the user used) is looked up: web_search
+   CLI, a version, a product, a name the user used) is looked up: a web search
    with the user's hints, then web_fetch the official docs or source; keep
    the URLs for done.
    Plan check, only for a new feature or a redesign with several parts or
@@ -489,7 +512,8 @@ Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; share
 ${SCRATCH}
 Your fork and the other jobs of this space: jobs_search and job_read (through use).
 ${COMPUTER}
-Web: web_search and web_fetch (through use). Look up anything from outside the folder
+Web: your built-in web_search when you have it (else web_lookup through use), web_fetch (through
+use) to read a page. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 
 # Finishing
@@ -510,8 +534,8 @@ really different work. An app, repo or tool of the user's you don't know
 (in the repo list or a project) is looked up before you ask what it is:
 read its README or package description; a typo typed in the wrong keyboard
 layout ("TJ볼게" = "써볼게") is read as what they meant. Your tools are behind
-use: call one by name with its args in one step ({"tool":"web_search","args":{"query":"…"}});
-use's description lists them (jobs_search, job_read, web_search, web_fetch, skill,
+use: call one by name with its args in one step ({"tool":"web_fetch","args":{"url":"…"}});
+use's description lists them (jobs_search, job_read, web_lookup, web_fetch, skill,
 read, bash, ondra_settings …). Gmail, Slack, Notion and other services the user wants
 connected, you connect yourself with the services tool (per workspace); a connected one's
 tools come through use too (mcp_servers lists them). What the user could press in Ondra
@@ -532,7 +556,7 @@ route each item:
   minute; read-only lookups allowed). A question about anything (what is X,
   explain X, which is better, how does X work) is answered from what you
   looked up this turn, never from recall alone: memory and files for the
-  user's own things, web_search then web_fetch for everything else, using
+  user's own things, a web search (your built-in web_search, else web_lookup) then web_fetch for everything else, using
   every hint the user gave (who made it, where they saw it: "깃허브에서 본",
   "hana가 만든"). A name you don't know or that could mean several things
   is searched, not guessed or swapped for a similar name. A search that
@@ -1199,7 +1223,7 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", t.parentId ? "" : checksPrompt(checksFor(projectById(t.project, t.space)?.folder ?? t.cwd)), inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
+  return [forModel(forHost(t.parentId ? SUB_SYSTEM : TASK_SYSTEM), model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", t.parentId ? "" : checksPrompt(checksFor(projectById(t.project, t.space)?.folder ?? t.cwd)), inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
 }
 
 /** What the Discord agent's jobs post on GitHub reads like a teammate wrote it, not a generated report. */

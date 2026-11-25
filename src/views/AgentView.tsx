@@ -13,6 +13,7 @@ import type { AgentNote, CaptainMessage } from "../state/types";
 import { UserMsg } from "../ui/MsgActions";
 import { Icon } from "../ui/Icon";
 import { keepBottom } from "../ui/stick";
+import { inSpace, kept, scrollKept } from "../state/viewState";
 import { AskDock, handed, onItsOwn, Reply, shows } from "./MainView";
 import { PaneControls } from "./PaneControls";
 import { RoutineRow } from "./Routines";
@@ -20,7 +21,8 @@ import { AgentJobs, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 
 type Part = "talk" | "work" | "routines" | "memory";
-const [part, setPart] = createSignal<Part>("talk");
+// each workspace's agent opens on the part it was left on
+const [part, setPart] = kept<Part>(() => inSpace(state.space, "agent.part"), "talk");
 
 /** the agent's chat in a space */
 export const agentKey = (space = state.space) => chatKey(space, AGENT_CHAT);
@@ -81,7 +83,7 @@ export function AgentView() {
 
       <Show when={part() === "talk"}>
         <Show when={msgs().length || asks().length} fallback={<p class="agent-empty">{t("디스코드에서 {name}에게 말을 걸면 여기에 남아요", { name: a().name })}</p>}>
-          <div class="thread" ref={(el) => onCleanup(keepBottom(el))}>
+          <div class="thread" ref={(el) => onCleanup(keepBottom(el, undefined, { key: () => inSpace(state.space, "agent/talk") }))}>
             <div class="thread-inner convo">
               <For each={msgs()}>
                 {(m: CaptainMessage) => (
@@ -108,13 +110,13 @@ export function AgentView() {
       </Show>
 
       <Show when={part() === "work"}>
-        <div class="agent-part">
+        <div class="agent-part" ref={scrollKept(() => inSpace(state.space, `agent/${part()}`))}>
           <AgentJobs space={state.space} />
         </div>
       </Show>
 
       <Show when={part() === "routines"}>
-        <div class="agent-part">
+        <div class="agent-part" ref={scrollKept(() => inSpace(state.space, `agent/${part()}`))}>
           <Show when={routines().length} fallback={<p class="agent-empty">{t("디스코드에서 \"매일 9시에 PR 정리해서 알려줘\"처럼 말하면 루틴이 생겨요")}</p>}>
             <div class="set-group agent-routines">
               <For each={routines()}>{(r) => <RoutineRow r={r} />}</For>
@@ -124,7 +126,7 @@ export function AgentView() {
       </Show>
 
       <Show when={part() === "memory"}>
-        <div class="agent-part">
+        <div class="agent-part" ref={scrollKept(() => inSpace(state.space, `agent/${part()}`))}>
           <WaysCard />
           <Show when={notes().length} fallback={<p class="agent-empty">{t("아직 기억한 게 없어요")}</p>}>
             <div class="agent-notes">

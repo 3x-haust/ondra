@@ -7,6 +7,7 @@ import { tidyParts } from "../engine/tidy";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
 import { fsRead, openInEditor, revealPath, revealLabel } from "../lib/native";
 import { setState, state, taskById } from "../state/store";
+import { inSpace, kept, scrollKept } from "../state/viewState";
 import type { JournalEntry, Memory, MemoryKind } from "../state/types";
 import { openTask, previewFile, toast } from "../state/ui";
 import { ago } from "../ui/bits";
@@ -47,7 +48,7 @@ export function Detail(props: { model: Model; sel: string; onSel: (id: string) =
   const now = () => (props.sel.startsWith("n:") ? props.model.nows.get(props.sel.slice(2)) : undefined);
   const journal = () => props.sel === JOURNAL || props.sel.startsWith("j|");
   return (
-    <aside class="md-side">
+    <aside class="md-side" ref={scrollKept(() => inSpace(state.space, `memory/side/${props.sel}`))}>
       <Switch fallback={<Summary model={props.model} id={props.sel} onSel={props.onSel} />}>
         <Match when={props.sel === VERSIONS}><Versions /></Match>
         <Match when={mem()}>{(m) => <Piece model={props.model} m={m()} onSel={props.onSel} />}</Match>
@@ -109,9 +110,12 @@ function H(props: { children: string; n?: number }) {
   );
 }
 
+/** "{n}개 더" opened in a list (`keep` names it) stays open when it is shown again */
+const moreOf = (keep: () => string) => kept(() => `fold/memory/${keep()}`, false, { many: true });
+
 /** a short list of pieces you can jump to */
-function PieceList(props: { list: Memory[]; onSel: (id: string) => void; limit?: number }) {
-  const [all, setAll] = createSignal(false);
+function PieceList(props: { list: Memory[]; onSel: (id: string) => void; limit?: number; keep: string }) {
+  const [all, setAll] = moreOf(() => props.keep);
   const shown = () => (all() ? props.list : props.list.slice(0, props.limit ?? 8));
   return (
     <div class="ms-list">
@@ -141,8 +145,8 @@ const endedAt = (e: JournalEntry) => {
   return (x && ((x.worktree?.state === "merged" ? x.mergedAt : undefined) ?? x.finishedAt)) || e.at;
 };
 
-function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; days?: boolean; limit?: number }) {
-  const [all, setAll] = createSignal(false);
+function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; days?: boolean; limit?: number; keep: string }) {
+  const [all, setAll] = moreOf(() => props.keep);
   const shown = () => (all() ? props.list : props.list.slice(0, props.limit ?? 30));
   const head = (e: JournalEntry, i: number) => props.days && (i === 0 || dayKey(shown()[i - 1].at) !== dayKey(e.at));
   return (
@@ -335,16 +339,16 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
         fallback={
           <Show when={recent().length}>
             <H>{t("최근 메모리")}</H>
-            <PieceList list={recent()} onSel={props.onSel} limit={5} />
+            <PieceList list={recent()} onSel={props.onSel} limit={5} keep={`${props.id}/recent`} />
           </Show>
         }
       >
         <H n={list().length}>{t("메모리")}</H>
-        <PieceList list={[...list()].sort(byWeight)} onSel={props.onSel} limit={30} />
+        <PieceList list={[...list()].sort(byWeight)} onSel={props.onSel} limit={30} keep={`${props.id}/list`} />
       </Show>
       <Show when={all() && props.model.journal.length}>
         <H>{t("최근 작업")}</H>
-        <EntryList list={recentJobs()} onSel={props.onSel} limit={4} />
+        <EntryList list={recentJobs()} onSel={props.onSel} limit={4} keep={`${props.id}/jobs`} />
       </Show>
       <Show when={all()}>
         <TidyLine />
@@ -425,7 +429,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
         ]}
       />
       <Show when={list().length} fallback={<Empty>{t("없음")}</Empty>}>
-        <EntryList list={list()} onSel={props.onSel} days={k().length !== 10} limit={60} />
+        <EntryList list={list()} onSel={props.onSel} days={k().length !== 10} limit={60} keep={`${props.id}/jobs`} />
       </Show>
     </div>
   );
@@ -740,7 +744,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
       </Show>
       <Show when={linked().length}>
         <H n={linked().length}>{t("연결된 메모리")}</H>
-        <PieceList list={linked()} onSel={props.onSel} />
+        <PieceList list={linked()} onSel={props.onSel} keep={`m:${props.m.id}/linked`} />
       </Show>
       <div class="md-acts">
         <Show when={m().invalidAt} fallback={<button class="btn sm ghost" onClick={() => retireMemory(m().id)}><Icon name="archive" size={14} />{t("보관")}</button>}>

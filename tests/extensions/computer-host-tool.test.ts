@@ -26,7 +26,7 @@ process.stdin.on("data", c => { buf += c; let nl;
   while ((nl = buf.indexOf("\\n")) >= 0) { const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
     const r = JSON.parse(line); let res;
     if (r.op === "launch" && r.app === "Nope") { process.stdout.write(JSON.stringify({ version: 1, id: r.id, ok: false, error: { code: "LAUNCH_FAILED", message: "app not found" } }) + "\\n"); continue; }
-    if (r.op === "launch") res = { pid: 4242, ...(r.app === "Installed" ? { path: "/Applications/Installed.app" } : {}), env: ENV, backgroundPreserved: true };
+    if (r.op === "launch") res = { pid: 4242, ...(r.app === "Installed" ? { path: "/Applications/Installed.app" } : {}), ...(r.app === "Remote" ? { mode: "background:sandboxed" } : r.app === "Guarded" ? { mode: "background:native+guard" } : {}), env: ENV, backgroundPreserved: true };
     else if (r.op === "observe") res = { tree: tree("a"), env: ENV };
     else if (r.op === "act") res = { actionMs: 5, env: ENV, backgroundPreserved: true, tree: tree(r.action.kind === "set-value" ? r.action.value : "a") };
     else if (r.op === "look") res = { matchedTree: ${JSON.stringify(matchedTree)}, image: { mimeType: "image/png", data: ${JSON.stringify(png)}, width: 1, height: 1 }, env: ENV };
@@ -133,6 +133,15 @@ describe("computer tool — host background mode", () => {
     await expect(call({ action: "start", app: "../x.app" })).rejects.toThrow(/Invalid app/);
     expect(text(await call({ action: "start", app: "Installed" }))).toContain("pid 4242, from /Applications/Installed.app.");
     await call({ action: "stop" });
+  });
+
+  it("tells the job to click by ref in an app it can't keep from coming forward", async () => {
+    for (const [app, warned] of [["Remote", true], ["Guarded", false]] as const) {
+      const { call } = load();
+      const start = text(await call({ action: "start", app }));
+      expect(start.includes("Click by ref first"), app).toBe(warned);
+      await call({ action: "stop" });
+    }
   });
 
   it("names the clicked element for the step line, outside what the model reads", async () => {

@@ -110,6 +110,13 @@ export default {
     "Ondra can't use the microphone. Turn on Ondra in System Settings › Privacy & Security › Microphone.",
   "음성 인식 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 음성 인식에서 Ondra를 켜 주세요.":
     "Ondra can't use speech recognition. Turn on Ondra in System Settings › Privacy & Security › Speech Recognition.",
+  "마이크 권한이 꺼져 있어요. Windows 설정 › 개인 정보 및 보안 › 마이크에서 데스크톱 앱의 마이크 사용을 켜 주세요.":
+    "Ondra can't use the microphone. Turn on microphone access for desktop apps in Windows Settings › Privacy & security › Microphone.",
+  "마이크를 쓸 수 없어요. 시스템의 소리 설정에서 입력 장치를 확인해 주세요.":
+    "Ondra can't use the microphone. Check the input device in your system's sound settings.",
+  "음성 인식 모델을 받는 중… {n}%": "Downloading the speech model… {n}%",
+  "음성 인식 모델을 받지 못했어요. 인터넷 연결을 확인한 뒤 다시 해 보세요.":
+    "Couldn't download the speech model. Check your internet connection and try again.",
   "쓸 수 있는 마이크가 없어요.": "No microphone is available.",
   "지금은 이 기기에서 음성 인식을 쓸 수 없어요.": "Speech recognition isn't available on this device right now.",
   "이 언어는 Mac 안에서 받아쓸 수 없어요. 시스템 설정 › 키보드에서 받아쓰기를 켠 뒤 다시 해 보세요.":
@@ -175,6 +182,11 @@ export default {
   "계정 추가": "Add account",
   "작업 없음": "No tasks",
   "지금 시작": "Start now",
+
+  // a step waiting on CI: each job of the run ("18분째 / 보통 25분", "완료 · 22분")
+  "보통 {d}": "usually {d}",
+  "취소됨|ci": "Cancelled",
+  "건너뜀": "Skipped",
 
   // fork card
   "응답 대기 중": "Waiting for reply",

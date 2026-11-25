@@ -36,6 +36,9 @@ export interface EngineInfo {
   dataDir: string;
   /** The user's home folder, for expanding `~`. */
   home: string;
+  /** The tools this app ships on this computer (false: not here): ondra-browser, and the helper that drives other apps. */
+  browser?: boolean;
+  computer?: boolean;
 }
 export const engineInfo = () =>
   call<EngineInfo>("engine_info", undefined, { enginePath: "/dev/engine", engineVersion: "dev", dataDir: "/tmp/ondra", home: "/Users/me" });
@@ -341,7 +344,7 @@ export const remoteForget = (id: string) => call<{ id: string; name: string; add
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 /**
- * Dictation (bundled ondra-dictate: the microphone and on-device speech recognition). `id`
+ * Dictation (bundled ondra-dictate: the microphone and speech recognition on this computer). `id`
  * names the run: its lines arrive as "dictate" events carrying it, {id, end: true} last.
  */
 export const dictateStart = (id: number, lang: string) => call<void>("dictate_start", { id, lang });
@@ -390,6 +393,15 @@ export const gitCommit = (cwd: string, message: string, env: Env = []) => call<s
 export const gitPush = (cwd: string, env: Env = []) => call<string>("git_push", { cwd, env }, "task/demo");
 /** a pull request's state, checks, comments and reviews as the space sees it (raw JSON, see prWatch.ts) */
 export const ghPrState = (url: string, env: Env = []) => call<string>("gh_pr_state", { url, env }, "");
+/** one Actions run's JSON fields (see ciRun.ts); `repo` is owner/name, else the folder's repo */
+export const ghRunView = (cwd: string, run: string, repo: string | undefined, fields: string, env: Env = []) =>
+  call<string>("gh_run_view", { cwd, run, repo: repo ?? null, fields, env }, "");
+/** a workflow's latest successful runs, as `[{databaseId}]` */
+export const ghRunList = (cwd: string, workflow: string, repo: string | undefined, env: Env = []) =>
+  call<string>("gh_run_list", { cwd, workflow, repo: repo ?? null, env }, "[]");
+/** a PR's checks (`{statusCheckRollup}`); pr "" is the folder's branch */
+export const ghPrChecks = (cwd: string, pr: string, repo: string | undefined, env: Env = []) =>
+  call<string>("gh_pr_checks", { cwd, pr, repo: repo ?? null, env }, "");
 /** everything the PR view shows, diff included (raw JSON, see prView.ts) */
 /** Issues of the folder's repo for a GitHub search (JSON array as text). */
 export const ghIssues = (cwd: string, search: string, env: Env = []) =>
@@ -560,6 +572,29 @@ export const devicesList = () =>
     { id: "Pixel_9", name: "Pixel 9", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: true, serial: "emulator-5554" },
     { id: "pixel_test", name: "pixel test", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: false },
   ]);
+/** The Android SDK in use (the user's, else Ondra's own) and what Ondra is bringing in for it.
+ *  accel: "windows" | "kvm" when the emulator can't run fast here; license and size: what
+ *  getting the emulator means (full only). */
+export interface AndroidSdk {
+  sdk: string;
+  adb: boolean;
+  emulator: boolean;
+  avd: boolean;
+  busy?: "adb" | "emulator" | null;
+  percent: number;
+  error?: string | null;
+  size: number;
+  license?: string | null;
+  accel?: "windows" | "kvm" | null;
+  /** AGENT_DEVICE_STATE_DIR that goes with Ondra's own SDK */
+  stateDir?: string | null;
+}
+export const androidSdkStatus = (full = false) =>
+  call<AndroidSdk>("android_sdk_status", { full }, { sdk: "", adb: true, emulator: true, avd: true, percent: 0, size: 0 });
+/** adb comes unasked; the emulator only once the user agreed to its license and size. */
+export const androidSdkGet = (what: "adb" | "emulator") => call<void>("android_sdk_get", { what });
+export const onAndroidSdk = (f: (s: AndroidSdk) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<AndroidSdk>("android-sdk", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Shut down the devices jobs made and left behind, except those of the jobs in `keep`. */
 export const jobDevicesRelease = (keep: string[]) => call<string[]>("job_devices_release", { keep }, []);
 export const deviceBoot = (d: Device) => call<void>("device_boot", { platform: d.platform, id: d.id });

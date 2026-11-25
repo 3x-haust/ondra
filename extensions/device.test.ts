@@ -1,7 +1,8 @@
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { alreadyBaked, bakeable, baseAvdName, freePort, internal, portsIn, missingBakes, needsRunner, pickPhone, readOnlyBoot, runSteps, spareName, spareOf, spareScript, staleLock, stepArgs, templateName } from "./device";
+import { agentDevice, alreadyBaked, androidSdk, avdNames, bakeable, baseAvdName, freePort, internal, portsIn, missingBakes, needsRunner, pickPhone, readOnlyBoot, runSteps, spareName, spareOf, spareScript, staleLock, stepArgs, templateName } from "./device";
 
 describe("steps in one call", () => {
   it("runs them in order on the job's session and stops at the first that fails", async () => {
@@ -136,5 +137,34 @@ describe("an emulator's port", () => {
 
   it("the ports in use come from adb's list", () => {
     expect(portsIn(["List of devices attached", "emulator-5554\tdevice", "emulator-5560\toffline", "R5CT\tdevice", ""])).toEqual(new Set([5554, 5560]));
+  });
+});
+
+describe("the Android SDK on each system", () => {
+  it("is the one the app points jobs at, else where Android Studio puts it", () => {
+    expect(androidSdk({ ANDROID_HOME: "/data/android-sdk" }, "darwin", "/Users/me")).toBe("/data/android-sdk");
+    expect(androidSdk({ ANDROID_SDK_ROOT: "/opt/sdk" }, "linux", "/home/me")).toBe("/opt/sdk");
+    expect(androidSdk({}, "darwin", "/Users/me")).toBe(join("/Users/me", "Library/Android/sdk"));
+    expect(androidSdk({}, "linux", "/home/me")).toBe(join("/home/me", "Android/Sdk"));
+    expect(androidSdk({ LOCALAPPDATA: "C:/Users/me/AppData/Local" }, "win32", "C:/Users/me")).toBe(join("C:/Users/me/AppData/Local", "Android", "Sdk"));
+  });
+
+  it("an emulator that couldn't run lists no AVDs, not its error as one", () => {
+    expect(avdNames({ ok: false, out: "spawn /home/me/Library/Android/sdk/emulator/emulator ENOENT" })).toEqual([]);
+    expect(avdNames({ ok: true, out: "INFO    | Storing crashdata\r\nPixel_9\r\nondra-base-Pixel_9\n" })).toEqual(["Pixel_9", "ondra-base-Pixel_9"]);
+  });
+});
+
+describe("agent-device on each system", () => {
+  it("runs as it is, except on Windows, where npm's .cmd shim is skipped for its script under node", () => {
+    const pkg = join("C:/Users/me/AppData/Roaming/npm", "node_modules", "agent-device");
+    const read = (f: string) => {
+      if (f === join(pkg, "package.json")) return JSON.stringify({ bin: { "agent-device": "bin/agent-device.mjs" } });
+      throw new Error("ENOENT");
+    };
+    expect(agentDevice("darwin", "/usr/bin", read)).toEqual(["agent-device", []]);
+    expect(agentDevice("linux", "/usr/bin", read)).toEqual(["agent-device", []]);
+    expect(agentDevice("win32", "C:/Windows;C:/Users/me/AppData/Roaming/npm", read)).toEqual(["node", [join(pkg, "bin/agent-device.mjs")]]);
+    expect(agentDevice("win32", "C:/Windows", read)).toEqual(["agent-device", []]);
   });
 });

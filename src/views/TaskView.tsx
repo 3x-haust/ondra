@@ -4,6 +4,7 @@ import { feedbackCommands } from "../ui/Feedback";
 import { Fold } from "../ui/Fold";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, taskById } from "../state/store";
+import { kept, ofJob } from "../state/viewState";
 import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
@@ -72,9 +73,9 @@ function TodoList(props: { t: Task }) {
  * What goes on beside the conversation, as one line over the input ("변경 3파일 +18 −4 · 할 일 2/4 ·
  * pnpm dev 실행 중"): each part opens its own view, the to-do list right above the line.
  */
-// (the list stays open or shut while the line redraws: its state lives with the view)
-const [todos, setTodos] = createSignal(false);
 function Tray(props: { t: Task; changes: boolean; made: number; bg: Shell[]; open: (tab: PanelTab) => void }) {
+  // each job's list stays open or shut as it was left (while the line redraws, and when the job is opened again)
+  const [todos, setTodos] = kept(() => ofJob(props.t.id, "todos"), false);
   const diff = () => taskDiff(props.t);
   const plan = () => props.t.plan.length > 0 && props.t.status !== "done";
   const count = () => planCount(props.t.plan);
@@ -296,8 +297,6 @@ export function TaskView(props: { id: string }) {
   // the panel shows the focused pane's tools: for a pane beside it, it isn't open
   const focused = usePaneFocused();
   const mine = () => panelOpen() && focused();
-  // another task starts with its to-do list shut
-  createEffect(on(() => props.id, () => setTodos(false)));
   return (
     <Show when={t()} fallback={<div class="pane-empty">{tr("삭제된 작업")}</div>}>
       {(task) => {

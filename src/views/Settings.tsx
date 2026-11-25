@@ -11,6 +11,7 @@ import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { deviceSpaces, ownSpaces, projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
 import { mirror, setMirror } from "../state/mirror";
+import { scrollKept } from "../state/viewState";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf } from "../state/limits";
 import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
@@ -24,7 +25,9 @@ import { componentNote, componentOf } from "../engine/components";
 import {
   accountProviders,
   accountRemove,
+  androidSdkStatus,
   inTauri,
+  onAndroidSdk,
   openNotices,
   pickFolder,
   revealPath,
@@ -363,11 +366,26 @@ function Components() {
     );
   };
   const analyzer = () => componentOf("binary-analysis");
+  // the Android SDK in use; Ondra's own comes in from the device hub (adb, then the emulator)
+  const [android, { mutate }] = createResource(() => androidSdkStatus());
+  const off = onAndroidSdk(mutate);
+  onCleanup(() => void off.then((f) => f()));
   return (
     <>
       <Row title={t("에이전트")}>{part(engine.info.engineVersion, engine.ready, "engine")}</Row>
       <Row title={t("브라우저")}>{part(status()?.browserVersion, !!status()?.browserVersion && status()?.chromeReady, "chrome")}</Row>
       <Row title={t("앱 조작")}>{part(status()?.desktopVersion, !!status()?.desktopVersion)}</Row>
+      <Show when={android()}>
+        {(a) => (
+          <Row title={t("Android SDK")}>
+            <Show when={!a().busy} fallback={<span class="set-note">{a().busy === "emulator" ? t("받는 중 {p}%", { p: a().percent }) : t("준비 중")}</span>}>
+              <Show when={a().adb} fallback={<span class="pill warn">{t("없음|missing")}</span>}>
+                <span class="set-note">{a().emulator ? t("준비됨") : "adb"}</span>
+              </Show>
+            </Show>
+          </Row>
+        )}
+      </Show>
       <Show when={analyzer()}>
         {(c) => <Row title={t("바이너리 분석")}>{part(c().version.split("-")[0], c().state === "ready", "binary-analysis")}</Row>}
       </Show>
@@ -1305,8 +1323,7 @@ export function SettingsPage(props: { onBack: () => void }) {
   onMount(() => window.addEventListener("keydown", key, true));
   onCleanup(() => window.removeEventListener("keydown", key, true));
   let body!: HTMLDivElement;
-  // each tab opens at its top
-  createEffect(on(settingsTab, () => body && (body.scrollTop = 0), { defer: true }));
+  // each tab opens where it was left, at its top the first time; a row found by the search wins
   // a row found by the search: once its tab is drawn, bring it into view and light it for a moment
   createEffect(on(jump, (row) => {
     if (!row) return;
@@ -1324,7 +1341,7 @@ export function SettingsPage(props: { onBack: () => void }) {
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />
-      <div class="settings-body" ref={body}>
+      <div class="settings-body" ref={(el) => ((body = el), scrollKept(() => `settings/${settingsTab()}`)(el))}>
         <div class="settings-inner">
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>

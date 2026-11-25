@@ -64,10 +64,11 @@ When research is one step of a bigger job (a fix, a feature), keep
 
 For each sub-question, repeat until its "done when" holds:
 
-1. `web_search` from a few different angles: the user's language and
+1. A web search (your built-in `web_search`, else `web_lookup` through use) from a few different angles: the user's language and
    English, the official name, the year ("2026"), `site:` the owner's domain,
    "docs", "release notes", "pricing", "paper". Engine busy → search in your
-   built-in browser tab through `browser-use`: `python3 "<this skill's folder>/web.py" search "<query>"`.
+   built-in browser tab through `browser-use`: `python3 "<this skill's folder>/web.py" search "<query>"`
+   (a computer without the built-in browser has no such tab: wait and search again).
 2. Read the primary sources: the vendor's docs, blog or changelog, the paper,
    the repository, the standard, the filing; aggregators only lead to them.
    A snippet is not reading. `web_fetch` first; a block page, an error, a bot
