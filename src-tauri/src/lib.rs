@@ -349,6 +349,7 @@ pub fn run() {
             bridge::start(app.handle().clone());
             // the engine, the browser and the analyzer: in place (or on their way) in the background
             components::start(app.handle());
+            devices::sdk::init(app.handle());
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
             // A dev build is a bare executable, not an .app: Stage Manager and
@@ -598,6 +599,8 @@ pub fn run() {
             inbrowser::inbrowser_share,
             browser::browser_release,
             devices::devices_list,
+            devices::sdk::android_sdk_status,
+            devices::sdk::android_sdk_get,
             devices::device_boot,
             devices::device_shutdown,
             devices::device_delete,
