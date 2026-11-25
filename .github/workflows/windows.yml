@@ -127,6 +127,9 @@ jobs:
           $builtHash = (Get-FileHash "src-tauri/binaries/ondra-remote-$env:TARGET.exe" -ErrorAction Stop).Hash
           $installedHash = (Get-FileHash "$installed/ondra-remote.exe" -ErrorAction Stop).Hash
           if ($installedHash -ne $builtHash) { throw 'Installed remote helper differs from the build' }
+          $builtHash = (Get-FileHash "src-tauri/binaries/ondra-dictate-$env:TARGET.exe" -ErrorAction Stop).Hash
+          $installedHash = (Get-FileHash "$installed/ondra-dictate.exe" -ErrorAction Stop).Hash
+          if ($installedHash -ne $builtHash) { throw 'Installed dictation helper differs from the build' }
           $expected = (Get-Content "$env:ONDRA_ENGINE_DIST/../package.json" -Raw | ConvertFrom-Json).version
           Set-Location $installed
           $version = & ./engine/ondra-engine.exe --version
@@ -160,6 +163,7 @@ jobs:
           Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
           pnpm test src/engine/farPaths.test.ts src/lib/nativeAssets.test.ts
           cargo test --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked identity
+          cargo test --manifest-path dictate/Cargo.toml --release --target $env:TARGET --locked
           # One run for all filters: a run per filter compiled the test build again after the first.
           cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib '--' --test-threads=1 `
             remote::power::tests winvault::tests providers::tests::keychain_wrapper_stores_reads_and_deletes `

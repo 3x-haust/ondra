@@ -344,7 +344,7 @@ export const remoteForget = (id: string) => call<{ id: string; name: string; add
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 /**
- * Dictation (bundled ondra-dictate: the microphone and on-device speech recognition). `id`
+ * Dictation (bundled ondra-dictate: the microphone and speech recognition on this computer). `id`
  * names the run: its lines arrive as "dictate" events carrying it, {id, end: true} last.
  */
 export const dictateStart = (id: number, lang: string) => call<void>("dictate_start", { id, lang });

@@ -8,7 +8,7 @@ After the run succeeds, download **Ondra-linux-x64** from the run's **Artifacts*
 
 ## Reproduce the build locally
 
-Install [Tauri's Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux) (on Debian/Ubuntu: `libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`). CI uses Rust 1.95.0, Node 24.14.0, pnpm 11.6.0 and Bun 1.3.14. These are build tools. The installed app doesn't need them.
+Install [Tauri's Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux) (on Debian/Ubuntu: `libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`), plus `libasound2-dev` for the dictation helper's microphone. CI uses Rust 1.95.0, Node 24.14.0, pnpm 11.6.0 and Bun 1.3.14. These are build tools. The installed app doesn't need them.
 
 ### Prepare the engine
 
@@ -32,7 +32,7 @@ sudo apt install ./src-tauri/target/release/bundle/deb/*.deb   # or: sudo dnf in
 
 There is no AppImage: its packer rewrites the library path of every program inside it, and that breaks the single-file engine.
 
-If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri/target`. The pre-build step also builds the remote helper (`ondra-remote`) and stages it as a sidecar. `pnpm tauri dev` prepares the same engine and helper.
+If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri/target`. The pre-build step also builds the remote helper (`ondra-remote`) and the dictation helper (`ondra-dictate`) and stages them as sidecars. `pnpm tauri dev` prepares the same engine and helpers.
 
 ## What the app uses on Linux
 
@@ -42,13 +42,14 @@ If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri/ta
 - **Notifications** go to the desktop's notification service over D-Bus. Sounds use `paplay`.
 - **One copy runs at a time.** Starting Ondra again brings the open window to the front.
 - **Keep awake** (Settings › 연결) holds a `systemd-inhibit` lock while Ondra is open.
+- **Dictation** (the composer's mic) records the default input through ALSA (`libasound2`, `alsa-lib`; PulseAudio and PipeWire serve it). Speech is recognized on the computer by SenseVoiceSmall, which `ondra-dictate` downloads once (about 240 MB) into `~/.local/share/dev.3xhaust.ondra/models` the first time someone dictates.
 
-The browser tool, app control, dictation and the iOS simulator need macOS helpers and are not part of the Linux build. Android emulators use the SDK in `$ANDROID_HOME` or `~/Android/Sdk`.
+The browser tool, app control and the iOS simulator need macOS helpers and are not part of the Linux build. Android emulators use the SDK in `$ANDROID_HOME` or `~/Android/Sdk`.
 
 ## Check an installed copy
 
 ```sh
-ls /usr/bin/ondra /usr/bin/ondra-remote /usr/lib/Ondra/engine/ondra-engine
+ls /usr/bin/ondra /usr/bin/ondra-remote /usr/bin/ondra-dictate /usr/lib/Ondra/engine/ondra-engine
 /usr/lib/Ondra/engine/ondra-engine --version
 ```
 

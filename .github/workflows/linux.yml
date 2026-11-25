@@ -43,7 +43,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf xvfb dbus-x11 gnome-keyring libsecret-tools
+            libayatana-appindicator3-dev librsvg2-dev libasound2-dev patchelf xvfb dbus-x11 gnome-keyring libsecret-tools
           npm install --global --prefix "$RUNNER_TEMP/pnpm" pnpm@11.6.0
           echo "$RUNNER_TEMP/pnpm/bin" >> "$GITHUB_PATH"
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
@@ -109,11 +109,13 @@ jobs:
           rpm=$(ls "$bundles"/rpm/*.rpm)
           sudo apt-get install -y "./$deb"
           lib=/usr/lib/Ondra
-          for f in /usr/bin/ondra /usr/bin/ondra-remote $lib/engine/ondra-engine $lib/engine/package.json $lib/engine/photon_rs_bg.wasm \
+          for f in /usr/bin/ondra /usr/bin/ondra-remote /usr/bin/ondra-dictate $lib/engine/ondra-engine $lib/engine/package.json $lib/engine/photon_rs_bg.wasm \
                    $lib/engine/native/linux/prebuilds/linux-x64/linux-platform-x11.node $lib/engine/THIRD_PARTY_NOTICES.txt; do
             test -s "$f" || { echo "missing or empty: $f"; exit 1; }
           done
           cmp /usr/bin/ondra-remote "src-tauri/binaries/ondra-remote-$TARGET"
+          cmp /usr/bin/ondra-dictate "src-tauri/binaries/ondra-dictate-$TARGET"
+          cargo test --manifest-path dictate/Cargo.toml --release --target "$TARGET" --locked
           expected=$(node -p "require('$ONDRA_ENGINE_DIST/../package.json').version")
           version=$($lib/engine/ondra-engine --version)
           [ "$version" = "$expected" ] || { echo "engine reported '$version', expected '$expected'"; exit 1; }
