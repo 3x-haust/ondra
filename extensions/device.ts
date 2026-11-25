@@ -15,7 +15,7 @@
 // copy of an AVD (no app data, no logins), deleted again when the job is done.
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
 
@@ -40,17 +40,54 @@ const PROTECTED = (() => {
   }
 })();
 const isProtected = (name: string) => !!PROTECTED?.test(name);
-const SDK = join(process.env.HOME || "", "Library/Android/sdk");
-const ADB = existsSync(join(SDK, "platform-tools/adb")) ? join(SDK, "platform-tools/adb") : "adb";
-const EMULATOR = join(SDK, "emulator/emulator");
-const AVD_HOME = process.env.ANDROID_AVD_HOME || join(process.env.HOME || "", ".android/avd");
+/** The Android SDK: ANDROID_HOME (the app sets it for jobs), else where Android Studio puts it on each system. */
+export function androidSdk(env: NodeJS.ProcessEnv = process.env, os: NodeJS.Platform = process.platform, home = homedir()): string {
+  const set = env.ANDROID_HOME || env.ANDROID_SDK_ROOT;
+  if (set) return set;
+  if (os === "win32") return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "Android", "Sdk");
+  return join(home, os === "darwin" ? "Library/Android/sdk" : "Android/Sdk");
+}
+const EXE = process.platform === "win32" ? ".exe" : "";
+const SDK = androidSdk();
+const ADB = existsSync(join(SDK, `platform-tools/adb${EXE}`)) ? join(SDK, `platform-tools/adb${EXE}`) : "adb";
+const EMULATOR = join(SDK, `emulator/emulator${EXE}`);
+const AVD_HOME = process.env.ANDROID_AVD_HOME || join(homedir(), ".android/avd");
 const MAX_OUT = 14_000;
 
+/** agent-device as node can start it: on Windows npm installs a .cmd shim, which execFile can't run without a shell, so its script runs under node. */
+export function agentDevice(os: NodeJS.Platform = process.platform, path = process.env.PATH || "", read = (f: string) => readFileSync(f, "utf8")): [string, string[]] {
+  if (os !== "win32") return ["agent-device", []];
+  for (const dir of path.split(";").filter(Boolean)) {
+    try {
+      const pkg = join(dir, "node_modules", "agent-device");
+      const bin = JSON.parse(read(join(pkg, "package.json"))).bin;
+      const script = typeof bin === "string" ? bin : bin?.["agent-device"];
+      if (!script) continue;
+      return [existsSync(join(dir, "node.exe")) ? join(dir, "node.exe") : "node", [join(pkg, script)]];
+    } catch {
+      /* not in this folder */
+    }
+  }
+  return ["agent-device", []];
+}
+const AGENT_DEVICE = agentDevice();
+
 function run(cmd: string, args: string[], opts: { timeout?: number; signal?: AbortSignal } = {}): Promise<{ ok: boolean; out: string }> {
+  const [file, pre] = cmd === "agent-device" ? AGENT_DEVICE : [cmd, []];
   return new Promise((done) => {
-    execFile(cmd, args, { timeout: opts.timeout ?? 120_000, maxBuffer: 32 * 1024 * 1024, signal: opts.signal, env: process.env }, (err, stdout, stderr) => {
+    execFile(file, [...pre, ...args], { timeout: opts.timeout ?? 120_000, maxBuffer: 32 * 1024 * 1024, signal: opts.signal, env: process.env }, (err, stdout, stderr) => {
       const out = `${stdout ?? ""}${stderr ? `\n${stderr}` : ""}`.trim();
       done({ ok: !err, out: out || (err ? String(err.message) : "") });
+    });
+  });
+}
+
+/** An Android screen as a PNG file (adb's output straight to the file, no shell). */
+function screencap(serial: string, file: string): Promise<{ ok: boolean; out: string }> {
+  return new Promise((done) => {
+    execFile(ADB, ["-s", serial, "exec-out", "screencap", "-p"], { encoding: "buffer", timeout: 60_000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      if (!err && stdout.length) writeFileSync(file, stdout);
+      done({ ok: !err, out: err ? String(err.message) : "" });
     });
   });
 }
@@ -470,7 +507,7 @@ async function androidBoot(avd: string, fresh: boolean, before: Set<string>, sig
     const serial = `emulator-${port}`;
     // headless with plain -gpu auto, the emulator draws in software on the CPU (several
     // cores at all times); auto-no-window draws on the Mac's GPU
-    const child = spawn(EMULATOR, [...(args ?? ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]), "-port", String(port)], { detached: true, stdio: "ignore" });
+    const child = spawn(EMULATOR, [...(args ?? ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]), "-port", String(port)], { detached: true, stdio: "ignore", windowsHide: true });
     // an emulator that quits at once (a broken system image, a bad snapshot, its port taken) isn't waited on for minutes
     let gone = false;
     child.on("exit", () => (gone = true));
@@ -523,10 +560,12 @@ async function snapshotBase(avd: string, signal?: AbortSignal): Promise<string |
   }, signal).catch(() => undefined);
 }
 
+/** AVD names from `emulator -list-avds`; none when it didn't run (its error isn't a name). */
+export const avdNames = (r: { ok: boolean; out: string }) => (r.ok ? r.out.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("INFO")) : []);
+
 /** A fresh emulator for this job, copied from an AVD of its space (or `model` when that one is). */
 async function androidMake(model: string | undefined, signal?: AbortSignal): Promise<Mine | string> {
-  const list = await run(EMULATOR, ["-list-avds"], { signal });
-  const avds = list.out.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("INFO") && !s.startsWith("ondra-"));
+  const avds = avdNames(await run(EMULATOR, ["-list-avds"], { signal })).filter((s) => !s.startsWith("ondra-"));
   // a copy carries no app data, so any AVD's system image will do when the space has none
   const mineToUse = (a: string) => !isProtected(a) && (!SCOPED || ALLOWED.includes(a));
   const base = (model && avds.includes(model) && !isProtected(model) ? model : undefined) ?? avds.find(mineToUse) ?? avds.find((a) => !isProtected(a));
@@ -573,7 +612,7 @@ async function allowed(platform: Platform, which: string, signal?: AbortSignal):
   }
   const { lines, busy } = await runningAvds(signal);
   if (busy.has(which)) return { platform, serial: busy.get(which)!, name: which, made: false };
-  const avds = (await run(EMULATOR, ["-list-avds"], { signal })).out.split("\n").map((s) => s.trim());
+  const avds = avdNames(await run(EMULATOR, ["-list-avds"], { signal }));
   if (avds.includes(which)) {
     const serial = await androidBoot(which, false, new Set(lines.map((l) => l.split(/\s+/)[0])), signal);
     // booted for this job: shut down again when it's done (the AVD itself stays)
@@ -668,7 +707,7 @@ export default function (pi: any) {
         const r = await run("agent-device", ["screenshot", file, "--session", SESSION], { signal, timeout: 60_000 });
         if (!existsSync(file) || statSync(file).size === 0) {
           // no app session yet: take the whole device screen
-          const raw = mine.platform === "ios" ? await run("xcrun", ["simctl", "io", mine.udid!, "screenshot", "--type=png", file]) : await run("sh", ["-c", `"${ADB}" -s ${mine.serial} exec-out screencap -p > "${file}"`]);
+          const raw = mine.platform === "ios" ? await run("xcrun", ["simctl", "io", mine.udid!, "screenshot", "--type=png", file]) : await screencap(mine.serial!, file);
           if (!existsSync(file) || statSync(file).size === 0) return text(`screenshot failed: ${r.out}\n${raw.out}`);
         }
         // the proof stays full size; what comes back to the model is small (a phone screen is ~2600px tall)
