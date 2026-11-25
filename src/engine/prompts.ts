@@ -137,7 +137,7 @@ an app's window can do is the user's: ask them for it (exact steps), or report i
     ["site first; the shared browser only when memory has no way.", "site first; when it has none, ask the user for what the page says."],
   ],
 };
-/** A role prompt with only the tools this computer has (Windows and Linux have no ondra-browser or app helper yet). */
+/** A role prompt with only the tools this computer has (Windows and Linux have no app helper; a build without ondra-browser has no browser). */
 export function forHost(prompt: string): string {
   const missing = (Object.keys(WITHOUT) as (keyof typeof WITHOUT)[]).filter((k) => engine.info[k] === false);
   return missing.flatMap((k) => WITHOUT[k]).reduce((p, [from, to]) => p.split(from).join(to), prompt);
