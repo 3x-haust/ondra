@@ -282,6 +282,14 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalledWith(expect.anything(), "메인 답", expect.anything());
   });
 
+  it("a job's end main said nothing about still reaches Discord: its own summary", async () => {
+    await ready();
+    setState("tasks", [{ id: "t10", title: "openwrt 대역 바꾸기", entries: [], status: "done", summary: "공유기 LAN을 10.77.0.0/24로 바꿨어요", agent: { channel: "c1" } } as never]);
+    setState("captain", (l) => [...l, { id: "end10", at: 6, space: "home", project: "@agent", from: "captain", after: "t10", reply: "", routes: [] }]);
+    said.hook?.("end10");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "공유기 LAN을 10.77.0.0/24로 바꿨어요", undefined));
+  });
+
   it("work done in another channel: its end line is said there only; nothing stock is copied to where it was asked", async () => {
     await ready();
     setState("tasks", [{ id: "t8", title: "orbit 탭", entries: [], agent: { channel: "c1", room: "55555" } } as never]);
