@@ -73,7 +73,7 @@ jobs:
         with:
           path: |
             remote/host/target/${{ env.TARGET }}/release/ondra?remote*
-            remote/host/target/${{ env.TARGET }}/release/deps/ondra_remote-*
+            remote/host/target/${{ env.TARGET }}/release/deps/ondra?remote*
             remote/host/target/${{ env.TARGET }}/release/.fingerprint/ondra-remote-*
           key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**', '.github/workflows/linux.yml') }}
 
