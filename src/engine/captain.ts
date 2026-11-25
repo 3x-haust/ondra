@@ -578,8 +578,9 @@ const sigOf = new Map<string, string>();
 /** Main declares only use: its tools (jobs, skills, web, settings, read / bash) are called through it. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
-  const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts") || e.endsWith("/discord.ts") || e.endsWith("/use.ts")).flatMap((e) => ["--extension", e]);
+  const lazy = all.find((e) => leaf(e) === "lazy-core.ts");
+  const names = new Set(["web.ts", "skills.ts", "jobs.ts", "secrets.ts", "ondra.ts", "discord.ts", "use.ts"]);
+  const direct = all.filter((e) => names.has(leaf(e))).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
