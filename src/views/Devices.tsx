@@ -7,7 +7,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import {
   deviceBoot, deviceDelete, deviceInput, deviceInputWarm, deviceKey, deviceKeyboard, deviceLandscape, deviceRecord, deviceRecording, deviceRelease,
   deviceRotate, deviceScreenshot, deviceShot, deviceShutdown, deviceStream, deviceStreamPoke, deviceStreamStop, deviceTouch, fileSrc, revealPath,
-  type Device, type DeviceAction,
+  androidSdkGet, androidSdkStatus, onAndroidSdk, type AndroidSdk, type Device, type DeviceAction,
 } from "../lib/native";
 import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "../state/devices";
 import { noModifiers, viewKey } from "../lib/shortcuts";
@@ -603,6 +603,76 @@ const byRuntime = (a: string, b: string) => {
   return os(a) - os(b) || b.localeCompare(a, undefined, { numeric: true });
 };
 
+const ACCEL_HOW = {
+  windows: "이 PC는 가상화가 꺼져 있어요. 시작 › ‘Windows 기능 켜기/끄기’에서 ‘Windows 하이퍼바이저 플랫폼’을 켜고 PC를 다시 시작해 주세요. BIOS의 가상화도 켜져 있어야 해요.",
+  kvm: "이 컴퓨터는 KVM을 쓸 수 없어요. BIOS에서 가상화(VT-x/AMD-V)를 켜고, KVM을 설치한 뒤 sudo usermod -aG kvm $USER를 실행하고 다시 로그인해 주세요.",
+} as const;
+
+/** Android on a computer without its SDK: adb comes by itself, the emulator and its image once
+ *  the user agrees to the license and the size. Hidden when the SDK in use has what it needs. */
+function AndroidSetup() {
+  const [s, setS] = createSignal<AndroidSdk>();
+  const [license, setLicense] = createSignal(false);
+  const load = async () => {
+    const v = await androidSdkStatus(true);
+    setS(v);
+    if (!v.adb && !v.busy) void androidSdkGet("adb");
+  };
+  onMount(() => {
+    void load();
+    const off = onAndroidSdk((v) => {
+      const was = s();
+      setS({ ...v, size: was?.size ?? v.size, license: was?.license ?? v.license, accel: was?.accel ?? v.accel });
+      // something came in: the list and what is still missing change
+      if (was?.busy && !v.busy) {
+        void load();
+        void refreshDevices();
+      }
+    });
+    onCleanup(() => void off.then((f) => f()));
+  });
+  const shown = () => {
+    const v = s();
+    return !!v && (!v.emulator || !v.avd) && (!!v.busy || v.license != null);
+  };
+  return (
+    <Show when={shown() && s()} keyed>
+      {(v) => (
+        <div class="dev-list dev-setup">
+          <div class="dev-row">
+            <Icon name="phone" size={16} class="muted" />
+            <b>{t("Android 에뮬레이터")}</b>
+            <span class="dev-sub">
+              {v.busy === "emulator"
+                ? t("받는 중 {p}%", { p: v.percent })
+                : v.busy
+                  ? t("준비 중")
+                  : v.error
+                    ? t("받지 못했어요")
+                    : v.size
+                      ? t("약 {gb}GB를 받아요", { gb: (v.size / 1e9).toFixed(1) })
+                      : ""}
+            </span>
+            <span class="spacer" />
+            <Show when={!v.busy}>
+              <Show when={v.license}>
+                <button class="btn sm ghost" onClick={() => setLicense(!license())}>{t("라이선스")}</button>
+              </Show>
+              <button class="btn sm" onClick={() => void androidSdkGet("emulator")}>{v.size ? t("동의하고 받기") : t("만들기")}</button>
+            </Show>
+          </div>
+          <Show when={v.accel}>
+            {(a) => <p class="dev-setup-note">{t(ACCEL_HOW[a()])}</p>}
+          </Show>
+          <Show when={license() && v.license}>
+            <pre class="dev-license">{v.license}</pre>
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 export function Devices() {
   // each workspace's list stays filtered and scrolled as it was left
   const [filter, setFilter] = kept<Filter>(() => inSpace(state.space, "devices.filter"), "all");
@@ -645,6 +715,9 @@ export function Devices() {
         {(d) => <Control d={d} onClose={() => setFocus(undefined)} />}
       </Show>
       <div class="devices-body" classList={{ hidden: !!focused() }} ref={scrollKept(() => inSpace(state.space, "devices"))}>
+        <Show when={filter() !== "ios"}>
+          <AndroidSetup />
+        </Show>
         <div class="dev-section">{t("켜짐")} <span class="dev-n">{on().length}</span></div>
         <div class="dev-grid">
           <For each={on()} fallback={<p class="dev-empty">{t("켜진 기기 없음")}</p>}>

@@ -25,7 +25,9 @@ import { componentNote, componentOf } from "../engine/components";
 import {
   accountProviders,
   accountRemove,
+  androidSdkStatus,
   inTauri,
+  onAndroidSdk,
   openNotices,
   pickFolder,
   revealPath,
@@ -364,11 +366,26 @@ function Components() {
     );
   };
   const analyzer = () => componentOf("binary-analysis");
+  // the Android SDK in use; Ondra's own comes in from the device hub (adb, then the emulator)
+  const [android, { mutate }] = createResource(() => androidSdkStatus());
+  const off = onAndroidSdk(mutate);
+  onCleanup(() => void off.then((f) => f()));
   return (
     <>
       <Row title={t("에이전트")}>{part(engine.info.engineVersion, engine.ready, "engine")}</Row>
       <Row title={t("브라우저")}>{part(status()?.browserVersion, !!status()?.browserVersion && status()?.chromeReady, "chrome")}</Row>
       <Row title={t("앱 조작")}>{part(status()?.desktopVersion, !!status()?.desktopVersion)}</Row>
+      <Show when={android()}>
+        {(a) => (
+          <Row title={t("Android SDK")}>
+            <Show when={!a().busy} fallback={<span class="set-note">{a().busy === "emulator" ? t("받는 중 {p}%", { p: a().percent }) : t("준비 중")}</span>}>
+              <Show when={a().adb} fallback={<span class="pill warn">{t("없음|missing")}</span>}>
+                <span class="set-note">{a().emulator ? t("준비됨") : "adb"}</span>
+              </Show>
+            </Show>
+          </Row>
+        )}
+      </Show>
       <Show when={analyzer()}>
         {(c) => <Row title={t("바이너리 분석")}>{part(c().version.split("-")[0], c().state === "ready", "binary-analysis")}</Row>}
       </Show>

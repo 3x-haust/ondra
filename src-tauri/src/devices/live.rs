@@ -414,7 +414,7 @@ pub async fn device_key(platform: String, id: String, serial: Option<String>, ke
                 "ArrowRight" => Some("22"),
                 _ => None,
             };
-            let mut cmd = Command::new(adb());
+            let mut cmd = crate::engine::background_command(adb());
             cmd.args(["-s", &s, "shell", "input"]);
             match code {
                 Some(c) => cmd.args(["keyevent", c]),
@@ -483,8 +483,8 @@ pub async fn device_rotate(platform: String, id: String, serial: Option<String>)
             }
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            run(Command::new(adb()).args(["-s", &s, "shell", "settings", "put", "system", "accelerometer_rotation", "0"]))?;
-            run(Command::new(adb()).args(["-s", &s, "shell", "settings", "put", "system", "user_rotation", &next.to_string()]))?;
+            run(crate::engine::background_command(adb()).args(["-s", &s, "shell", "settings", "put", "system", "accelerometer_rotation", "0"]))?;
+            run(crate::engine::background_command(adb()).args(["-s", &s, "shell", "settings", "put", "system", "user_rotation", &next.to_string()]))?;
         }
         if let Ok(mut m) = state().lock() {
             m.entry(id).or_default().1 = next;
@@ -514,7 +514,7 @@ pub async fn device_screenshot(platform: String, id: String, serial: Option<Stri
             run(Command::new("xcrun").args(["simctl", "io", &id, "screenshot", "--type=png", &p]))?;
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            let o = Command::new(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+            let o = crate::engine::background_command(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
             if !o.status.success() || o.stdout.is_empty() {
                 return Err("화면을 못 가져왔어요".into());
             }
@@ -544,7 +544,7 @@ pub async fn device_record(platform: String, id: String, serial: Option<String>,
         if let Some(mut r) = running {
             // stop: SIGINT lets the recorder finish the file
             if let Some(s) = &r.serial {
-                let _ = run(Command::new(adb()).args(["-s", s, "shell", "pkill", "-INT", "screenrecord"]));
+                let _ = run(crate::engine::background_command(adb()).args(["-s", s, "shell", "pkill", "-INT", "screenrecord"]));
             } else {
                 let _ = Command::new("kill").args(["-INT", &r.child.id().to_string()]).status();
             }
@@ -555,8 +555,8 @@ pub async fn device_record(platform: String, id: String, serial: Option<String>,
             kill(r.child);
             if let Some(s) = &r.serial {
                 std::thread::sleep(Duration::from_millis(600));
-                run(Command::new(adb()).args(["-s", s, "pull", "/sdcard/ondra-record.mp4", &r.path.display().to_string()]))?;
-                let _ = run(Command::new(adb()).args(["-s", s, "shell", "rm", "-f", "/sdcard/ondra-record.mp4"]));
+                run(crate::engine::background_command(adb()).args(["-s", s, "pull", "/sdcard/ondra-record.mp4", &r.path.display().to_string()]))?;
+                let _ = run(crate::engine::background_command(adb()).args(["-s", s, "shell", "rm", "-f", "/sdcard/ondra-record.mp4"]));
             }
             return if r.path.exists() { Ok(r.path.display().to_string()) } else { Err("녹화 파일을 못 만들었어요".into()) };
         }
@@ -572,7 +572,7 @@ pub async fn device_record(platform: String, id: String, serial: Option<String>,
             (c, path, None)
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            let c = Command::new(adb())
+            let c = crate::engine::background_command(adb())
                 .args(["-s", &s, "shell", "screenrecord", "/sdcard/ondra-record.mp4"])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())

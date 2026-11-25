@@ -469,7 +469,7 @@ fn sweep(home: &Path) {
     }
 }
 
-fn client() -> Result<reqwest::Client, String> {
+pub fn client() -> Result<reqwest::Client, String> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
@@ -484,13 +484,20 @@ fn client() -> Result<reqwest::Client, String> {
 /// Download into `part`, carrying on from what an earlier try left. A part that turns out wrong
 /// is thrown away and fetched once more from the start.
 pub async fn download(c: &Component, part: &Path, progress: &(dyn Fn(i32) + Sync)) -> Result<(), String> {
+    let (size, sha) = (c.size, c.sha256.clone());
+    fetch(&c.url, c.size, part, move |p| verify(p, size, &sha), &|have| progress(((have * 100) / size.max(1)).min(99) as i32)).await
+}
+
+/// Download `url` (`size` bytes) into `part` the same way, checked by `check`; `progress` gets
+/// the bytes in so far.
+pub async fn fetch(url: &str, size: u64, part: &Path, check: impl Fn(&Path) -> Result<(), String> + Clone + Send + 'static, progress: &(dyn Fn(u64) + Sync)) -> Result<(), String> {
     std::fs::create_dir_all(part.parent().ok_or("no parent")?).map_err(|e| e.to_string())?;
     let http = client()?;
     let mut fresh = false;
     loop {
-        fetch_part(&http, c, part, progress).await?;
-        let (p, size, sha) = (part.to_path_buf(), c.size, c.sha256.clone());
-        match blocking(move || verify(&p, size, &sha)).await? {
+        fetch_part(&http, url, size, part, progress).await?;
+        let (p, check) = (part.to_path_buf(), check.clone());
+        match blocking(move || check(&p)).await? {
             Ok(()) => return Ok(()),
             Err(e) if fresh => {
                 let _ = std::fs::remove_file(part);
@@ -504,17 +511,17 @@ pub async fn download(c: &Component, part: &Path, progress: &(dyn Fn(i32) + Sync
     }
 }
 
-async fn fetch_part(http: &reqwest::Client, c: &Component, part: &Path, progress: &(dyn Fn(i32) + Sync)) -> Result<(), String> {
+async fn fetch_part(http: &reqwest::Client, url: &str, size: u64, part: &Path, progress: &(dyn Fn(u64) + Sync)) -> Result<(), String> {
     use futures_util::StreamExt;
     let mut have = std::fs::metadata(part).map(|m| m.len()).unwrap_or(0);
-    if have > c.size {
+    if have > size {
         let _ = std::fs::remove_file(part);
         have = 0;
     }
-    if have == c.size {
+    if have == size {
         return Ok(());
     }
-    let mut req = http.get(&c.url);
+    let mut req = http.get(url);
     if have > 0 {
         req = req.header(reqwest::header::RANGE, format!("bytes={have}-"));
     }
@@ -539,14 +546,14 @@ async fn fetch_part(http: &reqwest::Client, c: &Component, part: &Path, progress
         let chunk = chunk.map_err(|e| e.to_string())?;
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         have += chunk.len() as u64;
-        if have > c.size {
+        if have > size {
             drop(file);
             let _ = std::fs::remove_file(part);
             return Err("more bytes than expected".into());
         }
         if beat.elapsed() >= Duration::from_millis(500) {
             beat = Instant::now();
-            progress(((have * 100) / c.size).min(99) as i32);
+            progress(have);
         }
     }
     file.flush().map_err(|e| e.to_string())?;
