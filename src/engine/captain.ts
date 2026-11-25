@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { hostedToolEvents } from "./hostedSearch";
 import { liveKeys } from "./live";
 import { readFields } from "./form";
 import { clearExtensionUi, extensionUi } from "./extensionUi";
@@ -722,6 +723,9 @@ function watchCommands(space: string) {
 
 /** main looking jobs up: the step shows on its pending reply, then stays above the reply */
 const stepsOf = new Map<string, string>();
+/** per chat: searches its provider ran itself, still open (hostedSearch.ts) */
+const hostedOpenBy = new Map<string, Set<string>>();
+const hostedOpen = (space: string) => hostedOpenBy.get(space) ?? (hostedOpenBy.set(space, new Set()), hostedOpenBy.get(space)!);
 function noteStep(space: string, ev: any) {
   const id = `${space}:${ev.toolCallId ?? ""}`;
   // the end event carries no arguments: the finished line is worked out at the start
@@ -757,7 +761,7 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
   }
   // the rest of what it looks at before answering, so a long wait shows where it is
   const pick = (busy: string, did: string, what: string) => (what ? `${done ? did : busy} · ${what}` : undefined);
-  if (tool === "web_search") return pick("웹에서 찾는 중", "웹에서 찾음", stepName(args?.query, 30));
+  if (tool === "web_search" || tool === "web_lookup") return pick("웹에서 찾는 중", "웹에서 찾음", stepName(args?.query, 30));
   if (tool === "web_fetch") {
     let site = String(args?.url ?? "");
     try { site = new URL(site).hostname.replace(/^www\./, ""); } catch { /* as written */ }
@@ -841,6 +845,8 @@ async function ensureCaptain(space: string) {
       heardAt.set(space, Date.now());
       // `use` only carries a call: the tool it called counts (its own events, parentToolCallId set)
       if ((ev.type === "tool_execution_start" || ev.type === "tool_execution_end") && !isUseCall(ev)) (noteStep(space, ev), guardTurn(space, ev));
+      // a search its provider ran itself shows as a step too
+      for (const x of hostedToolEvents(ev, hostedOpen(space))) noteStep(space, x);
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
     exit() {

@@ -280,6 +280,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     let mut env = Vec::new();
     // agent_spawn swaps this for the saved secrets (secrets.rs); the page only sees the flag
     env.push((crate::secrets::MARKER.into(), "1".into()));
+    // a Claude or Codex account searches the web with its own provider's built-in web_search
+    // (the engine adds it only for those, and drops it for a session the provider refuses it in)
+    env.push(("PI_HOSTED_WEB_SEARCH".into(), "1".into()));
     if let Some(dir) = sidecar_dir() {
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));
