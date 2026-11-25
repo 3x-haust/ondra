@@ -204,6 +204,7 @@ fn kill_children(app: &AppHandle) {
     app.state::<pty::Ptys>().kill_all();
     browser::stop(app);
     dictate::stop_all();
+    tools::release_display();
 }
 
 /// `ondra --keychain-credential`: ondra-browser's keychain helper (see keychain.rs).
@@ -288,6 +289,7 @@ pub fn run() {
                 if let Some(host) = tools::sidecar("ondra-cuhost") {
                     let _ = std::process::Command::new(host).arg("--reap").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
                 }
+                tools::hold_display();
             });
             {
                 let handle = app.handle().clone();

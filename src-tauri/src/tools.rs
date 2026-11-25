@@ -112,6 +112,29 @@ pub fn open_privacy_settings(pane: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The off-screen display jobs run Mac apps on, held while the app runs.
+static DISPLAY: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+/// Hold the off-screen display for as long as the app runs, so a job starting or ending its
+/// Mac-app helper attaches or drops no display: macOS lays the user's Stage Manager stage out
+/// again on each, and a window of theirs shrinks for a moment. The helper exits when its
+/// stdin closes, also when the app is killed.
+pub fn hold_display() {
+    let Some(host) = sidecar("ondra-cuhost") else { return };
+    let Ok(mut held) = DISPLAY.lock() else { return };
+    if held.is_some() {
+        return;
+    }
+    *held = Command::new(host).arg("--hold-display").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().ok();
+}
+
+pub fn release_display() {
+    if let Some(mut child) = DISPLAY.lock().ok().and_then(|mut d| d.take()) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 /// The guide laid over System Settings' privacy list (one at a time).
 static GUIDE: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
 
