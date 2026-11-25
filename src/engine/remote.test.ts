@@ -111,6 +111,20 @@ describe("calls from a Mac allowed in", () => {
     expect(state.projects!.map((p) => p.id)).toEqual(before);
     setDeviceSpaces(DEV, undefined);
   });
+  it("keeps a new job in its allowed workspace and only inherits folders from visible jobs", async () => {
+    setDeviceSpaces(DEV, ["home"]);
+    try {
+      const id = "workspace-job";
+      await call("create", [{ id, title: "notes", ask: "notes", project: "app", follows: "inSecret", after: ["inApp", "inSecret"], reach: ["회사"] }]);
+      const task = taskById(id)!;
+      expect(task.cwd).toBe("/tmp/app");
+      expect(task.after).toEqual(["inApp"]);
+      expect(task.reach).toBeUndefined();
+      expect(task.follows).toBeUndefined();
+    } finally {
+      setDeviceSpaces(DEV, undefined);
+    }
+  });
   it("answer, hand over and read secrets only for what it may reach", async () => {
     setState("decisions", [
       { id: "dApp", taskId: "inApp", at: 1, question: "?", options: [{ id: "a", label: "A" }], context: [], kind: "ask" },

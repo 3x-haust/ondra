@@ -95,7 +95,7 @@ function spacesOf(device: string): Set<string> | undefined {
   const l = state.settings.deviceSpaces?.[device];
   return l ? new Set(l) : undefined;
 }
-const reach = (c: Conn): Reach => ({ device: c.device, watch: c.watch, spaces: spacesOf(c.device) });
+const reach = (c: Pick<Conn, "device" | "watch">): Reach => ({ device: c.device, watch: c.watch, spaces: spacesOf(c.device) });
 /** what that Mac keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
 const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
@@ -202,22 +202,23 @@ async function sendProjects(conn: number) {
 
 /** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
-export function create(c: { device: string }, f: FarAsk) {
+export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
   if (!f || typeof f !== "object" || typeof f.ask !== "string") throw new Error("bad request");
   // this Mac's own project only (never one shown here from a third Mac)
   const p = f.project && !f.project.startsWith("r:") ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
   const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
-  if (!spaceAllowed(spacesOf(c.device), space)) throw new Error("그 워크스페이스는 쓸 수 없어요");
+  const access = reach(c);
+  if (!spaceAllowed(access.spaces, space)) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const from = { device: c.device, space: f.space ?? "" };
   const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
   // ids it builds on must be jobs of this Mac in that workspace (the ones that Mac was shown)
   const mine = (id: unknown) => {
     const t = typeof id === "string" ? taskById(id) : undefined;
-    return t && !t.host && t.space === space ? t.id : undefined;
+    return t && t.space === space && mayReach(access, t, taskById) ? t.id : undefined;
   };
   const after = (Array.isArray(f.after) ? f.after : []).map(mine).filter((x): x is string => !!x);
-  const reach = (Array.isArray(f.reach) ? f.reach : []).map((l) => state.spaces.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space);
+  const extraSpaces = (Array.isArray(f.reach) ? f.reach : []).map((l) => state.spaces.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space && spaceAllowed(access.spaces, x));
   const id = jobs.createTask({
     id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id,
     isolate: typeof f.isolate === "boolean" ? f.isolate : state.settings.isolate, accountId: account, accountPinned: account === f.account, from, model: f.model, thinking: f.thinking,
@@ -226,7 +227,7 @@ export function create(c: { device: string }, f: FarAsk) {
     ...(f.weight === "light" || f.weight === "heavy" ? { weight: f.weight } : {}),
     ...(f.origin && typeof f.origin.path === "string" ? { origin: f.origin } : {}),
     ...(after.length ? { after } : {}),
-    ...(reach.length ? { reach } : {}),
+    ...(extraSpaces.length ? { reach: extraSpaces } : {}),
     ...(mine(f.follows) ? { follows: mine(f.follows) } : {}),
     ...(f.issue && typeof f.issue.n === "number" ? { issue: f.issue } : {}),
     ...(typeof f.by === "string" && f.by ? { by: f.by } : {}),

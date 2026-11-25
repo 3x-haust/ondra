@@ -168,7 +168,7 @@ describe("a new job in that Mac's project", () => {
     setState("spaces", (l) => [...l, { id: "work", label: "회사", folder: "~", rules: "" }]);
     setState("projects", [{ id: "repo", space: "home", name: "repo", folder: "/repo" }]);
     setState("tasks", [job({ id: "j1", status: "done", project: "repo" }), job({ id: "elsewhere", space: "work" })]);
-    const id = create({ device: "dev" }, {
+    const id = create({ device: "dev", watch: new Set(["repo"]) }, {
       id: "n1", title: "Ship it", ask: "Ship the fix", project: "repo", space: "home",
       priority: 0, weight: "heavy", branch: "fix/ship", after: ["j1", "elsewhere", "ghost"], reach: ["회사", "없음"], follows: "j1", by: "j1", permission: "full", isolate: false,
     });
@@ -182,7 +182,7 @@ describe("a new job in that Mac's project", () => {
 
   it("a Mac too old to send the new fields gets the old defaults", () => {
     setState("projects", [{ id: "repo", space: "home", name: "repo", folder: "/repo" }]);
-    create({ device: "dev" }, { id: "n2", title: "Old", ask: "Old ask", project: "repo", space: "home" });
+    create({ device: "dev", watch: new Set(["repo"]) }, { id: "n2", title: "Old", ask: "Old ask", project: "repo", space: "home" });
     expect(taskById("n2")).toMatchObject({ priority: 2, weight: "light", permission: "auto" });
     expect(taskById("n2")?.after).toBeUndefined();
   });
