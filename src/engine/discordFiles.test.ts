@@ -21,9 +21,14 @@ describe("this Mac's files and folders in what goes to Discord", () => {
       "깔려 있는 Orbit 끄고 [테스트 빌드 폴더](file:///var/folders/8r/T/ondra-scratch/build/Products/Debug/)에 있는 걸로 열어 봐. [보고서](/Users/me/out/report.pdf), [영상](/Users/me/out/huge.mov), [없는 것](/Users/me/gone.txt), ![shot](/x.png) [사이트](https://a.dev)",
       kind,
     );
-    expect(out.text).toBe("깔려 있는 Orbit 끄고 테스트 빌드 폴더에 있는 걸로 열어 봐. 보고서, 영상, 없는 것 (`~/gone.txt`), ![shot](/x.png) [사이트](https://a.dev)");
+    expect(out.text).toBe("깔려 있는 Orbit 끄고 테스트 빌드 폴더에 있는 걸로 열어 봐. 보고서, 영상, 없는 것 (`~/gone.txt`), shot (`/x.png`) [사이트](https://a.dev)");
     expect(out.files).toEqual(["/Users/me/out/report.pdf"]);
     expect(out.open.map((o) => o.label)).toEqual(["테스트 빌드 폴더", "영상"]);
+  });
+
+  it("a picture on this Mac goes up and its words go away", async () => {
+    const out = await localLinks("아까 판 띄운다 해놓고 안 올렸네\n![](/tmp/metachess/board.png)", async (p) => (p === "/tmp/metachess/board.png" ? "file" : "none"));
+    expect(out).toMatchObject({ text: "아까 판 띄운다 해놓고 안 올렸네", files: ["/tmp/metachess/board.png"] });
   });
 
   it("a bare file:// link too", async () => {
