@@ -7,8 +7,13 @@ fn explorer() -> Command {
     Command::new(PathBuf::from(root).join("explorer.exe"))
 }
 
+/// Explorer reads `C:/a/b` as a bad path and opens its default folder instead
+pub(super) fn native(path: &str) -> String {
+    path.replace('/', "\\")
+}
+
 pub(super) fn reveal(path: &str) {
-    let _ = explorer().arg("/select,").arg(path).spawn();
+    let _ = explorer().arg("/select,").arg(native(path)).spawn();
 }
 
 pub(super) fn open_url(url: &str) {

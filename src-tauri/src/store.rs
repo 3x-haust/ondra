@@ -656,11 +656,15 @@ fn which(name: &str) -> Option<PathBuf> {
 #[tauri::command]
 pub fn open_in_editor(path: String) -> Result<(), String> {
     #[cfg(windows)]
-    let editors = ["cursor.exe", "code.exe", "zed.exe"];
+    let path = windows::native(&path);
+    // Windows installers put a .cmd shim on PATH (running it opens a console); the app is a few folders up
+    #[cfg(windows)]
+    let editors = [("cursor.cmd", "Cursor.exe"), ("code.cmd", "Code.exe"), ("zed.exe", "zed.exe")]
+        .map(|(shim, exe)| which(shim).and_then(|s| s.ancestors().take(5).map(|d| d.join(exe)).find(|p| p.is_file())));
     #[cfg(not(windows))]
-    let editors = ["cursor", "code", "zed"];
+    let editors = ["cursor", "code", "zed"].map(which);
     for editor in editors {
-        if let Some(bin) = which(editor) {
+        if let Some(bin) = editor {
             return Command::new(bin)
                 .arg(&path)
                 .env("PATH", user_path())
