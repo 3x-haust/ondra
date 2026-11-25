@@ -99,12 +99,21 @@ pub fn request_accessibility() -> bool {
 
 #[tauri::command]
 pub fn open_privacy_settings(pane: String) -> Result<(), String> {
+    #[cfg(windows)]
+    if pane == "microphone" {
+        crate::store::open_windows_settings("privacy-microphone");
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    return Err(format!("no privacy settings page for {pane} here"));
+    #[cfg(target_os = "macos")]
     let anchor = match pane.as_str() {
         "screen" => "Privacy_ScreenCapture",
         "microphone" => "Privacy_Microphone",
         "speech" => "Privacy_SpeechRecognition",
         _ => "Privacy_Accessibility",
     };
+    #[cfg(target_os = "macos")]
     Command::new("/usr/bin/open")
         .arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}"))
         .spawn()
@@ -302,6 +311,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     let mut env = Vec::new();
     // agent_spawn swaps this for the saved secrets (secrets.rs); the page only sees the flag
     env.push((crate::secrets::MARKER.into(), "1".into()));
+    // a Claude or Codex account searches the web with its own provider's built-in web_search
+    // (the engine adds it only for those, and drops it for a session the provider refuses it in)
+    env.push(("PI_HOSTED_WEB_SEARCH".into(), "1".into()));
     if let Some(dir) = sidecar_dir() {
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));

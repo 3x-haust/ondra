@@ -3,7 +3,7 @@
   "bundle": {
     "targets": ["deb", "rpm"],
     "createUpdaterArtifacts": false,
-    "externalBin": ["binaries/ondra-remote", "binaries/ondra-browser"],
+    "externalBin": ["binaries/ondra-remote", "binaries/ondra-dictate", "binaries/ondra-browser"],
     "resources": {
       "binaries/ondra-bgguard.dylib": null,
       "dmg/background.tiff": null,

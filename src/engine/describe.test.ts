@@ -130,6 +130,14 @@ describe("mainCommand", () => {
     expect(mainCommand("cd /x && pnpm test")).toBe("pnpm test");
     expect(mainCommand("git status")).toBe("git status");
   });
+
+  it("a look before a wait loop: the row names what the loop waits on", () => {
+    const c = `git log --format='%h %an <%ae> | %s' origin/main..HEAD; git log origin/main..HEAD --format=%B | rg -i 'co-authored' || echo "no co-authored"; for i in $(seq 1 60); do s=$(gh pr checks 839 -R 3x-haust/ondra 2>/dev/null | rg -c 'pending' ); [ "\${s:-0}" = 0 ] && break; sleep 10; done; gh pr checks 839 -R 3x-haust/ondra`;
+    expect(mainCommand(c)).toBe("gh pr checks 839 -R 3x-haust/ondra 2>/dev/null");
+    expect(d(c)).toMatchObject({ label: "GitHub 빌드 기다림", now: "GitHub 빌드 기다리는 중" });
+    expect(d("gh pr checks 12 --watch").now).toBe("GitHub 빌드 기다리는 중");
+    expect(d("gh pr checks 12").now).toBe("PR 확인 중");
+  });
 });
 
 describe("nowText", () => {

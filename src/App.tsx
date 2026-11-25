@@ -10,6 +10,7 @@ import type { SpaceId, Task } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, panelTab, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setJumpMsg, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { keepPanes } from "./state/panes";
+import { setLive } from "./state/viewState";
 import { Panes } from "./views/Panes";
 import { menuClose } from "./views/PaneControls";
 import { appCommands } from "./state/commands";
@@ -98,6 +99,8 @@ export default function App() {
     await loadState();
     // the panes as they were left, without jobs deleted since
     createRoot(() => keepPanes(() => state.space, (v) => (v.name !== "task" && v.name !== "changes") || !!taskById(v.id)));
+    // where each view was left goes with its job or workspace once that is deleted
+    setLive({ space: (id) => state.spaces.some((s) => s.id === id), job: (id) => !!taskById(id) });
     if (!location.search.includes("fixture")) seedProjects();
     migrateMemory();
     await startRpc();

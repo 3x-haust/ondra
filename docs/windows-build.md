@@ -38,14 +38,14 @@ pnpm tauri build --target $target --bundles nsis --ci --no-sign '--' --locked
 Get-ChildItem "src-tauri\target\$target\release\bundle\nsis\*-setup.exe"
 ```
 
-If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri\target`. The pre-build step builds the remote helper and stages it as a Tauri sidecar. `pnpm tauri dev` prepares the same engine and helper. Remote project jobs are separate from desktop automation: Windows app observation and input are not available. Windows uses an NSIS installer, **not** `scripts/release.mjs`; this command neither signs nor publishes a release and does not write the macOS component/update manifest. The first build needs network access for dependencies; the installer may fetch WebView2 on systems without it.
+If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri\target`. The pre-build step builds the remote helper and the dictation helper (`ondra-dictate`) and stages them as Tauri sidecars. `pnpm tauri dev` prepares the same engine and helpers. Dictation recognizes speech on the PC with SenseVoiceSmall, which the helper downloads once (about 240 MB) into `%LOCALAPPDATA%\dev.3xhaust.ondra\models` the first time someone dictates. Remote project jobs are separate from desktop automation: Windows app observation and input are not available. Windows uses an NSIS installer, **not** `scripts/release.mjs`; this command neither signs nor publishes a release and does not write the macOS component/update manifest. The first build needs network access for dependencies; the installer may fetch WebView2 on systems without it.
 
-CI silently installs the EXE into a temporary directory on the disposable runner. It verifies that `ondra-remote.exe` matches its freshly built sidecar by SHA-256, checks the engine's WASM, x64 native addon and notices, and runs the installed engine's `--version` against the pinned source package version. It also checks that the installed application opens a window and a second launch reuses the running instance. This does not check pairing or a job on a physical PC.
+CI silently installs the EXE into a temporary directory on the disposable runner. It verifies that `ondra-remote.exe` and `ondra-dictate.exe` match their freshly built sidecars by SHA-256, checks the engine's WASM, x64 native addon and notices, and runs the installed engine's `--version` against the pinned source package version. It also checks that the installed application opens a window and a second launch reuses the running instance. This does not check pairing or a job on a physical PC.
 
 For a manual smoke test, run the setup EXE. In the **installed application directory** (not the NSIS output directory), check:
 
 ```powershell
-Get-Item .\ondra.exe, .\ondra-remote.exe, .\engine\ondra-engine.exe, .\engine\package.json
+Get-Item .\ondra.exe, .\ondra-remote.exe, .\ondra-dictate.exe, .\engine\ondra-engine.exe, .\engine\package.json
 .\engine\ondra-engine.exe --version
 ```
 

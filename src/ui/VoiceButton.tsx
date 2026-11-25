@@ -1,6 +1,6 @@
 // The composer's mic: press to talk, press again and the words go in at the cursor.
-// Recognition runs on this Mac (ondra-dictate, Apple's on-device speech recognition);
-// no audio leaves it. While recording, a small level meter and the time sit beside the
+// Recognition runs on this computer (ondra-dictate: Apple's on-device speech recognition on
+// the Mac, a speech model fetched the first time on Windows and Linux); no audio leaves it. While recording, a small level meter and the time sit beside the
 // button and the words heard so far show under the text; Esc (or a press while it is
 // starting or finishing) drops it. One dictation at a time across every composer.
 // The flow follows deepseek-ai/chat-demo's voice input (MIT), with its cloud ASR left out.
@@ -8,6 +8,7 @@ import { createEffect, createSignal, Index, onCleanup, Show } from "solid-js";
 import { lang, t } from "../i18n";
 import { logWarn } from "../lib/log";
 import { dictateCancel, dictateStart, dictateStop, onDictate, openPrivacySettings } from "../lib/native";
+import { onWindows } from "../lib/shortcuts";
 import { toast } from "../state/ui";
 import { clock, type DictateError, dictateLang, pushLevel, readDictate, smoothLevel } from "./dictation";
 import { Icon } from "./Icon";
@@ -22,6 +23,8 @@ const [owner, setOwner] = createSignal<object | null>(null);
 const [partial, setPartial] = createSignal("");
 const [bars, setBars] = createSignal(quiet());
 const [since, setSince] = createSignal(0);
+/** how much of the speech model has come, while it is fetched the first time */
+const [fetched, setFetched] = createSignal<number | null>(null);
 /** the run in progress (0: none); the helper's lines carry it */
 let run = 0;
 let shown = 0;
@@ -37,6 +40,7 @@ function reset() {
   setStatus("idle");
   setOwner(null);
   setPartial("");
+  setFetched(null);
   setBars(quiet());
   window.removeEventListener("keydown", onEsc, true);
 }
@@ -50,18 +54,28 @@ function onEsc(e: KeyboardEvent) {
 }
 
 const pane = { "mic-denied": "microphone", "speech-denied": "speech" } as const;
+const onMac = () => /Macintosh/.test(navigator.userAgent);
+
+function micDenied() {
+  if (onMac()) return t("마이크 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Ondra를 켜 주세요.");
+  if (onWindows()) return t("마이크 권한이 꺼져 있어요. Windows 설정 › 개인 정보 및 보안 › 마이크에서 데스크톱 앱의 마이크 사용을 켜 주세요.");
+  return t("마이크를 쓸 수 없어요. 시스템의 소리 설정에서 입력 장치를 확인해 주세요.");
+}
 
 function explain(code: DictateError, detail?: string) {
   logWarn("dictate", detail ? `${code}: ${detail}` : code);
   const text = {
-    "mic-denied": t("마이크 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Ondra를 켜 주세요."),
+    "mic-denied": micDenied(),
     "speech-denied": t("음성 인식 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 음성 인식에서 Ondra를 켜 주세요."),
     "no-mic": t("쓸 수 있는 마이크가 없어요."),
     unavailable: t("지금은 이 기기에서 음성 인식을 쓸 수 없어요."),
     "no-on-device": t("이 언어는 Mac 안에서 받아쓸 수 없어요. 시스템 설정 › 키보드에서 받아쓰기를 켠 뒤 다시 해 보세요."),
+    "no-model": t("음성 인식 모델을 받지 못했어요. 인터넷 연결을 확인한 뒤 다시 해 보세요."),
     failed: t("받아쓰기에 실패했어요."),
   }[code];
-  const where = code === "mic-denied" || code === "speech-denied" ? pane[code] : null;
+  // Windows has a page for the microphone only; Linux has none
+  const settings = onMac() || (onWindows() && code === "mic-denied");
+  const where = settings && (code === "mic-denied" || code === "speech-denied") ? pane[code] : null;
   toast(text, "bad", where ? { label: t("설정 열기"), run: () => void openPrivacySettings(where).catch(() => {}) } : undefined);
 }
 
@@ -69,7 +83,11 @@ function onEvent(raw: Record<string, unknown>) {
   const ev = readDictate(raw, run);
   if (!ev) return;
   switch (ev.kind) {
+    case "download":
+      setFetched(ev.progress);
+      return;
     case "ready":
+      setFetched(null);
       setSince(Date.now());
       setStatus("recording");
       return;
@@ -150,7 +168,12 @@ export function DictateLive(props: { owner: object }) {
   return (
     <Show when={dictating(props.owner)}>
       <div class="dictate-live" classList={{ waiting: !partial() }} aria-live="polite">
-        {partial() || (status() === "starting" ? t("마이크를 켜는 중…") : t("듣고 있어요…"))}
+        {partial() ||
+          (status() !== "starting"
+            ? t("듣고 있어요…")
+            : fetched() !== null
+              ? t("음성 인식 모델을 받는 중… {n}%", { n: Math.floor((fetched() ?? 0) * 100) })
+              : t("마이크를 켜는 중…"))}
       </div>
     </Show>
   );

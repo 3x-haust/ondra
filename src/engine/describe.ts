@@ -235,6 +235,25 @@ export function mainCommand(cmd: string): string {
     .map((p) => unwrapCommand(p.trim().replace(/\s*&\s*$/, "")).replace(/\s*&$/, ""))
     .filter(Boolean);
   const skip = /^(cd|export|set|source|\.|echo|printf|date|true|false|:|mkdir|unset|local|pkill|killall|kill|sleep|wait|for|while|until|if|fi|done|break|continue|pgrep|lsof|test|\[|[A-Z_][A-Z0-9_]*=\S*$)(\s|$)/;
+  // only a look around before a wait loop (`git log …; for … gh pr checks …; sleep 10; done`):
+  // the loop is the work, so the row names what it waits on, not the look
+  const looks = /^(git\s+(?:-C\s+\S+\s+)?(?:log|status|diff|show|branch|rev-parse)|cat|head|tail|ls|rg|grep|wc|jq|sed\s+-n|awk)\b/;
+  // (what is quoted can't split it: `--format='%h | %s'`)
+  const bare = cmd
+    .replace(/'[^']*'|"[^"]*"/g, "''")
+    .split(/\s*(?:&&|\|\||;|\n|\|)\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const loop = bare.findIndex((p) => /^(for|while|until)\b/.test(p));
+  if (loop >= 0 && /\bsleep\b/.test(cmd) && bare.slice(0, loop).every((p) => skip.test(p) || looks.test(p))) {
+    // inside the loop only (up to its done)
+    const end = bare.findIndex((p, i) => i > loop && /^done\b/.test(p));
+    const polled = bare
+      .slice(loop, end < 0 ? undefined : end)
+      .map((p) => unwrapCommand(p.replace(/^(?:do|then)\s+/, "").replace(/^[A-Za-z_]\w*=\$\(\s*/, "").replace(/\s*\)\s*$/, "")))
+      .find((p) => p && !skip.test(p) && !looks.test(p) && !/^(do|then)$/.test(p));
+    if (polled) return polled;
+  }
   return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
 }
 
@@ -255,7 +274,10 @@ export function describeCommand(cmd: string): Said {
   const waits = /\b(until|while)\b[\s\S]*\bsleep\b|\bfor\b[\s\S]*\bseq\b[\s\S]*\bsleep\b/.test(c);
   if (/\bpr-media\.sh\b/.test(c)) return S("PR에 사진 넣음", "PR에 사진 넣는 중");
   if (runsProgram(c, /\bgh\b/)) {
-    if (/\bactions\b|\bgh\s+run\b/.test(c)) return waits ? S("GitHub 빌드 기다림", "GitHub 빌드 기다리는 중") : S("GitHub 빌드 확인함", "GitHub 빌드 확인 중");
+    // a PR's checks polled in a loop, or watched: waiting for the build, not looking at the PR
+    const watches = /\bgh\s+(?:run|pr\s+checks)\b[^;&|\n]*--watch\b|\bgh\s+run\s+watch\b/.test(c);
+    if (/\bactions\b|\bgh\s+run\b|\bgh\s+pr\s+checks\b/.test(c) && (waits || watches)) return S("GitHub 빌드 기다림", "GitHub 빌드 기다리는 중");
+    if (/\bactions\b|\bgh\s+run\b/.test(c)) return S("GitHub 빌드 확인함", "GitHub 빌드 확인 중");
     if (/\bgh\s+pr\s+create\b/.test(c)) return S("PR 올림", "PR 올리는 중");
     if (/\bgh\s+pr\s+merge\b/.test(c)) return S("PR 병합함", "PR 병합 중");
     if (/\bgh\s+pr\s+(edit|comment|review)\b/.test(c)) return S("PR 고침", "PR 고치는 중");

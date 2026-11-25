@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Search and read the public web when web_search / web_fetch can't.
+"""Search and read the public web when the web search / web_fetch can't.
 
     web.py search "<query>" [--engine bing,naver,google,yahoo] [--n 8] [--json]
     web.py fetch <url> [--dir "$R"] [--find "<phrase>"] [--max 12000] [--json]

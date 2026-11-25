@@ -391,6 +391,20 @@ describe("교차 검토 in the task prompt and the review skill", () => {
     ]) expect(skill).toContain(rule);
     expect(skill).not.toMatch(/left brain|right brain|dual-brain review/i);
   });
+
+  it("adds broad checks under the same four-part evidence rule, never printing a secret", () => {
+    const skill = bundledSkills["../../skills/code-review/SKILL.md"].replace(/\s+/g, " ");
+    for (const rule of [
+      "What changed and who feels it", "## 바뀐 것과 영향 (Impact)", "Trust boundaries",
+      "read `checks.md` in this skill's folder", "## 보안·의존성 (Security & dependencies)", "## 자잘한 것 (Nits)",
+      "The broad checks get no exception", "A tool result is evidence, not a finding", "P1/P2 only when the affected part is reachable",
+      "A `nit:` is never P1 or P2", "Never write a secret's value anywhere", "`[보안]`", "`[성능]`",
+    ]) expect(skill).toContain(rule);
+    const checks = import.meta.glob<string>("../../skills/code-review/checks.md", { query: "?raw", import: "default", eager: true })["../../skills/code-review/checks.md"];
+    for (const rule of ["never install one", "only results on lines this change added or changed", "osv-scanner scan -L", "gitleaks git", "only with a config the repo keeps"])
+      expect(checks.replace(/\s+/g, " ")).toContain(rule);
+    expect(`${skill}\n${checks}`).not.toMatch(/coderabbit/i);
+  });
 });
 
 describe("rigor that fits the job", () => {

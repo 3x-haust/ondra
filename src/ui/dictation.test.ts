@@ -10,11 +10,14 @@ describe("the dictation helper's lines", () => {
     expect(readDictate({ id: 5, final: "" }, 5)).toEqual({ kind: "final", text: "" });
     expect(readDictate({ id: 5, limit: true }, 5)).toEqual({ kind: "limit" });
     expect(readDictate({ id: 5, end: true }, 5)).toEqual({ kind: "end" });
+    expect(readDictate({ id: 5, download: 0.42 }, 5)).toEqual({ kind: "download", progress: 0.42 });
+    expect(readDictate({ id: 5, download: 2 }, 5)).toEqual({ kind: "download", progress: 1 });
   });
   it("names an error, and one it doesn't know as a failure", () => {
     expect(readDictate({ id: 5, error: "mic-denied" }, 5)).toEqual({ kind: "error", code: "mic-denied" });
     expect(readDictate({ id: 5, error: "failed", detail: "boom" }, 5)).toEqual({ kind: "error", code: "failed", detail: "boom" });
     expect(readDictate({ id: 5, error: "something-new" }, 5)).toEqual({ kind: "error", code: "failed" });
+    expect(readDictate({ id: 5, error: "no-model", detail: "HTTP 503" }, 5)).toEqual({ kind: "error", code: "no-model", detail: "HTTP 503" });
   });
   it("ignores another run's lines, lines with no run going, and lines it doesn't know", () => {
     expect(readDictate({ id: 4, final: "old" }, 5)).toBeNull();

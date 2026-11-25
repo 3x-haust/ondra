@@ -1,7 +1,9 @@
-// `web_search` and `web_fetch`: look things up on the web without a browser tab.
+// `web_lookup` and `web_fetch`: look things up on the web without a browser tab.
 // Every engine (main and jobs) gets them, so an answer about a name, a tool or
-// a fact can be checked and cited instead of recalled.
-//   web_search {query}  → top results: title, url, snippet (Brave's HTML results)
+// a fact can be checked and cited instead of recalled. A Claude or Codex account
+// searches with its own provider's web_search (built into the model, switched on
+// by PI_HOSTED_WEB_SEARCH); web_lookup is for the rest, and for when that fails.
+//   web_lookup {query}  → top results: title, url, snippet (Brave's HTML results)
 //   web_fetch  {url}    → the page as plain text, trimmed
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -337,12 +339,12 @@ export async function browserSearch(query: string, run: Run = browser, dir = web
 
 export default function (pi: any) {
   pi.registerTool({
-    name: "web_search",
+    name: "web_lookup",
     label: "Web search",
     // reached through use; never declared, it carries no prompt lines (they would rebuild the prompt)
     exposure: "deferred",
     description:
-      "Search the web. Returns the top results (title, url, snippet). Use it for anything you are not sure is current and exact: names of tools, libraries, people, products, versions, prices, news, anything the user calls by a name you don't recognise. Search with the user's hints (who made it, where it's from), then web_fetch the best pages and cite their URLs.",
+      "Search the web through Ondra (when you have no built-in web_search tool, or it failed). Returns the top results (title, url, snippet). Use it for anything you are not sure is current and exact: names of tools, libraries, people, products, versions, prices, news, anything the user calls by a name you don't recognise. Search with the user's hints (who made it, where it's from), then web_fetch the best pages and cite their URLs.",
     parameters: Type.Object({
       query: Type.String({ description: "what to search for, with the user's hints (maker, site, year)" }),
       count: Type.Optional(Type.Number({ description: "results to return (default 8, max 15)" })),
@@ -377,7 +379,7 @@ export default function (pi: any) {
   pi.registerTool({
     name: "web_fetch",
     label: "Web fetch",
-    description: "Read a web page as plain text (scripts, menus and styling dropped). Use after web_search to read the sources you'll cite. Pages that need sign-in or run only in a browser: use the browser instead.",
+    description: "Read a web page as plain text (scripts, menus and styling dropped). Use after a search to read the sources you'll cite. Pages that need sign-in or run only in a browser: use the browser instead.",
     exposure: "deferred",
     parameters: Type.Object({
       url: Type.String({ description: "http(s) URL" }),

@@ -1,0 +1,23 @@
+[package]
+name = "ondra-dictate"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+rust-version = "1.88"
+
+# Its own workspace: its ONNX Runtime (through transcribe-rs) is another version than the one the app links
+# for memory search, and two of them can't be linked into one build.
+[workspace]
+
+[dependencies]
+cpal = "0.18"
+serde_json = "1"
+sha2 = "0.11"
+transcribe-rs = { version = "=0.3.0", default-features = false, features = ["onnx"] }
+ureq = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

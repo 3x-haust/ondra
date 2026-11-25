@@ -172,7 +172,7 @@ function stepLine(r: Record<string, unknown>): string {
     ? "sent, but nothing on screen changed: in this app a drag can start but cannot drop in the background. Don't drag again; use the app's other ways (menu items, buttons, keys, set-value)"
     : a.effect === "no_change" ? "sent, but nothing on screen changed: it probably did nothing, try another way (keys, or the app's menu bar: act menu)"
     : a.effect === "changed" ? "screen changed" : "no window to check";
-  const front = a.selfActivated ? (a.restored ? "; the app came forward and the user's app was put back in front" : "; the app came forward")
+  const front = a.selfActivated ? (a.restored ? "; the app came forward and the user's app was put back in front: from here click by ref in this app, by position only when a ref click did nothing" : "; the app came forward")
     : a.raisedOverUser ? (a.orderRestored ? "; this app lifts its window when clicked with the pointer, and the helper put the user's window back on top at once (nothing to undo, carry on); from here prefer refs, keys and menu commands to pointer clicks in this app" : "; this app lifted its window over the user's and it could not be put back: avoid pointer clicks in this app") : "";
   const again = typeof a.pressAgain === "string"
     ? `. “${a.pressAgain}” is on screen again, as before the prompt it brought up: that earlier press was probably swallowed. Unless the screen shows its result, press “${a.pressAgain}” again`
@@ -311,10 +311,13 @@ export default function (pi: any) {
       const pid = typeof r.pid === "number" ? `, pid ${r.pid}` : "";
       // which copy it opened: a name or bundle ID can open the installed app, not the job's build
       const from = typeof r.path === "string" && r.path !== app.replace(/\/+$/, "") ? `, from ${r.path}` : "";
+      // without Ondra's guard in it (a sandboxed app, the real app), the app can take the front when clicked by position
+      const unguarded = typeof r.mode === "string" && !r.mode.includes("+guard");
+      const pointer = !unguarded ? "" : "\nOndra can't keep this app from coming forward: a click by position (click-at, or click with pointer) can take the user's focus. Click by ref first; click by position only when a ref click did nothing.";
       sessionApp = app;
       const saved = Object.entries(readFlows()[appKey(app)] ?? {}).map(([n, f]) => flowLine(n, f));
       const flows = saved.length ? `\nSaved flows for this app (run {app, flow, values} does one in a single call): ${saved.join("; ")}` : "";
-      return `Opened ${app} in the background${how}${pid}${from}.${menus}${flows}\n${screenBlock(r)}`;
+      return `Opened ${app} in the background${how}${pid}${from}.${pointer}${menus}${flows}\n${screenBlock(r)}`;
     }
     catch (error) { try { await stopHost(); } catch { /* already gone */ } throw error; }
   }

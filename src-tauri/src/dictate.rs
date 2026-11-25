@@ -1,15 +1,19 @@
-//! Dictation for the composer's mic button: runs the `ondra-dictate` helper
-//! (helpers/dictate.swift: the microphone and Apple's on-device speech recognition,
-//! nothing sent off the Mac). One at a time. Its lines go to the window as "dictate"
-//! events, each with the id the window started it under, so a late line from an earlier
-//! run is told apart; {"id", "end": true} follows the last one.
+//! Dictation for the composer's mic button: runs the `ondra-dictate` helper, the microphone
+//! and speech recognition on this computer, no audio sent off it: on the Mac
+//! helpers/dictate.swift (Apple's on-device recognition), on Windows and Linux the dictate/
+//! crate (a speech model it fetches into the app's models folder the first time). One at a
+//! time. Its lines go to the window as "dictate" events, each with the id the window started
+//! it under, so a late line from an earlier run is told apart; {"id", "end": true} follows
+//! the last one.
 use std::{
     io::{BufRead, BufReader, Write},
     path::PathBuf,
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{Child, ChildStdin, Stdio},
     sync::Mutex,
 };
 use tauri::{AppHandle, Emitter};
+#[cfg(not(target_os = "macos"))]
+use tauri::Manager;
 
 /// Seconds a dictation records at most; the helper stops itself there.
 const MAX_SECONDS: u32 = 120;
@@ -22,19 +26,24 @@ struct Running {
 
 static HELPER: Mutex<Option<Running>> = Mutex::new(None);
 
-#[cfg(not(target_os = "macos"))]
-fn helper() -> Result<PathBuf, String> { Err("Ondra 받아쓰기는 macOS에서만 쓸 수 있어요".into()) }
-
 /// The bundled helper; in development also straight from src-tauri/binaries.
-#[cfg(target_os = "macos")]
 fn helper() -> Result<PathBuf, String> {
-    const TRIPLE: &str = if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" };
+    const ARCH: &str = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+    const OS: &str = if cfg!(target_os = "macos") { "apple-darwin" } else if cfg!(windows) { "pc-windows-msvc" } else { "unknown-linux-gnu" };
+    const BUILD: &str = if cfg!(target_os = "macos") { "src-tauri/helpers/build.sh" } else { "pnpm tauri build" };
     crate::tools::sidecar("ondra-dictate")
         .or_else(|| {
-            let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("binaries/ondra-dictate-{TRIPLE}"));
+            let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("binaries/ondra-dictate-{ARCH}-{OS}{}", std::env::consts::EXE_SUFFIX));
             p.exists().then_some(p)
         })
-        .ok_or_else(|| "받아쓰기 도우미가 없어요. src-tauri/helpers/build.sh 로 만들어 주세요.".to_string())
+        .ok_or_else(|| format!("받아쓰기 도우미가 없어요. {BUILD} 로 만들어 주세요."))
+}
+
+/// Where the Windows and Linux helper keeps its speech model: the machine's own app data
+/// (on Windows the local one, not the roaming profile).
+#[cfg(not(target_os = "macos"))]
+fn models(app: &AppHandle) -> PathBuf {
+    app.path().app_local_data_dir().unwrap_or_else(|_| crate::engine::data_dir(app)).join("models")
 }
 
 fn kill(mut r: Running) {
@@ -59,8 +68,11 @@ pub fn dictate_start(app: AppHandle, id: u64, lang: String) -> Result<(), String
     if let Some(r) = slot.take() {
         kill(r);
     }
-    let mut child = Command::new(helper()?)
-        .args(["--lang", &lang, "--max", &MAX_SECONDS.to_string()])
+    let mut cmd = crate::engine::background_command(helper()?);
+    cmd.args(["--lang", &lang, "--max", &MAX_SECONDS.to_string()]);
+    #[cfg(not(target_os = "macos"))]
+    cmd.arg("--models").arg(models(&app));
+    let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

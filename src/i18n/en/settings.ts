@@ -306,7 +306,7 @@ export default {
   "메모리에서 찾아요": "Searches memories",
   "메모리를 지워요": "Deletes a memory",
   "필요한 스킬을 찾아요": "Finds the skill it needs",
-  "웹에서 검색해요": "Searches the web",
+  "웹에서 검색해요 (모델에 검색이 없을 때)": "Searches the web (when the model has no search of its own)",
   "웹 페이지를 읽어요": "Reads a web page",
   "시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요": "Starts simulators and emulators, takes screenshots, taps",
   "도구 검색": "Search tools",
@@ -324,7 +324,7 @@ export default {
   "저장된 메모리에서 지금 작업에 맞는 것을 찾아요": "Finds saved memories that fit the current task",
   "더는 맞지 않는 메모리를 지워요": "Deletes a memory that no longer holds",
   "작업에 맞는 스킬을 찾아 그 안내를 읽어요": "Finds a skill that fits the task and reads it",
-  "웹에서 검색하고 결과 목록을 받아요": "Searches the web and returns the results",
+  "모델에 웹 검색이 없을 때 Ondra가 대신 검색해 결과 목록을 받아요": "Searches the web for a model without a search of its own, and returns the results",
   "웹 페이지를 받아 읽을 수 있는 글로 바꿔요": "Fetches a web page as readable text",
   "iOS 시뮬레이터와 Android 에뮬레이터를 켜고, 화면을 찍고, 누르고, 글자를 입력해요": "Starts iOS simulators and Android emulators, takes screenshots, taps and types",
 

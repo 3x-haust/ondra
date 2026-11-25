@@ -14,6 +14,8 @@ docs/research/
 
 # remote control: build output
 remote/*/target/
+# dictation on Windows and Linux: build output
+dictate/target/
 
 # Python byte-code from running bundled skill scripts (would ship inside the app)
 __pycache__/
