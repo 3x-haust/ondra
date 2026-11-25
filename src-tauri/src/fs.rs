@@ -3,14 +3,14 @@
 
 use crate::engine::user_path;
 use serde::Serialize;
-use std::{path::Path, process::Command};
+use std::path::Path;
 
 const MAX_FILES: usize = 20_000;
 const MAX_READ: u64 = 2 * 1024 * 1024;
 const SKIP: &[&str] = &[".git", ".ondra", "node_modules", "target", ".next", "dist", "build", ".venv", "__pycache__", ".DS_Store"];
 
 fn git_files(cwd: &str) -> Option<Vec<String>> {
-    let out = Command::new("git")
+    let out = crate::engine::background_command("git")
         .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         .current_dir(cwd)
         .env("PATH", user_path())
@@ -45,7 +45,8 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
             walk(root, &p, out);
         } else if ft.is_file() {
             if let Ok(rel) = p.strip_prefix(root) {
-                out.push(rel.display().to_string());
+                // The file tree and git both use '/' for relative paths on every host.
+                out.push(rel.iter().map(|part| part.to_string_lossy()).collect::<Vec<_>>().join("/"));
             }
         }
     }
@@ -193,8 +194,8 @@ mod repo_tests {
         for d in ["top/.git", "projects/acme/.git", "projects/notes", "worktrees/acme/feat/.git", ".hidden/.git", "projects/acme/sub/.git"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
-        let found: Vec<String> = repos(&root).into_iter().map(|p| p.trim_start_matches(&root.display().to_string()).to_string()).collect();
-        assert_eq!(found, vec!["/projects/acme", "/top"]);
+        let found: Vec<_> = repos(&root).into_iter().map(std::path::PathBuf::from).collect();
+        assert_eq!(found, vec![root.join("projects/acme"), root.join("top")]);
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -321,14 +322,14 @@ pub fn copy_image(bytes: Vec<u8>) -> Result<(), String> {
 /// Make a new project folder (main can start a project somewhere new). Only inside home.
 #[tauri::command]
 pub fn ensure_dir(path: String) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let p = if let Some(rest) = path.strip_prefix("~/") { format!("{home}/{rest}") } else { path };
-    let pb = std::path::PathBuf::from(&p);
+    let home = crate::engine::user_home().ok_or("홈 폴더를 찾지 못했어요")?;
+    let input = Path::new(&path);
+    let pb = input.strip_prefix("~").map(|rest| home.join(rest)).unwrap_or_else(|_| input.to_owned());
     if !pb.is_absolute() || !pb.starts_with(&home) || pb.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
         return Err("홈 폴더 안의 절대 경로만 만들 수 있어요".into());
     }
     std::fs::create_dir_all(&pb).map_err(|e| e.to_string())?;
-    Ok(p)
+    Ok(pb.display().to_string())
 }
 
 /// Save a picture the user asked for into ~/Downloads (a free name), and return its path.
@@ -364,7 +365,7 @@ pub async fn space_logs(app: tauri::AppHandle, space: String, ids: Vec<String>) 
         let key = crate::browser::space_key(&space);
         let dest = data.join("spaces").join(&key).join("logs");
         std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-        let ok = |s: &str| !s.is_empty() && !s.contains('/') && !s.contains("..");
+        let ok = |s: &str| Path::new(s).file_name().is_some_and(|n| n == s) && !s.contains("..") && !(cfg!(windows) && s.contains(':'));
         let mut keep: std::collections::HashSet<String> = ids.into_iter().filter(|s| ok(s)).collect();
         // main chats of this space: captain-<space> and captain-<space>-<project>
         let sessions = data.join("sessions");

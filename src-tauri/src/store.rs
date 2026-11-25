@@ -10,6 +10,9 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(windows)]
+mod windows;
+
 fn state_file(app: &AppHandle) -> PathBuf {
     data_dir(app).join("state.json")
 }
@@ -44,7 +47,7 @@ pub fn memory_mirror(app: AppHandle, files: Vec<MirrorFile>, space: Option<Strin
     for f in &files {
         let rel = Path::new(&f.path);
         let settings = f.path.starts_with(".obsidian/") && rel.extension().is_some_and(|x| x == "json");
-        if rel.is_absolute() || rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) || (!settings && rel.extension().is_none_or(|x| x != "md")) {
+        if rel.components().any(|c| !matches!(c, std::path::Component::Normal(_))) || (!settings && rel.extension().is_none_or(|x| x != "md")) {
             continue;
         }
         let path = root.join(rel);
@@ -88,7 +91,7 @@ pub struct MemoryVersion {
 }
 
 fn memory_git(root: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+    let out = crate::engine::background_command("git")
         .arg("-C")
         .arg(root)
         // the memory folder is the app's own repo: never the user's signing or hooks
@@ -237,7 +240,7 @@ pub async fn memory_sources(folder: String) -> Vec<NoteFile> {
 /// Claude Code config folders: ~/.claude, $CLAUDE_CONFIG_DIR, and the ones
 /// wrappers keep under ~/.local/share/<tool>/home/.claude*.
 fn claude_dirs() -> Vec<std::path::PathBuf> {
-    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else { return vec![] };
+    let Some(home) = crate::engine::user_home() else { return vec![] };
     let mut dirs = vec![home.join(".claude")];
     if let Some(d) = std::env::var_os("CLAUDE_CONFIG_DIR") {
         dirs.push(d.into());
@@ -566,9 +569,17 @@ pub fn account_remove(app: AppHandle, account_id: String) {
 
 // ───────────── opening things ─────────────
 
-/// Native folder picker via AppleScript, so no extra plugin is needed.
+/// Choose an existing local folder. Cancellation leaves the current project alone.
 #[tauri::command]
 pub async fn pick_folder(prompt: String) -> Option<String> {
+    #[cfg(windows)]
+    { rfd::AsyncFileDialog::new().set_title(prompt).pick_folder().await.map(|f| f.path().display().to_string()) }
+    #[cfg(not(windows))]
+    { pick_folder_mac(prompt) }
+}
+
+#[cfg(not(windows))]
+fn pick_folder_mac(prompt: String) -> Option<String> {
     let out = Command::new("/usr/bin/osascript")
         .arg("-e")
         .arg(format!("POSIX path of (choose folder with prompt \"{}\")", prompt.replace(['"', '\\'], "")))
@@ -581,6 +592,14 @@ pub async fn pick_folder(prompt: String) -> Option<String> {
 /// Files to attach to a message (several allowed). Empty if cancelled.
 #[tauri::command]
 pub async fn pick_files(prompt: String) -> Vec<String> {
+    #[cfg(windows)]
+    { rfd::AsyncFileDialog::new().set_title(prompt).pick_files().await.unwrap_or_default().into_iter().map(|f| f.path().display().to_string()).collect() }
+    #[cfg(not(windows))]
+    { pick_files_mac(prompt) }
+}
+
+#[cfg(not(windows))]
+fn pick_files_mac(prompt: String) -> Vec<String> {
     let script = format!(
         "set fs to choose file with prompt \"{}\" with multiple selections allowed\nset out to \"\"\nrepeat with f in fs\nset out to out & POSIX path of f & linefeed\nend repeat\nout",
         prompt.replace(['"', '\\'], "")
@@ -594,6 +613,9 @@ pub async fn pick_files(prompt: String) -> Vec<String> {
 
 #[tauri::command]
 pub fn reveal_path(path: String) {
+    #[cfg(windows)]
+    windows::reveal(&path);
+    #[cfg(not(windows))]
     let _ = Command::new("/usr/bin/open").arg("-R").arg(path).spawn();
 }
 
@@ -602,6 +624,9 @@ pub fn reveal_path(path: String) {
 #[tauri::command]
 pub fn open_url(url: String) {
     if ["https://", "http://", "mailto:", "tel:"].iter().any(|p| url.starts_with(p)) {
+        #[cfg(windows)]
+        windows::open_url(&url);
+        #[cfg(not(windows))]
         let _ = Command::new("/usr/bin/open").arg(url).spawn();
     }
 }
@@ -616,18 +641,25 @@ pub fn open_notices(app: tauri::AppHandle) -> Result<(), String> {
         .into_iter()
         .find(|p| p.is_file())
         .ok_or("라이선스 파일이 없어요")?;
+    #[cfg(windows)]
+    crate::engine::system_command("notepad.exe").arg(file).spawn().map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
     Command::new("/usr/bin/open").arg("-t").arg(file).spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 fn which(name: &str) -> Option<PathBuf> {
-    user_path().split(':').map(|d| Path::new(d).join(name)).find(|p| p.is_file())
+    std::env::split_paths(user_path()).filter(|d| !d.as_os_str().is_empty()).map(|d| d.join(name)).find(|p| p.is_file())
 }
 
 /// Opens a file or folder in the user's editor (Cursor, VS Code, Zed), else the default app.
 #[tauri::command]
 pub fn open_in_editor(path: String) -> Result<(), String> {
-    for editor in ["cursor", "code", "zed"] {
+    #[cfg(windows)]
+    let editors = ["cursor.exe", "code.exe", "zed.exe"];
+    #[cfg(not(windows))]
+    let editors = ["cursor", "code", "zed"];
+    for editor in editors {
         if let Some(bin) = which(editor) {
             return Command::new(bin)
                 .arg(&path)
@@ -640,11 +672,16 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
                 .map_err(|e| e.to_string());
         }
     }
-    Command::new("/usr/bin/open").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
+    #[cfg(windows)]
+    let mut fallback = windows::editor_fallback(Path::new(&path));
+    #[cfg(not(windows))]
+    let mut fallback = Command::new("/usr/bin/open");
+    fallback.arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// A script that opens a shell in `path` with the space's environment (its git
 /// identity, GitHub login, ssh keys, CLI shims first on PATH).
+#[cfg(not(windows))]
 fn shell_script(path: &str, env: &[(String, String)]) -> String {
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let mut lines = vec!["#!/bin/zsh".to_string(), format!("cd {} || exit 1", q(path))];
@@ -664,6 +701,7 @@ fn shell_script(path: &str, env: &[(String, String)]) -> String {
     lines.join("\n") + "\n"
 }
 
+#[cfg(not(windows))]
 fn space_shell_script(app: &AppHandle, path: &str, env: &[(String, String)]) -> Result<String, String> {
     let dir = data_dir(app).join("terminal");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -681,6 +719,14 @@ fn space_shell_script(app: &AppHandle, path: &str, env: &[(String, String)]) -> 
 /// `env` (the space's `space_env`) the shell runs as that space.
 #[tauri::command]
 pub fn open_in_terminal(app: AppHandle, path: String, env: Option<Vec<(String, String)>>) -> Result<(), String> {
+    #[cfg(windows)]
+    { let _ = app; windows::terminal(&path, &env.unwrap_or_default()) }
+    #[cfg(not(windows))]
+    { open_mac_terminal(app, path, env) }
+}
+
+#[cfg(not(windows))]
+fn open_mac_terminal(app: AppHandle, path: String, env: Option<Vec<(String, String)>>) -> Result<(), String> {
     let has = |app: &str| Path::new(&format!("/Applications/{app}.app")).exists();
     let mut cmd = Command::new("/usr/bin/open");
     if let Some(env) = env.filter(|e| !e.is_empty()) {
@@ -761,7 +807,11 @@ pub struct Limit {
 
 fn curl_json(url: &str, headers: &[(String, String)]) -> Option<serde_json::Value> {
     use std::io::Write;
-    let mut child = Command::new("/usr/bin/curl")
+    #[cfg(windows)]
+    let mut curl = crate::engine::system_command("curl.exe");
+    #[cfg(not(windows))]
+    let mut curl = Command::new("/usr/bin/curl");
+    let mut child = curl
         .args(["-sS", "--max-time", "12", "-H", "@-", url])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -1076,7 +1126,7 @@ mod trace_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod terminal_tests {
     use super::shell_script;
 
