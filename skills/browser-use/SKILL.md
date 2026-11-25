@@ -22,6 +22,11 @@ The browser is the app's own: `browse` and `ondra-browser` are on your `PATH`
 another browser tool, never use `npx` for one, never change any `ONDRA_BROWSER_*`
 variable, and never ask the user to set anything up.
 
+Not every computer has it yet: where `command -v ondra-browser` finds nothing
+(Windows and Linux for now), this skill doesn't apply. Read public pages with
+`web_fetch`; a step that needs the browser (a sign-in, clicks, a screenshot of a
+page) is the user's to do, or goes into "unverified".
+
 ## The loop: one call per step
 
 ```bash
