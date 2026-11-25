@@ -5,9 +5,9 @@
 //   web_fetch  {url}    → the page as plain text, trimmed
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { Type } from "typebox";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36";
@@ -278,6 +278,9 @@ const browser: Run = (args, stdin, timeoutMs = 60_000) =>
     if (stdin !== undefined) child.stdin?.end(stdin);
   });
 
+/** ondra-browser is on every job's PATH where the app ships it (not on Windows or Linux yet) */
+const hasBrowser = () => (process.env.PATH ?? "").split(delimiter).some((d) => d && existsSync(join(d, process.platform === "win32" ? "ondra-browser.exe" : "ondra-browser")));
+
 /** An engine that just turned the tab away sits out a while (the file `web.py` keeps too, shared by every job). */
 const benched = (dir: string): Record<string, number> => {
   try {
@@ -350,6 +353,7 @@ export default function (pi: any) {
         const r = await search(p.query, signal);
         const refused = r.status === 429 || r.status === 202 || !!r.busyUntil;
         if (!r.hits.length && refused) {
+          if (!hasBrowser()) return text("The search engine is refusing searches for now. Don't retry in a loop: work on with what you have and search again later.", { query: p.query, hits: [] });
           // turned away: the same search in this job's browser tab, without the job having to judge it
           const b = await browserSearch(p.query);
           if (b.hits.length) {
@@ -362,10 +366,10 @@ export default function (pi: any) {
           );
         }
         const hits = r.hits.slice(0, n);
-        if (!hits.length) return text(`No results (HTTP ${r.status}). Try other words, or search in your ondra-browser tab.`, { query: p.query, hits: [] });
+        if (!hits.length) return text(`No results (HTTP ${r.status}). Try other words${hasBrowser() ? ", or search in your ondra-browser tab" : ""}.`, { query: p.query, hits: [] });
         return text(hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"), { query: p.query, hits, cached: !!r.cached });
       } catch (e) {
-        return text(`Search failed: ${(e as Error).message}. Try again, or use the browser.`, { query: p.query, hits: [] });
+        return text(`Search failed: ${(e as Error).message}. Try again${hasBrowser() ? ", or use the browser" : ""}.`, { query: p.query, hits: [] });
       }
     },
   });
