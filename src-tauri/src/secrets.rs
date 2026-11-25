@@ -588,10 +588,10 @@ fn set_secret(
         return Err("값이 너무 길어요 (32KB까지)".into());
     }
     // .env first: when git would commit it, nothing is saved until the user answers
-    if cfg!(windows) && project.is_some() && write_dotenv.unwrap_or(false) {
-        return Err("Windows 시크릿은 보관함에만 저장해요. .env에 쓰기를 꺼 주세요".into());
-    }
     if project.is_some() && write_dotenv.unwrap_or(false) {
+        if !cfg!(target_os = "macos") {
+            return Err("이 기기에는 프로젝트 시크릿을 .env로 쓸 수 없어요. .env에 쓰기를 꺼 주세요".into());
+        }
         if let Some(folder) = folder.as_deref().filter(|f| !f.is_empty()) {
             write_env(Path::new(folder), &name, &value, add_ignore.unwrap_or(false))?;
         }
