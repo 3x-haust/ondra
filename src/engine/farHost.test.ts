@@ -13,10 +13,12 @@ vi.mock("../lib/native", async (orig) => {
     ptyOpen: vi.fn(async () => {}),
     // links followed: one link inside the project points out of it
     farReal: vi.fn(async (paths: string[]) => paths.map((p) => (p === "/Users/me/work/app/link" ? "/Users/me/.ssh" : p))),
+    ghIssues: vi.fn(async () => []),
+    spaceEnv: vi.fn(async (s: { id: string }) => [["SPACE", s.id]]),
   };
 });
 
-import { engineInfo, farReal, fsFiles, fsRead, ptyOpen } from "../lib/native";
+import { engineInfo, farReal, fsFiles, fsRead, ghIssues, ptyOpen } from "../lib/native";
 import { setState } from "../state/store";
 import type { Project, Task } from "../state/types";
 import { farCall, rootsFor, type FarPeer } from "./farHost";
@@ -177,6 +179,17 @@ describe("what another Mac may reach here", () => {
     await call("far.ptyOpen", "term1", "t1", 100, 30);
     expect(ptyOpen).toHaveBeenCalledWith("far-7-term1", "/Users/me/work/app", null, [], expect.anything(), 100, 30);
     await call("far.ptyClose", "term1");
+  });
+
+  it("asks GitHub as the space of a project registered through a link", async () => {
+    setState("spaces", [{ id: "s1", label: "회사", folder: "~", rules: "" }, { id: "s2", label: "개인", folder: "~", rules: "" }] as never);
+    setState("space", "s2");
+    setState("projects", [{ id: "p1", space: "s1", name: "app", folder: "~/work/app" }] as Project[]);
+    // the project's folder is a link: everything under it resolves to the volume it points at
+    vi.mocked(farReal).mockImplementation(async (paths) => paths.map((p) => p && p.replace("/Users/me/work/app", "/Volumes/data/app")));
+    await call("far.ghIssues", "/Users/me/work/app", "");
+    expect(ghIssues).toHaveBeenCalledWith("/Volumes/data/app", "", [["SPACE", "s1"]]);
+    vi.mocked(farReal).mockReset();
   });
 
   it("knows only its own calls", () => {

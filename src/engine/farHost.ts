@@ -132,7 +132,11 @@ async function reach(p: FarPeer, path: unknown, files = false): Promise<string> 
 
 /** the env of a folder's space here (gh signed in as that space) */
 const envOf = async (dir: string): Promise<Env> => {
-  const pr = (state.projects ?? []).find((x) => { const root = normPath(x.folder, home()); return root && under(dir, root); });
+  // `dir` came back from reach() with links followed: match it against the folders followed too
+  const projects = state.projects ?? [];
+  const folders = projects.map((x) => normPath(x.folder, home()) ?? "");
+  const reals = (await farReal(folders).catch(() => folders)).map((r) => realPath(r, home()));
+  const pr = projects.find((_, i) => [reals[i], folders[i]].some((root) => root && under(dir, root)));
   const space = pr?.space ?? state.space;
   return spaceEnv(spaceById(space)).catch(() => []);
 };
