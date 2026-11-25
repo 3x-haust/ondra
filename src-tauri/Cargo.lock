@@ -3024,8 +3024,11 @@ version = "0.86.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "chrono",
+ "dirs",
  "fastembed",
  "futures-util",
+ "getrandom 0.3.4",
  "libc",
  "mac-notification-sys",
  "objc2",
@@ -3034,6 +3037,7 @@ dependencies = [
  "portable-pty",
  "quick-xml",
  "reqwest 0.13.5",
+ "rfd",
  "rustls",
  "security-framework",
  "serde",
@@ -3043,8 +3047,10 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-updater",
+ "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3839,6 +3845,27 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams 0.5.0",
  "web-sys",
+]
+
+[[package]]
+name = "rfd"
+version = "0.15.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef2bee61e6cffa4635c72d7d81a84294e28f0930db0ddcb0f66d10244674ebed"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "js-sys",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

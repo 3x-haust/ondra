@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::AppHandle;
 
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "ai.ondra.secret";
 /// Set on a job's engine env: "1" (global secrets) or "p:<project id>" (global and that project's).
 pub const MARKER: &str = "ONDRA_SECRETS";
@@ -74,7 +75,7 @@ fn item_of(dir: &str, name: &str) -> String {
 pub fn valid_item(item: &str) -> bool {
     let (dir, name) = split_item(item);
     let dir_ok = dir.is_empty()
-        || (!dir.starts_with('/') && !dir.contains(':') && !dir.contains(',') && !dir.contains('=') && dir.split('/').all(|p| !p.is_empty() && p != "." && p != ".."));
+        || (!dir.starts_with('/') && !(cfg!(windows) && dir.contains('\\')) && !dir.contains(':') && !dir.contains(',') && !dir.contains('=') && dir.split('/').all(|p| !p.is_empty() && p != "." && p != ".."));
     dir_ok && valid_name(name).is_ok()
 }
 
@@ -203,7 +204,43 @@ mod store {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+mod store {
+    use super::BTreeMap;
+    use crate::winvault;
+    use std::sync::Mutex;
+
+    type Vault = BTreeMap<String, String>;
+    static WRITE: Mutex<()> = Mutex::new(());
+
+    fn load() -> Result<Vault, String> {
+        let path = winvault::file("secrets.dpapi").map_err(|e| e.to_string())?;
+        match winvault::read_optional(&path) {
+            Ok(Some(bytes)) => serde_json::from_slice(&bytes).map_err(|_| "시크릿 보관함 형식이 올바르지 않아요".into()),
+            Ok(None) => Ok(Vault::new()),
+            Err(e) => Err(format!("Windows 시크릿 보관함을 열지 못했어요: {e}")),
+        }
+    }
+    fn change(update: impl FnOnce(&mut Vault)) -> Result<(), String> {
+        let _guard = WRITE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut vault = load()?;
+        update(&mut vault);
+        let bytes = serde_json::to_vec(&vault).map_err(|e| e.to_string())?;
+        let path = winvault::file("secrets.dpapi").map_err(|e| e.to_string())?;
+        winvault::write(&path, &bytes).map_err(|e| e.to_string())
+    }
+    pub fn set_many(pairs: Vec<(String, String)>) -> Result<(), String> {
+        if pairs.is_empty() { return Ok(()); }
+        change(|v| v.extend(pairs))
+    }
+    pub fn set(account: &str, value: &str) -> Result<(), String> { change(|v| { v.insert(account.into(), value.into()); }) }
+    pub fn get(account: &str) -> Option<String> { load().ok()?.remove(account) }
+    pub fn has(account: &str) -> bool { load().is_ok_and(|v| v.contains_key(account)) }
+    pub fn check() -> Result<(), String> { load().map(|_| ()) }
+    pub fn delete(account: &str) -> Result<(), String> { change(|v| { v.remove(account); }) }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 mod store {
     pub fn set_many(_: Vec<(String, String)>) -> Result<(), String> {
         Err("시크릿은 macOS에서만 쓸 수 있어요".into())
@@ -551,6 +588,9 @@ fn set_secret(
         return Err("값이 너무 길어요 (32KB까지)".into());
     }
     // .env first: when git would commit it, nothing is saved until the user answers
+    if cfg!(windows) && project.is_some() && write_dotenv.unwrap_or(false) {
+        return Err("Windows 시크릿은 보관함에만 저장해요. .env에 쓰기를 꺼 주세요".into());
+    }
     if project.is_some() && write_dotenv.unwrap_or(false) {
         if let Some(folder) = folder.as_deref().filter(|f| !f.is_empty()) {
             write_env(Path::new(folder), &name, &value, add_ignore.unwrap_or(false))?;

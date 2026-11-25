@@ -41,18 +41,25 @@ pub fn bridge_env() -> Vec<(String, String)> {
     env()
 }
 
-fn token() -> String {
+pub(crate) fn token() -> Result<String, getrandom::Error> {
     let mut b = [0u8; 24];
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        let _ = f.read_exact(&mut b);
-    }
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    getrandom::fill(&mut b)?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
+#[cfg(test)]
+#[test]
+fn each_bridge_launch_has_a_fresh_192_bit_token() {
+    let a = token().unwrap();
+    assert_eq!(a.len(), 48);
+    assert!(a.bytes().all(|b| b.is_ascii_hexdigit()));
+    assert_ne!(a, token().unwrap());
 }
 
 pub fn start(app: AppHandle) {
     let Ok(listener) = TcpListener::bind("127.0.0.1:0") else { return };
     let Ok(addr) = listener.local_addr() else { return };
-    let secret = token();
+    let Ok(secret) = token() else { return };
     let _ = DOOR.set((addr.port(), secret.clone()));
     std::thread::spawn(move || {
         let mut seq = 0u64;
