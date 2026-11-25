@@ -212,7 +212,7 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(() => (postQuestions(), void scout(), void workTick()), 3000);
+  sweep ??= setInterval(() => (postQuestions(), void postApprovals(), void scout(), void workTick()), 3000);
   // a turn into someone that outlived the app pops back now, else when its time is up
   keepTime();
   setStatus({ state: "connecting" });
@@ -651,6 +651,8 @@ async function picked(i: DiscordInteraction, a: AgentSettings) {
     const { decide } = await import("./tasks");
     await decide(d.id, o.id);
     posted.delete(d.id);
+    // its buttons show the pick, not "gone"
+    approvals.delete(d.id);
   }
   // answered (here or elsewhere): the buttons can't be pressed again
   if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: d ? pickButtons(d, o?.id ?? "-") : [] }).catch(() => {});
@@ -1211,6 +1213,44 @@ function postQuestions() {
         hearMine(to, text);
       })
       .catch(() => posted.delete(d.id));
+  }
+}
+
+/** approvals posted to the owner, by decision id: their message, to close once the question is gone */
+const approvals = new Map<string, { channel: string; message?: string; d: Decision }>();
+/** the Discord agent's own: a job of its, or its own chat ("main:home~@agent") */
+const agentsOwn = (owner: string) => !!channelOf(owner) || (owner.startsWith("main:") && owner.endsWith(`~${AGENT_CHAT}`));
+
+/**
+ * A job of the agent (or its own chat) waits on the user's yes (a tool asking before a security
+ * action: "보안 동작을 허용할까요?"): asked in the owner's DM, which only they see, word for word (what
+ * is allowed is never put in other words), with its buttons; only the owner's press counts. Answered
+ * in the app or gone by its time, the buttons there can't be pressed any more.
+ */
+export async function postApprovals(a: AgentSettings | undefined = settings()) {
+  for (const [id, p] of approvals) {
+    if (state.decisions.some((d) => d.id === id)) continue;
+    approvals.delete(id);
+    if (p.message) await discordApi("PATCH", `/channels/${p.channel}/messages/${p.message}`, { components: pickButtons(p.d, "-") }).catch(() => {});
+  }
+  if (!a?.on || !a.ownerId) return;
+  for (const d of state.decisions) {
+    if (!d.ui || approvals.has(d.id) || posted.has(d.id) || !agentsOwn(d.taskId)) continue;
+    approvals.set(d.id, { channel: "", d });
+    const to = await dmChannel(a);
+    if (!to || !state.decisions.some((x) => x.id === d.id)) {
+      approvals.delete(d.id);
+      continue;
+    }
+    const about = taskById(d.taskId)?.title;
+    const content = `🔒 ${about ? `${about}\n` : ""}${d.question}\n-# Ondra 앱에서 답해도 돼요`.slice(0, 2000);
+    const m = (await discordApi("POST", `/channels/${to}/messages`, { content, components: pickButtons(d), allowed_mentions: { parse: [] } }).catch((e) => {
+      logError("agent", `approval: ${e instanceof Error ? e.message : String(e)}`);
+      return undefined;
+    })) as { id?: string } | undefined;
+    approvals.set(d.id, { channel: to, message: m?.id, d });
+    // a reply in words there ("허용", "2") answers it too
+    if (m?.id) posted.set(d.id, to);
   }
 }
 
