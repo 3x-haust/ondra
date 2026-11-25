@@ -21,11 +21,13 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     path::PathBuf,
-    process::{Child, Command, Stdio},
-    sync::{Mutex, OnceLock},
+    process::{Child, Stdio},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager};
+#[cfg(not(windows))]
+use std::{process::Command, sync::OnceLock};
 
 /// A job's session daemon goes away after this long without a command; its tab stays.
 const IDLE_MS: &str = "900000";
@@ -53,7 +55,9 @@ fn space_dir(app: &AppHandle, space: &str) -> PathBuf {
 /// every space used to share, so nobody is signed out by the split.
 fn profile_dir(app: &AppHandle, space: &str) -> PathBuf {
     let dir = space_dir(app, space).join("profile");
+    #[cfg(target_os = "macos")]
     let old = crate::engine::data_dir(app).join("browser").join("profile");
+    #[cfg(target_os = "macos")]
     if !dir.exists() && old.is_dir() {
         let _ = std::fs::create_dir_all(space_dir(app, space));
         let _ = Command::new("/bin/cp").arg("-Rp").arg(&old).arg(&dir).status();
@@ -110,6 +114,7 @@ fn answers(port: u16) -> bool {
 }
 
 /// Sites turn away "HeadlessChrome"; present the same build as plain Chrome.
+#[cfg(not(windows))]
 fn user_agent(chrome: &std::path::Path) -> Option<String> {
     static UA: OnceLock<String> = OnceLock::new();
     if let Some(ua) = UA.get() {
@@ -185,7 +190,9 @@ fn kill_profile_chrome(app: &AppHandle, space: &str, inner: &mut Inner) {
         let _ = c.wait();
     }
     // this space's profile, and the old shared one (a Chrome left from before the split)
+    #[cfg(target_os = "macos")]
     let old = crate::engine::data_dir(app).join("browser").join("profile");
+    #[cfg(target_os = "macos")]
     for dir in [profile_dir(app, space), old] {
         let flag = format!("--user-data-dir={}", dir.display());
         // `--` first: without it pkill reads the pattern as an option and kills nothing
@@ -244,14 +251,14 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
     let profile = profile_dir(app, space);
     std::fs::create_dir_all(&profile).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(port_file(app, space));
-    let mut cmd = Command::new(&chrome);
+    let mut cmd = crate::engine::background_command(&chrome);
+    #[cfg(target_os = "macos")]
+    cmd.args(["--use-mock-keychain", "--password-store=basic"]);
+    let port = stable_port(app, space);
     cmd.arg(format!("--user-data-dir={}", profile.display()))
-        .arg(format!("--remote-debugging-port={}", stable_port(app, space)))
+        .arg(format!("--remote-debugging-port={port}"))
         .args([
             "--remote-debugging-address=127.0.0.1",
-            // never touch the user's keychain for Chrome's own cookie key
-            "--use-mock-keychain",
-            "--password-store=basic",
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-timer-throttling",
@@ -262,6 +269,8 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
     if !chrome.ends_with("chrome-headless-shell") {
         cmd.arg("--headless=new");
     }
+    // chrome.exe --version may open a normal browser window. Keep the native Windows UA.
+    #[cfg(not(windows))]
     if let Some(ua) = user_agent(&chrome) {
         cmd.arg(format!("--user-agent={ua}"));
     }
@@ -275,7 +284,8 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
 
     let started = Instant::now();
     loop {
-        if let Some(p) = read_port(app, space).filter(|p| answers(*p)) {
+        // Chrome writes DevToolsActivePort only when it picked the port itself (--port=0).
+        if let Some(p) = (port != 0).then_some(port).or_else(|| read_port(app, space)).filter(|p| answers(*p)) {
             inner.child = Some(child);
             inner.port = Some(p);
             return Ok(p);
@@ -300,12 +310,16 @@ pub fn stop(app: &AppHandle) {
         inner.port = None;
         inner.child.take()
     }).collect();
+    #[cfg(unix)]
     for child in &children {
         let _ = Command::new("/bin/kill").args(["-TERM", &child.id().to_string()]).status();
     }
-    let until = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < until && children.iter_mut().any(|c| matches!(c.try_wait(), Ok(None))) {
-        std::thread::sleep(Duration::from_millis(50));
+    #[cfg(unix)]
+    {
+        let until = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < until && children.iter_mut().any(|c| matches!(c.try_wait(), Ok(None))) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
     for mut child in children {
         let _ = child.kill();

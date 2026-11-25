@@ -9,6 +9,7 @@
 
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, Ordering};
+#[cfg(target_os = "macos")]
 use std::sync::OnceLock;
 
 use serde::Serialize;
@@ -54,6 +55,7 @@ fn store_id(space: &str) -> [u8; 16] {
 
 /// Safari's own user agent. The webview's default leaves out "Version/… Safari/…", and
 /// Google's sign-in refuses such embedded browsers.
+#[cfg(target_os = "macos")]
 fn user_agent() -> &'static str {
     static UA: OnceLock<String> = OnceLock::new();
     UA.get_or_init(|| {
@@ -116,7 +118,6 @@ fn open_popup(app: &AppHandle, opened_on: &str, url: Url, features: tauri::webvi
     let mut b = WebviewWindowBuilder::new(app, &label, WebviewUrl::External("about:blank".parse().expect("blank")))
         .window_features(features)
         .title(url.host_str().unwrap_or("로그인"))
-        .user_agent(user_agent())
         .initialization_script(&close_script)
         .on_navigation(move |u| {
             if u.as_str() == CLOSE_URL {
@@ -132,6 +133,8 @@ fn open_popup(app: &AppHandle, opened_on: &str, url: Url, features: tauri::webvi
                 let _ = w.set_title(&title);
             }
         });
+    #[cfg(target_os = "macos")]
+    { b = b.user_agent(user_agent()); }
     if !positioned {
         b = b.center();
     }
@@ -235,10 +238,12 @@ pub async fn inbrowser_show(app: AppHandle, x: f64, y: f64, w: f64, h: f64, url:
     let sp = space.clone();
     let popup_app = app.clone();
     let popup_label = label(&space);
-    let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start))
-        .data_store_identifier(store_id(&space))
-        .user_agent(user_agent())
-        .on_new_window(move |url, features| {
+    let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start));
+    #[cfg(target_os = "macos")]
+    let builder = builder.data_store_identifier(store_id(&space)).user_agent(user_agent());
+    #[cfg(windows)]
+    let builder = builder.data_directory(crate::engine::data_dir(&app).join("webviews").join(format!("space-{:x}", u128::from_be_bytes(store_id(&space)))));
+    let builder = builder.on_new_window(move |url, features| {
             let on = PAGE_OF.lock().unwrap().get(&popup_label).cloned().unwrap_or_default();
             open_popup(&popup_app, &on, url, features)
         })
