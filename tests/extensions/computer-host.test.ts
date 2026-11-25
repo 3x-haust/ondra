@@ -489,4 +489,14 @@ process.stdin.on("data", c => { buf += c; let nl;
     expect(Date.now() - t0).toBeLessThan(2000);
     await session.stop();
   });
+
+  it("pauses on a wait with seconds alone, and the steps after it go on", async () => {
+    const { session } = await open();
+    const t0 = Date.now();
+    const r = await session.steps([{ kind: "wait", seconds: 0.4 }, { kind: "click", find: "가족" }]) as Record<string, any>;
+    expect(r.failed).toBeUndefined();
+    expect(r.steps[0]).toMatchObject({ kind: "wait", wait: { paused: true } });
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
+    await session.stop();
+  });
 });

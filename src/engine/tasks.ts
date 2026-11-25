@@ -28,7 +28,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentStopCommand
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
-import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
+import { answeredNo, commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
 import { causeFooting, checkEvidence, isBugFix, isCodeFile, leftovers, promisesLater, readUnverified, reproGap, reviewUnresolved, riskyChange, unbackedChecked, unbackedClaim, uncheckedLine, unreasoned } from "./proof";
 import { checksCovering, checksFor, checksOwed, loadLocalChecks } from "./localChecks";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
@@ -1689,7 +1689,9 @@ function handlers(id: string, run: Run) {
           run.tools.delete(ev.toolCallId);
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
-          if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
+          // a search that found nothing (exit 1) is an answer, not a failed step
+          const failed = !!ev.isError && !(done?.kind === "tool" && done.tool.name === "bash" && answeredNo(done.tool.target ?? "", out));
+          if (done?.kind === "tool") loopGuard(id, run, done.tool, !failed);
           // a fork's plan that stopped moving: ask where it is. Subagents and reviews
           // aren't asked (their list is short-lived), and a fork at most twice a session:
           // 225 reminders in 312 sessions bought a status line, not a fix.
@@ -1715,7 +1717,7 @@ function handlers(id: string, run: Run) {
           updateTask(id, (t) => {
             const e = t.entries.find((x) => x.id === entryId);
             if (e?.kind === "tool") {
-              e.tool.ok = !ev.isError;
+              e.tool.ok = !failed;
               // a click names its element once the call returns ("클릭함 ‘보내기’")
               const label = ev.result?.details?.label;
               if (e.tool.name === "computer" && !e.tool.target && typeof label === "string" && label.trim()) e.tool.target = computerLabel(label) ?? "";
@@ -1729,7 +1731,7 @@ function handlers(id: string, run: Run) {
             const sh = t.shells.find((s) => s.id === ev.toolCallId);
             if (sh) {
               sh.endedAt = Date.now();
-              sh.ok = !ev.isError;
+              sh.ok = !failed;
               if (typeof out === "string") sh.tail = out.slice(-TAIL);
             }
           });
