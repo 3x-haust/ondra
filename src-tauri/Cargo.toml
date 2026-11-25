@@ -39,10 +39,11 @@ fastembed = { version = "=4.9.1", default-features = false, features = ["ort-dow
 portable-pty = "0.9"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Power", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 rfd = { version = "0.15", default-features = false }
 tempfile = "3"
 dirs = "6"
+tauri-plugin-single-instance = "2"
 
 [profile.release]
 # thin LTO over 16 units, kept between builds: a release where only the page changed relinks in

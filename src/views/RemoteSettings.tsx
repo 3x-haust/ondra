@@ -171,8 +171,8 @@ function ThisDevice() {
         <Switch_ on={!!state.settings.remote} set={(v) => void setRemoteOn(v)} label={t("다른 기기에서 이 기기 쓰기")} />
       </Row>
       <Show when={state.settings.remote}>
-        <Show when={/Macintosh/.test(navigator.userAgent)}>
-          <Row title={t("잠자기 방지")} desc={t("전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요")}>
+        <Show when={/Macintosh|Windows/.test(navigator.userAgent)}>
+          <Row title={t("잠자기 방지")} desc={/Windows/.test(navigator.userAgent) ? t("원격 연결을 켜 두면 이 PC가 자동으로 잠들지 않아요") : t("전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요")}>
             <Switch_ on={!!state.settings.remoteAwake} set={(v) => (setState("settings", "remoteAwake", v), keepAwake())} label={t("잠자기 방지")} />
           </Row>
         </Show>

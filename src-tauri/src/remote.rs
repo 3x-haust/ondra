@@ -129,11 +129,16 @@ pub fn remote_host_name() -> String {
 #[cfg(target_os = "macos")]
 static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
 
-/// Keep this Mac from sleeping while others may work on it (on power only): a `caffeinate` tied to this app, so it never outlives it.
+#[cfg(windows)]
+mod power;
+
+/// The sleep request belongs to this host and ends with the app.
 #[tauri::command]
 pub fn remote_awake(on: bool) -> Result<(), String> {
-    #[cfg(not(target_os = "macos"))]
-    return if on { Err("Keep awake is only available on macOS".into()) } else { Ok(()) };
+    #[cfg(windows)]
+    return power::keep_awake(on).map_err(|e| e.to_string());
+    #[cfg(not(any(target_os = "macos", windows)))]
+    return if on { Err("Keep awake is unavailable on this platform".into()) } else { Ok(()) };
     #[cfg(target_os = "macos")]
     keep_awake(on)
 }

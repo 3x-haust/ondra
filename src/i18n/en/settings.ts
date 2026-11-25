@@ -425,6 +425,7 @@ export default {
   "버전 다름": "Different version",
   "두 기기의 Ondra 버전이 달라요: 이 기기 {a}, 다른 기기 {b}": "Different Ondra versions: this device {a}, other device {b}",
   "잠자기 방지": "Keep awake",
+  "원격 연결을 켜 두면 이 PC가 자동으로 잠들지 않아요": "Keep this PC awake while remote hosting is on",
   "전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요": "This Mac won't sleep while it's plugged in",
   "{name}의 계정": "Account on {name}",
   "이 프로젝트는 {name}에 있어요": "This project is on {name}",
