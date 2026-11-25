@@ -2,6 +2,9 @@ name: Linux packages
 
 on:
   pull_request:
+  # Builds on main leave the Rust cache that pull requests start from.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -45,6 +48,14 @@ jobs:
           npm install --global --prefix "$RUNNER_TEMP/pnpm" pnpm@11.6.0
           echo "$RUNNER_TEMP/pnpm/bin" >> "$GITHUB_PATH"
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+
+      # Restores the compiled dependencies of both crates and the cargo registry; only the app and
+      # the remote helper themselves are compiled again. The key follows the toolchain and Cargo.lock.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            src-tauri -> target
+            remote/host -> target
 
       - name: Build the pinned coding agent
         run: |
