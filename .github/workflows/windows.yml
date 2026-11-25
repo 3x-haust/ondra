@@ -22,7 +22,6 @@ jobs:
     env:
       ENGINE_REV: 3311ed88dc6c5c403db2ce4edc762b734acbfb25
       TARGET: x86_64-pc-windows-msvc
-      CARGO_INCREMENTAL: '0'
       RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-msvc
     defaults:
       run:
@@ -59,6 +58,15 @@ jobs:
             src-tauri -> target
             remote/host -> target
 
+      # The app crate is compiled again on every run (the checkout makes its sources new), so the
+      # incremental state of the last build here or on main is kept: rustc then redoes only the code
+      # that changed. Saved under each commit; the newest one of this pull request or main comes back.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src-tauri/target/${{ env.TARGET }}/release/incremental
+          key: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ github.sha }}
+          restore-keys: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
       - name: Build the pinned coding agent
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -79,7 +87,11 @@ jobs:
       - name: Build unsigned installer
         env:
           ONDRA_ENGINE_BUN_EXE: ${{ steps.bun.outputs.bun-path }}
-        run: pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
+        # rust-cache turns incremental builds off; the release profile's own setting (on for the app,
+        # off for the remote helper) applies here, as in a release build.
+        run: |
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
+          pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
 
       - name: Verify installed payload
         run: |
@@ -128,12 +140,13 @@ jobs:
       - name: Run Windows platform tests
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
           pnpm test src/engine/farPaths.test.ts src/lib/nativeAssets.test.ts
           cargo test --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked identity
-          foreach ($test in 'remote::power::tests', 'winvault::tests', 'providers::tests::keychain_wrapper_stores_reads_and_deletes',
-                   'farfs::tests', 'components::tests::bundled_engine_needs_the_platform_executable_and_its_assets') {
-            cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib $test
-          }
+          # One run for all filters: a run per filter compiled the test build again after the first.
+          cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib '--' --test-threads=1 `
+            remote::power::tests winvault::tests providers::tests::keychain_wrapper_stores_reads_and_deletes `
+            farfs::tests components::tests::bundled_engine_needs_the_platform_executable_and_its_assets
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
