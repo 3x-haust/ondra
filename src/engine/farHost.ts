@@ -7,7 +7,7 @@
 //
 // Every call checks what it touches: a path must lie inside a folder of a project the Mac added
 // or of a job it sees (engine/farPaths.ts), a job must be one it sees. Nothing else is reached.
-import { onEvent, artifactsList, farPiece, farPut, farReal, farStat, fsFiles, fsGrep, fsRead, fsWrite, ghIssue, ghIssues, ghPrView, gitChanges, gitCommit, gitFileAt, gitMerged, gitPr, gitPush, ptyClose, ptyOpen, ptyResize, ptyWrite, reverseTrace, spaceEnv, type Env } from "../lib/native";
+import { onEvent, artifactsList, farPiece, farPut, farReal, farStat, fsFiles, fsGrep, fsRead, fsWrite, ghIssue, ghIssues, ghPrView, gitChanges, gitCommit, gitFileAt, gitMerged, gitPr, gitPush, openInEditor, ptyClose, ptyOpen, ptyResize, ptyWrite, reverseTrace, revealPath, spaceEnv, type Env } from "../lib/native";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Project, Task } from "../state/types";
 import { allowedPath, capText, cleanRoots, mentions, mirrorPath, normPath, realPath, repoPath, tooWide, under, windowsHome } from "./farPaths";
@@ -234,6 +234,9 @@ const FAR: Record<string, Fn> = {
     // cut short: the next ask goes on from where this piece ends
     return cut ? { text, end: (Number(from) || 0) + new TextEncoder().encode(text).length } : r;
   },
+  /** on this Mac's screen: Finder, or the editor */
+  "far.reveal": async (p, path: string) => revealPath(await reach(p, path, true)),
+  "far.editor": async (p, path: string) => openInEditor(await reach(p, path)),
   "far.ghIssues": async (p, dir: string, q: string) => {
     const d = await reach(p, dir);
     return ghIssues(d, String(q ?? ""), await envOf(d));

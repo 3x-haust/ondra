@@ -49,8 +49,9 @@ describe("where a thing is done", () => {
     await changesIn("H", "/Users/other/app", undefined, true);
     expect(askHost).toHaveBeenCalledWith("H", "far.changes", ["/Users/other/app", null, true]);
     await revealOn("H", "~/x");
+    expect(askHost).toHaveBeenCalledWith("H", "far.reveal", ["~/x"]);
     await editorOn("H", "~/x");
-    expect(askHost).toHaveBeenCalledTimes(2);
+    expect(askHost).toHaveBeenCalledWith("H", "far.editor", ["~/x"]);
     expect(openInEditor).not.toHaveBeenCalled();
     expect(fsFiles).not.toHaveBeenCalled();
     expect(revealPath).not.toHaveBeenCalled();

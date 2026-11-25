@@ -71,9 +71,9 @@ export const mergedIn = (host: Where, repo: string, branch: string, into: string
   onMac<(Merged & { changes: Cut }) | null>(host, "far.merged", [there(repo), branch, into ?? null, base], () => gitMerged(repo, branch, into, base));
 export const artifactsOf = (host: Where, id: string) => onMac<ArtifactFile[]>(host, "far.artifacts", [id], () => artifactsList(id));
 export const traceOf = (host: Where, id: string, from: number) => onMac<{ text: string; end: number }>(host, "far.trace", [id, from], () => reverseTrace(id, from));
-/** Desktop actions are local only. Older hosts would activate Finder or their editor. */
-export const revealOn = (host: Where, path: string) => host ? Promise.resolve() : revealPath(path).catch(() => {});
-export const editorOn = (host: Where, path: string) => host ? Promise.resolve() : openInEditor(path).catch(() => {});
+/** Finder there (on that Mac's own screen) */
+export const revealOn = (host: Where, path: string) => onMac<void>(host, "far.reveal", [there(path)], () => revealPath(path)).catch(() => {});
+export const editorOn = (host: Where, path: string) => onMac<void>(host, "far.editor", [there(path)], () => openInEditor(path)).catch(() => {});
 
 /** an error from there, in words for a panel: an older Ondra there doesn't know the call */
 export function farError(e: unknown): string {

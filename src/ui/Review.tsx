@@ -384,10 +384,8 @@ export function PreviewPane() {
             <Show when={kind() === "image"}>
               <button class="icon-btn sm" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(full(), [full()], host())}><Icon name="zoom" size={14} /></button>
             </Show>
-            <Show when={!host()}>
-              <button class="btn sm ghost" title={tr("편집기에서 열기")} onClick={() => void editorOn(host(), full())}><Icon name="external" size={14} />{tr("편집기")}</button>
-              <button class="btn sm ghost" title={tr("Finder에서 보기")} onClick={() => void revealOn(host(), full())}><Icon name="folder" size={14} />Finder</button>
-            </Show>
+            <button class="btn sm ghost" title={host() ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(host(), full())}><Icon name="external" size={14} />{tr("편집기")}</button>
+            <button class="btn sm ghost" title={host() ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(host(), full())}><Icon name="folder" size={14} />Finder</button>
           </div>
         </Show>
         <div class="pv-body">
@@ -517,10 +515,8 @@ function Viewer(props: { root: string; path: string; host?: Where; changed?: Dif
           <button class="btn sm primary" disabled={!dirty()} title="⌘S" onClick={() => editor?.save()}>{tr("저장")}</button>
           <button class="btn sm ghost" onClick={leave}>{tr("닫기")}</button>
         </Show>
-        <Show when={!props.host}>
-          <button class="icon-btn sm" title={tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>
-          <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealOn(props.host, full())}><Icon name="folder" size={14} /></button>
-        </Show>
+        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>
+        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.host, full())}><Icon name="folder" size={14} /></button>
       </div>
       <div class="fv-body" classList={{ editing: mode() === "edit" }}>
         <Show when={mode() !== "edit"} fallback={

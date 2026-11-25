@@ -181,8 +181,6 @@ describe("what another Mac may reach here", () => {
 
   it("knows only its own calls", () => {
     expect(farCall(peer(), "far.nope")).toBeUndefined();
-    expect(farCall(peer(), "far.reveal")).toBeUndefined();
-    expect(farCall(peer(), "far.editor")).toBeUndefined();
     expect(farCall(peer(), "constructor")).toBeUndefined();
     expect(farCall(peer(), "__proto__")).toBeUndefined();
   });
