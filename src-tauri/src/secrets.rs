@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::AppHandle;
 
-#[cfg(target_os = "macos")]
+#[cfg(not(windows))]
 const SERVICE: &str = "ai.ondra.secret";
 /// Set on a job's engine env: "1" (global secrets) or "p:<project id>" (global and that project's).
 pub const MARKER: &str = "ONDRA_SECRETS";
@@ -240,24 +240,31 @@ mod store {
     pub fn delete(account: &str) -> Result<(), String> { change(|v| { v.remove(account); }) }
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+/// One Secret Service item per secret (service `ai.ondra.secret`, the account its name): the
+/// desktop's keyring asks once to unlock, not per item, and a failed read never rewrites the others.
+#[cfg(target_os = "linux")]
 mod store {
-    pub fn set_many(_: Vec<(String, String)>) -> Result<(), String> {
-        Err("시크릿은 macOS에서만 쓸 수 있어요".into())
+    use crate::providers::linux_keys::{clear, lookup, store};
+    const LABEL: &str = "Ondra secret";
+
+    pub fn set_many(pairs: Vec<(String, String)>) -> Result<(), String> {
+        pairs.iter().try_for_each(|(k, v)| set(k, v))
     }
-    pub fn set(_: &str, _: &str) -> Result<(), String> {
-        Err("시크릿은 macOS에서만 쓸 수 있어요".into())
+    pub fn set(account: &str, value: &str) -> Result<(), String> {
+        store(super::SERVICE, account, LABEL, value)
     }
-    pub fn get(_: &str) -> Option<String> {
-        None
+    pub fn get(account: &str) -> Option<String> {
+        lookup(super::SERVICE, account)
     }
-    pub fn has(_: &str) -> bool {
-        false
+    pub fn has(account: &str) -> bool {
+        get(account).is_some()
     }
+    /// The keyring can be written and read (unlocked, a Secret Service running).
     pub fn check() -> Result<(), String> {
-        Err("시크릿은 macOS에서만 쓸 수 있어요".into())
+        store(super::SERVICE, ".check", LABEL, "1").map_err(|e| format!("키링을 열지 못했어요: {e}"))
     }
-    pub fn delete(_: &str) -> Result<(), String> {
+    pub fn delete(account: &str) -> Result<(), String> {
+        clear(super::SERVICE, account);
         Ok(())
     }
 }
