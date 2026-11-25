@@ -42,6 +42,18 @@ describe("a spec's tickets are one piece of work", () => {
     expect(taskById((out[0] as { taskId: string }).taskId)?.group).toBe("spec");
   });
 
+  it("the agent's follow-ups go under its own job, never under one of the user's", () => {
+    setState("tasks", [
+      job("mine", "done"),
+      job("its", "done", { agent: {} }),
+      job("next", "running", { agent: {}, follows: "its" }),
+      job("odd", "running", { agent: {}, follows: "mine" }),
+    ]);
+    expect(carriedOn(taskById("next")!)?.id).toBe("its");
+    expect(lineHead(taskById("next")!).id).toBe("its");
+    expect(carriedOn(taskById("odd")!)).toBeUndefined();
+  });
+
   it("its end is the group's only when nothing else of it can still run", () => {
     setState("tasks", [
       job("spec", "done"),

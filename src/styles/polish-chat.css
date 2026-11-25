@@ -2770,6 +2770,17 @@
   margin: 0;
   max-width: 760px;
 }
+/* its 작업: the sidebar's list, as is, in the page (no panel of its own, the page scrolls) */
+.agent-view .agent-part .sidebar.sb-embed {
+  display: block;
+  max-width: 520px;
+  background: transparent;
+  border: 0;
+}
+.agent-view .agent-part .sb-embed .sb-scroll {
+  overflow: visible;
+  padding: 0;
+}
 .agent-view .agent-notes {
   display: flex;
   flex-direction: column;

@@ -337,12 +337,14 @@ export function trimChats(list: CaptainMessage[], keep = 300): CaptainMessage[] 
 
 /** a job of the list: not a subagent, a quick answer or archived */
 export const listed = (t: Task) => !t.parentId && !t.answer && !t.archived && !t.agent;
+/** a job in the Discord agent's own list (its 작업), as listed is for the sidebar */
+export const agentListed = (t: Task) => !t.parentId && !t.answer && !t.archived && !!t.agent;
 /** the job a follow-up carries on (one started by answering it, say "merge it") or the job of its group,
  *  when that one is in the same list: the job is part of its line, shown under it and named by it */
 export function carriedOn(t: Task): Task | undefined {
   for (const id of [t.follows, t.group]) {
     const p = id ? taskById(id) : undefined;
-    if (p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project) return p;
+    if (p && p.id !== t.id && (t.agent ? agentListed(p) : listed(p)) && p.space === t.space && p.project === t.project) return p;
   }
   return undefined;
 }

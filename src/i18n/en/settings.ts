@@ -691,6 +691,7 @@ export default {
   "대화할 채널": "Channels to talk in",
   "기억": "Memory",
   "아직 기억한 게 없어요": "Nothing remembered yet",
+  "아직 한 작업이 없어요": "No work yet",
   "잊기": "Forget",
   "이곳": "This place",
   "교훈": "Lesson",

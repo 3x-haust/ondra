@@ -13,10 +13,10 @@ import type { AgentNote, CaptainMessage } from "../state/types";
 import { UserMsg } from "../ui/MsgActions";
 import { Icon } from "../ui/Icon";
 import { keepBottom } from "../ui/stick";
-import { AskDock, handed, onItsOwn, ProjectTasks, Reply, shows } from "./MainView";
+import { AskDock, handed, onItsOwn, Reply, shows } from "./MainView";
 import { PaneControls } from "./PaneControls";
 import { RoutineRow } from "./Routines";
-import { SidebarToggle } from "./Sidebar";
+import { AgentJobs, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 
 type Part = "talk" | "work" | "routines" | "memory";
@@ -109,7 +109,7 @@ export function AgentView() {
 
       <Show when={part() === "work"}>
         <div class="agent-part">
-          <ProjectTasks list={jobs()} />
+          <AgentJobs space={state.space} />
         </div>
       </Show>
 
