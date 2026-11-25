@@ -1,8 +1,16 @@
 # Build the native Windows installer
 
-Build on Windows in PowerShell, using a short local checkout path (for example `C:\src\ondra`). Install [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/) including Visual Studio C++ Build Tools, the Windows SDK and WebView2. Use Rust stable **MSVC** (1.91 or newer), Git for Windows, Node 24, pnpm 11 and Bun 1.3.14. Git Bash is also used by the engine's shell tool at runtime. Node, pnpm, Rust and Bun are build tools, not requirements to run the installed app.
+## Get the x64 installer from CI
 
-## Prepare the engine
+The [Windows installer workflow](../.github/workflows/windows.yml) runs on pull requests or manually from **Actions → Windows installer → Run workflow** (once the workflow is on the default branch). It builds from a clean GitHub-hosted Windows Server 2022 VM; it does not need a self-hosted machine, signing keys or release credentials.
+
+After the run succeeds, download **Ondra-windows-x64-nsis** from the run's **Artifacts** section and unzip it to get `*-setup.exe`. The **Verify installed payload** log includes the installer SHA-256; compare it with `Get-FileHash .\<installer-name>.exe` after extraction. The artifact is retained for seven days. This is an unsigned test installer, not a GitHub Release; Windows may show a SmartScreen warning.
+
+## Reproduce the build locally
+
+Use PowerShell 7 on Windows and a short local checkout path (for example `C:\src\ondra`). Install [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/) including Visual Studio C++ Build Tools, the Windows SDK and WebView2. CI uses the x64 **MSVC** Rust 1.95.0 toolchain, Git for Windows, Node 24.14.0, pnpm 11.6.0 and Bun 1.3.14. Git Bash is also used by the engine's shell tool at runtime. Node, pnpm, Rust and Bun are build tools, not requirements to run the installed app.
+
+### Prepare the engine
 
 Ondra uses `packages/coding-agent` in [3x-haust/3xhaustpi](https://github.com/3x-haust/3xhaustpi), the same RPC engine as on macOS. **Do not use the `3xhaustpi-windows-*.zip` releases**: those package the separate `packages/3xhaustpi` CLI. From the Ondra checkout:
 
@@ -19,19 +27,22 @@ Pop-Location
 
 Keep the **whole built checkout**, not just `dist`: the [upstream Windows binary recipe](https://github.com/3x-haust/3xhaustpi/blob/3311ed88dc6c5c403db2ce4edc762b734acbfb25/scripts/build-binaries.sh) compiles the Bun entry and both workers. The Ondra bundle does the same for the selected target, and copies the themes, images, HTML export templates, photon WASM, docs/examples and architecture-matched `packages/tui/native/win32/prebuilds` addon. The engine license and dependency notices travel with it.
 
-## Build and install
+### Build and install
 
 ```powershell
 $target = 'x86_64-pc-windows-msvc'   # aarch64-pc-windows-msvc on native ARM64
-rustup target add $target
-pnpm install --frozen-lockfile
-pnpm tauri build --target $target --ci
+$env:RUSTUP_TOOLCHAIN = "1.95.0-$target"
+rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm tauri build --target $target --bundles nsis --ci --no-sign -- --locked
 Get-ChildItem "src-tauri\target\$target\release\bundle\nsis\*-setup.exe"
 ```
 
 If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri\target`. The pre-build step compiles `remote/host` with its own lockfile and stages the Tauri sidecar. `pnpm tauri dev` prepares the same engine and helper. Windows uses an NSIS installer, **not** `scripts/release.mjs`; this command neither signs nor publishes a release and does not write the macOS component/update manifest. The first build needs network access for dependencies; the installer may fetch WebView2 on systems without it.
 
-Run the setup EXE. In the **installed application directory** (not the NSIS output directory), check:
+CI silently installs the EXE into a temporary directory on the disposable runner. It verifies that the installed remote helper matches the freshly built sidecar by SHA-256, checks the engine's WASM, x64 native addon and notices, and runs the installed engine's `--version` against the pinned source package version. It does not open the GUI or pair devices.
+
+For a manual smoke test, run the setup EXE. In the **installed application directory** (not the NSIS output directory), check:
 
 ```powershell
 Get-Item .\ondra.exe, .\ondra-remote.exe, .\engine\ondra-engine.exe, .\engine\package.json
