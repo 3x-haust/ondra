@@ -115,6 +115,7 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           pnpm test src/engine/farPaths.test.ts src/lib/nativeAssets.test.ts
+          cargo test --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked identity
           foreach ($test in 'remote::power::tests', 'winvault::tests', 'providers::tests::keychain_wrapper_stores_reads_and_deletes',
                    'farfs::tests', 'components::tests::bundled_engine_needs_the_platform_executable_and_its_assets') {
             cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib $test
