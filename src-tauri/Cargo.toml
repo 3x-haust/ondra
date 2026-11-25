@@ -49,6 +49,10 @@ tauri-plugin-single-instance = "2"
 # the GTK dialogs WebKitGTK already brings in, as tauri-plugin-dialog uses on Linux
 rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
 dirs = "6"
+tauri-plugin-single-instance = "2"
+# notifications over D-Bus: notify-send before libnotify 0.7.10 (Ubuntu 22.04) has no actions.
+# 4.18 shares zbus 5 with single-instance; 4.19 moved to zbus 6.
+notify-rust = { version = "~4.18", default-features = false, features = ["z"] }
 
 [profile.release]
 # thin LTO over 16 units, kept between builds: a release where only the page changed relinks in

@@ -595,17 +595,18 @@ pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<b
             if sound {
                 play_alarm();
             }
-            // with an action, notify-send waits and prints the action's name when the notice is clicked
-            let mut cmd = std::process::Command::new("notify-send");
-            cmd.args(["--app-name", &app.package_info().name]);
+            // the default action is a click on the notice itself; waiting for it holds this thread
+            let mut n = notify_rust::Notification::new();
+            n.appname(&app.package_info().name).summary(&title).body(&body);
             if waits {
-                cmd.args(["--action", "default=열기", "--wait"]);
+                n.action("default", "열기");
             }
-            let out = cmd.arg("--").arg(&title).arg(&body).stdin(Stdio::null()).stderr(Stdio::null()).output();
-            if let (Ok(out), Some(tag)) = (out, tag) {
-                if String::from_utf8_lossy(&out.stdout).trim() == "default" {
-                    clicked(&app, &tag);
-                }
+            if let (Ok(shown), Some(tag)) = (n.show(), tag) {
+                shown.wait_for_action(|action| {
+                    if action == "default" {
+                        clicked(&app, &tag);
+                    }
+                });
             }
         }
     };

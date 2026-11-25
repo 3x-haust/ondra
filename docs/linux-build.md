@@ -39,7 +39,8 @@ If `CARGO_TARGET_DIR` is set, look under that directory instead of `src-tauri/ta
 - **Secrets and provider keys** go to the desktop's Secret Service (GNOME Keyring, KWallet) through `secret-tool` from libsecret. Both packages depend on it (`libsecret-tools` on Debian/Ubuntu, `libsecret` on Fedora), and on `curl` and `git`. Without an unlocked keyring, Settings › 시크릿 can't save anything.
 - **Opening links, files and folders** uses `xdg-open`. **Revealing a file** asks the file manager over D-Bus and falls back to opening its folder.
 - **Open in terminal** uses the first terminal it finds: GNOME Terminal, Konsole, Xfce Terminal, Ptyxis, kitty, Alacritty, WezTerm, xterm, then `x-terminal-emulator`.
-- **Notifications** use `notify-send`. Sounds use `paplay`.
+- **Notifications** go to the desktop's notification service over D-Bus. Sounds use `paplay`.
+- **One copy runs at a time.** Starting Ondra again brings the open window to the front.
 - **Keep awake** (Settings › 연결) holds a `systemd-inhibit` lock while Ondra is open.
 
 The browser tool, app control, dictation and the iOS simulator need macOS helpers and are not part of the Linux build. Android emulators use the SDK in `$ANDROID_HOME` or `~/Android/Sdk`.
