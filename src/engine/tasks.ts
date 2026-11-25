@@ -34,6 +34,7 @@ import { checksCovering, checksFor, checksOwed, loadLocalChecks } from "./localC
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
+import { recallNow, stepThings } from "./stepRecall";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
 import { hostedToolEvents } from "./hostedSearch";
@@ -43,6 +44,8 @@ import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, ma
 const KIND_IDS: unknown[] = KINDS.map((k) => k.id);
 
 interface Run {
+  /** what it turned to this session (apps, devices, sites, programs, steps): memory about each is looked up once */
+  things?: Set<string>;
   /** searches the provider ran itself, still open (hostedSearch.ts) */
   hosted?: Set<string>;
   text: string;
@@ -542,7 +545,11 @@ function applyBlocks(t: Task, items: any[], run: Run) {
     switch (b.type) {
       case "now":
         // a status line in Chinese (a model slipping language) is dropped, not shown
-        if (b.text && !chineseOnly(String(b.text))) t.now = t.intent = String(b.text).slice(0, 140);
+        if (b.text && !chineseOnly(String(b.text))) {
+          t.now = t.intent = String(b.text).slice(0, 140);
+          const said = t.now;
+          queueMicrotask(() => recallOnTheWay(t.id, run, [said], false));
+        }
         run.quietTools = 0;
         run.planMovedAt = Date.now();
         if (b.step !== undefined) moveTo(t.plan, b.step);
@@ -816,6 +823,39 @@ function heard(id: string, gone: { text: string; from?: string }[]) {
     if (!x.pending?.length) x.pending = undefined;
   });
   markTaken(gone.flatMap((g) => (g.from ? [g.from] : [])));
+}
+
+/**
+ * Memory about what the job just turned to (a step, or an app, device, site or program), sent to it
+ * once when there is some it wasn't given. Names are looked up once a session; a piece never twice.
+ */
+function recallOnTheWay(id: string, run: Run, about: string[], names: boolean) {
+  const seen = (run.things ??= new Set());
+  const todo = about.filter((x) => !seen.has(x.toLowerCase()));
+  if (!todo.length) return;
+  for (const x of todo) seen.add(x.toLowerCase());
+  const t0 = taskById(id);
+  // a review lens checks the memory it was given, nothing more
+  if (!t0 || t0.lens) return;
+  const query = todo.join(" ");
+  void (async () => {
+    await prepareQuery(query, 800);
+    const t = taskById(id);
+    if (!t || runs.get(id) !== run || !run.streaming) return;
+    const hits = recallNow(t, query, names);
+    if (!hits.length) return;
+    markUsed(hits.map((m) => m.id));
+    const more = hits.length > 1 ? ` 외 ${hits.length - 1}개` : "";
+    updateTask(id, (x) => {
+      x.recalled = [...(x.recalled ?? []), ...hits.map((m) => m.id)];
+      push(x, { kind: "note", text: `기억 불러옴 · ${hits[0].text.slice(0, 80)}${more}` });
+    });
+    const what = names ? todo.join(", ") : "the step you're on";
+    void request(agentOf(id), {
+      type: "steer",
+      message: `(Ondra) From the user's memory, about ${what} (not in what you were given at the start):\n${memoryLines(hits).join("\n")}\nFollow what applies to this work; ignore what doesn't.`,
+    }).catch(() => {});
+  })();
 }
 
 /** A user message started in the engine: a queued one (steer, follow-up) the model now takes. */
@@ -1652,6 +1692,7 @@ function handlers(id: string, run: Run) {
           run.refused = undefined;
           if (run.replanCalls !== undefined && ++run.replanCalls >= REPLAN_CALLS) askReplan(id, run);
           const tool = describeTool(ev.toolName, ev.args);
+          recallOnTheWay(id, run, stepThings(ev.toolName, ev.args), true);
           updateTask(id, (t) => {
             const { now, ...call } = tool;
             // reading a picture is looking at it: the row shows it ("이미지 1개 확인함")

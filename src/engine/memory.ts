@@ -463,7 +463,7 @@ export function siteWords(text: string): string[] {
 export function recall(
   list: Memory[],
   query: string,
-  opts: { budget?: number; max?: number; folder?: (m: Memory) => boolean; links?: boolean; /** only pieces clearly about the query */ strict?: boolean; /** strict: what the work is about (its title, topic); a piece must share a word with it */ about?: string } = {},
+  opts: { budget?: number; max?: number; folder?: (m: Memory) => boolean; links?: boolean; /** only pieces clearly about the query */ strict?: boolean; /** strict: what the work is about (its title, topic); a piece must share a word with it */ about?: string; /** strict: how many rare query words a piece must share (2; 1 for a query that is only names) */ need?: number } = {},
 ): Memory[] {
   const pool = list;
   if (!pool.length) return [];
@@ -500,7 +500,7 @@ export function recall(
     const sem = sim === undefined || got.length < 4 ? 0 : Math.min(3, Math.max(0, (sim - mu) / sd - 1.2) * 1.5);
     // strict: one shared common word isn't enough; the words or the meaning must match.
     // Meaning scores are relative (some piece always stands out), so they count only on topic
-    const hit = opts.strict ? onTopic && (rare >= 2 || sem > 0.8) : bm > 0 || sem > 0 || local;
+    const hit = opts.strict ? onTopic && (rare >= (opts.need ?? 2) || sem > 0.8) : bm > 0 || sem > 0 || local;
     // + importance, + how often it came up again, + recency (30-day half-life)
     const seen = Math.min(0.3, 0.1 * ((m.seen ?? 1) - 1));
     const score = (bm + sem + (hit ? 0.35 * ((m.importance ?? 3) / 5) + 0.25 * fresh + seen + (local ? 0.6 : 0) : 0)) * (0.45 + 0.55 * fresh);
