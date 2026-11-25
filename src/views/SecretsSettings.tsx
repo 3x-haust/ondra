@@ -39,15 +39,14 @@ export function SecretsSettings() {
   const [scope, setScope] = createSignal(GLOBAL);
   const project = () => projects().find((p) => p.id === scope());
   // another Mac's project: its names as that Mac last said them
-  const [far, setFar] = createSignal<Record<string, FarSecrets>>({});
+  const [far, setFar] = createSignal<Record<string, string[]>>({});
   const farOf = () => splitProjectId(project()?.id);
-  const items = () => (farOf() ? (far()[scope()]?.items ?? []) : (saved().projects[scope()] ?? []));
-  const canWriteDotenv = () => !!project() && (farOf() ? far()[scope()]?.canWriteDotenv === true : /Macintosh/.test(navigator.userAgent));
+  const items = () => (farOf() ? (far()[scope()] ?? []) : (saved().projects[scope()] ?? []));
   const askFar = async <T extends FarSecrets>(fn: string, arg: unknown): Promise<T> => {
     const at = farOf()!;
     const id = scope();
     const r = await viaHost<T>(at.host, fn, [arg]);
-    setFar((m) => ({ ...m, [id]: fn === "secretSync" ? r : { ...m[id], ...r } }));
+    setFar((m) => ({ ...m, [id]: r.items ?? [] }));
     return r;
   };
   // picked: that Mac takes in its .env files first, as this page does here when it opens
@@ -65,7 +64,7 @@ export function SecretsSettings() {
     return pl.project ? `${p?.name ?? t("지운 프로젝트")}${dir ? `/${dir}` : ""}` : t("모든 작업");
   };
   const groupKey = (g: SecretGroup) => g.places.map((pl) => `${pl.project ?? ""}/${pl.item}`).join("|");
-  const count = (id: string) => (splitProjectId(id) ? far()[id]?.items : saved().projects[id])?.length ?? 0;
+  const count = (id: string) => (splitProjectId(id) ? far()[id] : saved().projects[id])?.length ?? 0;
   const [name, setName] = createSignal("");
   const [value, setValue] = createSignal("");
   const [toEnv, setToEnv] = createSignal(true);
@@ -93,11 +92,10 @@ export function SecretsSettings() {
       const p = project();
       const replaced = items().includes(clean());
       const at = farOf();
-      const writeDotenv = canWriteDotenv() && toEnv();
       if (at) {
         // .env isn't ignored by git there: asked here first, as for this Mac's
-        if ((await askFar("secretSet", { project: at.id, name: clean(), value: value(), writeDotenv, addIgnore })).notIgnored) return void setAskIgnore(true);
-      } else mutate(await secretSet({ name: clean(), value: value(), project: p?.id, folder: p?.folder, writeDotenv, addIgnore }));
+        if ((await askFar("secretSet", { project: at.id, name: clean(), value: value(), writeDotenv: toEnv(), addIgnore })).notIgnored) return void setAskIgnore(true);
+      } else mutate(await secretSet({ name: clean(), value: value(), project: p?.id, folder: p?.folder, writeDotenv: !!p && toEnv(), addIgnore }));
       toast(replaced ? t("{name}을(를) 바꿨어요", { name: clean() }) : t("{name}을(를) 저장했어요", { name: clean() }));
       setName("");
       setValue("");
@@ -151,9 +149,6 @@ export function SecretsSettings() {
       </PageHead>
 
       <div class="set-group">
-        <Show when={!farOf() && /Windows/.test(navigator.userAgent)}>
-          <p class="set-note">{t("이 PC의 시크릿과 직접 연결 키는 Windows 사용자 계정으로 암호화해요. 일반 계정의 로그인 토큰은 엔진의 auth.json에 저장되며 이 보호를 받지 않아요.")}</p>
-        </Show>
         <Show when={scope() === GLOBAL}>
           <For each={groups()} fallback={<div class="empty-line">{t("없어요")}</div>}>
             {(g) => (
@@ -193,16 +188,13 @@ export function SecretsSettings() {
         <form class="set-row sec-add" onSubmit={(e) => (e.preventDefault(), save())}>
           <input class="input sec-name" placeholder="NAME" aria-label={t("이름")} autocomplete="off" spellcheck={false} value={name()} onInput={(e) => (setName(e.currentTarget.value), setAskIgnore(false))} />
           <input class="input sec-value" type="password" placeholder={t("값")} aria-label={t("값")} autocomplete="off" value={value()} onInput={(e) => setValue(e.currentTarget.value)} />
-          <Show when={canWriteDotenv()}>
+          <Show when={project()}>
             <label class="check sec-env" title={t("Ondra 밖에서 실행해도 같은 값이 쓰여요")}>
               <input type="checkbox" checked={toEnv()} onChange={(e) => (setToEnv(e.currentTarget.checked), setAskIgnore(false))} />.env
             </label>
           </Show>
           <button class="btn primary sm" type="submit" disabled={busy() || !clean() || !value()}>{t("추가")}</button>
         </form>
-        <Show when={project() && !canWriteDotenv()}>
-          <p class="set-note">{t("이 프로젝트의 .env에는 복사하지 않아요. 기존 .env 파일은 암호화되지 않아요.")}</p>
-        </Show>
         <Show when={askIgnore()}>
           <div class="set-row sec-warn">
             <Icon name="alert" size={14} />

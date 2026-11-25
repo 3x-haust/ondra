@@ -241,7 +241,7 @@ export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
 
 /** One of this Mac's projects' secrets, for Settings › 시크릿 on the Mac that added it: its saved names
  *  (and how many came in from its .env), never a value. A value comes this way only to be saved. */
-export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean; canWriteDotenv?: boolean }
+export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean }
 const projectFolder = (id: unknown) => {
   const p = typeof id === "string" ? projectById(id) : undefined;
   if (!p || p.host) throw new Error("그 프로젝트가 이 Mac에 없어요");
@@ -255,7 +255,7 @@ export const secretCalls = {
     const p = projectFolder(project);
     const r = await secretSync([[p.id, p.folder]]);
     noteSecrets(r.saved, state.projects ?? []);
-    return { items: namesOf(r.saved, p.id), added: r.added.length, canWriteDotenv: typeof navigator !== "undefined" && /Macintosh/.test(navigator.userAgent) };
+    return { items: namesOf(r.saved, p.id), added: r.added.length };
   },
   secretSet: async (o: { project: string; name: string; value: string; writeDotenv?: boolean; addIgnore?: boolean }): Promise<FarSecrets> => {
     const p = projectFolder(o?.project);

@@ -194,12 +194,7 @@ describe("a project's secrets, asked from the Mac that added it", () => {
 
   it("say only that project's names, never a value or another's", async () => {
     vi.spyOn(native, "secretSync").mockResolvedValue({ saved: saved({ repo: ["API_KEY"], other: ["SECRET"] }), added: ["API_KEY"] });
-    for (const [userAgent, canWriteDotenv] of [["Windows NT", false], ["Macintosh", true]] as const) {
-      vi.stubGlobal("navigator", { userAgent });
-      try {
-        await expect(secretCalls.secretSync("repo")).resolves.toEqual({ items: ["API_KEY"], added: 1, canWriteDotenv });
-      } finally { vi.unstubAllGlobals(); }
-    }
+    await expect(secretCalls.secretSync("repo")).resolves.toEqual({ items: ["API_KEY"], added: 1 });
     expect(native.secretSync).toHaveBeenCalledWith([["repo", "/repo"]]);
   });
 
