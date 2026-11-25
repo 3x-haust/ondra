@@ -42,4 +42,14 @@ describe("computer-use off-screen display", () => {
     expect(keeper).toMatch(/CGWarpMouseCursorPosition/);
     expect(keeper).toMatch(/pullBackWindows\(of:/);
   });
+
+  // Off the bottom-right corner, a window dragged into that corner landed on it, out of sight,
+  // and apps saw the pointer there before it was put back.
+  it("sits above the user's screens, where no window reaches, and no app sees the pointer on it", () => {
+    const ensure = body(swift, "func ensure(hold: Bool = false) -> Bool {");
+    expect(ensure).toMatch(/var corner = CGPoint\(x: screens\.map\(\\\.maxX\)\.max\(\)!, y: screens\.map\(\\\.minY\)\.min\(\)! - /);
+    const keeper = swift.slice(swift.indexOf("func keepUserOffBackdrop() -> Never"), swift.indexOf("func pullBackWindows("));
+    expect(keeper).toMatch(/tapCreate\(tap: \.cghidEventTap, place: \.headInsertEventTap, options: \.defaultTap/);
+    expect(keeper).toMatch(/event\.location = back/);
+  });
 });
