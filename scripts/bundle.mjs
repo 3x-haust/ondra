@@ -25,6 +25,11 @@ if (process.platform === "win32" || process.env.TAURI_ENV_TARGET_TRIPLE?.include
   bundleWindows(root);
   process.exit(0);
 }
+if (process.platform === "linux" || process.env.TAURI_ENV_TARGET_TRIPLE?.includes("-linux-")) {
+  const { bundleLinux } = await import("./bundle-linux.mjs");
+  bundleLinux(root);
+  process.exit(0);
+}
 
 const tauri = join(root, "src-tauri");
 const binDir = join(tauri, "binaries");
