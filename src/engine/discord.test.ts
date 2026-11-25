@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, openThreads, closeThreads, channelOf, askedWhere, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, openThreads, closeThreads, foldThreads, headLine, channelOf, askedWhere, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -761,7 +761,9 @@ describe("the whole way round", () => {
     setState("tasks", [{ id: "t1", title: "배포 준비", status: "running", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     // its own thread, named after it, in the channel it was asked in
-    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/threads", expect.objectContaining({ name: "배포 준비" })), { timeout: 5000 });
+    // hung from a head line in the channel, so the work folds under it
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages/b1/threads", expect.objectContaining({ name: "배포 준비" })), { timeout: 5000 });
+    expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages", { content: "⏳ **배포 준비**", allowed_mentions: { parse: [] } });
     await vi.waitFor(() => expect(taskById("t1")?.agent).toMatchObject({ thread: "th1", threadIn: "c1" }));
     expect(channelOf("t1")).toBe("th1");
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
@@ -787,6 +789,30 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(said.thrown).toHaveLength(2), { timeout: 5000 });
     expect(said.thrown[1].note).toContain('the thread of your job t1 "배포 준비"');
   }, 20_000);
+
+  it("an ended job's head line in the channel says how it ended; its work stays folded in the thread", async () => {
+    await ready();
+    const api = vi.spyOn(native, "discordApi").mockResolvedValue({ id: "x" });
+    const now = Date.now();
+    const head = { channel: "c1", thread: "th5", threadIn: "c1", head: "h5", folded: false };
+    setState("tasks", [
+      { id: "t5", title: "로그 정리", status: "done", finishedAt: now - 30_000, entries: [], digest: { line: "오래된 로그 3GB를 지웠어요", text: "", at: now }, agent: head } as never,
+      { id: "t6", title: "요약 기다림", status: "done", finishedAt: now - 30_000, entries: [], agent: { ...head, thread: "th6", head: "h6" } } as never,
+      { id: "t7", title: "안 끝남", status: "running", entries: [], agent: { ...head, thread: "th7", head: "h7" } } as never,
+    ]);
+    await foldThreads(now);
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h5", { content: "✅ **로그 정리**\n오래된 로그 3GB를 지웠어요", allowed_mentions: { parse: [] } });
+    expect(taskById("t5")?.agent?.folded).toBe(true);
+    // no digest yet: it waits for one a little, then says what it has
+    expect(api).not.toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h6", expect.anything());
+    expect(api).not.toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h7", expect.anything());
+    await foldThreads(now + 4 * 60_000);
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h6", { content: "✅ **요약 기다림**", allowed_mentions: { parse: [] } });
+    api.mockClear();
+    await foldThreads(now + 5 * 60_000);
+    expect(api).not.toHaveBeenCalled();
+    expect(headLine({ id: "t8", title: "빌드", status: "failed", error: "서명 키가 없어요", entries: [] } as never)).toBe("❌ **빌드**\n서명 키가 없어요");
+  });
 
   it("a job's thread is put away a while after it ended; a job asked in a DM works in the DM", async () => {
     await ready();

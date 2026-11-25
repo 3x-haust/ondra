@@ -219,7 +219,7 @@ export async function startAgent() {
     sweeping = true;
     void openThreads()
       .catch(() => {})
-      .then(() => (postQuestions(), void postApprovals(), void unpinAnswered(), void closeThreads(), void scout(), void workTick()))
+      .then(() => (postQuestions(), void postApprovals(), void unpinAnswered(), void foldThreads(), void closeThreads(), void scout(), void workTick()))
       .finally(() => (sweeping = false));
   }, 3000);
   // a turn into someone that outlived the app pops back now, else when its time is up
@@ -302,7 +302,7 @@ export const OWNER_WAYS = `How you work here (every user's; their own ways, belo
 - People, servers and lessons go in your personal memory, not the work memory.`;
 
 /** How the work it starts shows on Discord: on by default, the where and whether is its own call. */
-export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps (and the pictures it puts in its words) shows on Discord as it happens, typing on, secrets hidden; nothing about its steps is added for it, it says those itself. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). Each job gets its own thread in that place, named after it (Ondra opens it; a DM has none, there it works in the DM): its words, its questions and your end line go in the thread, and the user's words in a thread are for its job. When the work goes elsewhere, your line here just says where; your end line is said there; whether to say anything back where they asked, and what, is yours (the discord tool posts anywhere). "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
+export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps (and the pictures it puts in its words) shows on Discord as it happens, typing on, secrets hidden; nothing about its steps is added for it, it says those itself. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). Each job gets its own thread in that place, named after it, hung from a head line Ondra posts there ("⏳ title", turned into how it ended and what came of it once it ends, its work folded in the thread under it; a DM has none, there it works in the DM): its words, its questions and your end line go in the thread, and the user's words in a thread are for its job. The head line already tells that place how it ended: don't say it there again. When the work goes elsewhere, your line here just says where; your end line is said there; whether to say anything back where they asked, and what, is yours (the discord tool posts anywhere). "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
@@ -1285,8 +1285,11 @@ export function channelOf(taskId: string): string | undefined {
 
 // ---- each job its own thread, as each job has its own view in the app: started from a server
 // channel, its words, questions and end go in a thread named after it, the channel keeps the talk.
-// A DM can't have threads: there it works in the DM as before. Ended a while, its thread is put
-// away (named ✅/❌ and archived), as the sidebar folds finished jobs; a word there opens it again.
+// The thread hangs from one message in the channel ("⏳ title"): once the job ends that message
+// says how it ended and what came of it, and the whole work stays folded in the thread under it,
+// as a finished job in the app shows its summary with its steps folded. A DM can't have threads:
+// there it works in the DM as before. Ended a while, its thread is put away (named ✅/❌ and
+// archived); a word there opens it again.
 const THREAD_CLOSE_AFTER = 10 * 60_000;
 const jobOpen = (t: Task) => t.status !== "done" && t.status !== "failed";
 const setJobAgent = (id: string, patch: Partial<NonNullable<Task["agent"]>>) => setState("tasks", (x) => x.id === id, "agent", (a) => ({ ...(a ?? {}), ...patch }));
@@ -1299,13 +1302,41 @@ export async function openThreads() {
     if (!a || !place || t.parentId || !jobOpen(t) || (a.thread !== undefined && a.threadIn === place)) continue;
     // a DM (no threads): where it was asked
     const dm = !servers.has(place) && place === (await dmChannel().catch(() => undefined));
-    const made = dm
-      ? undefined
-      : ((await discordApi("POST", `/channels/${place}/threads`, { name: cut(t.title || t.ask, 100), type: 11, auto_archive_duration: 1440 }).catch((e) => {
-          logError("agent", `thread: ${e instanceof Error ? e.message : String(e)}`);
-          return undefined;
-        })) as { id?: string } | undefined);
-    setJobAgent(t.id, { thread: made?.id ?? "", threadIn: place, threadClosed: false });
+    if (dm) {
+      setJobAgent(t.id, { thread: "", threadIn: place, threadClosed: false });
+      continue;
+    }
+    const name = cut(t.title || t.ask, 100);
+    const fail = (e: unknown) => (logError("agent", `thread: ${e instanceof Error ? e.message : String(e)}`), undefined);
+    const head = (await discordApi("POST", `/channels/${place}/messages`, { content: headLine(t), allowed_mentions: { parse: [] } }).catch(fail)) as { id?: string } | undefined;
+    // from its head message; a channel that won't take one gets a thread of its own
+    const made = (await (head?.id
+      ? discordApi("POST", `/channels/${place}/messages/${head.id}/threads`, { name, auto_archive_duration: 1440 })
+      : discordApi("POST", `/channels/${place}/threads`, { name, type: 11, auto_archive_duration: 1440 })
+    ).catch(fail)) as { id?: string } | undefined;
+    setJobAgent(t.id, { thread: made?.id ?? "", threadIn: place, threadClosed: false, ...(made?.id && head?.id ? { head: head.id, folded: false } : {}) });
+  }
+}
+
+/** a job's head line in the channel: what it is while it works; how it ended and what came of it once it has */
+export function headLine(t: Task): string {
+  const title = cut(t.title || t.ask, 120);
+  if (jobOpen(t)) return `⏳ **${title}**`;
+  const came = t.digest?.line || t.summary || (t.status === "failed" ? t.error : "") || "";
+  return cut(`${t.status === "failed" ? "❌" : "✅"} **${title}**${came ? `\n${came}` : ""}`, 1900);
+}
+
+/** A digest is written a little after a job ends: its head waits for it this long, then says what it has. */
+const HEAD_WAITS = 3 * 60_000;
+
+/** Ended jobs: their head message in the channel says how it ended, the work stays folded in the thread. */
+export async function foldThreads(now = Date.now()) {
+  for (const t of state.tasks) {
+    const a = t.agent;
+    if (!a?.head || a.folded || !a.threadIn || t.parentId || jobOpen(t)) continue;
+    if (!t.digest && (t.finishedAt ?? now) > now - HEAD_WAITS) continue;
+    setJobAgent(t.id, { folded: true });
+    await discordApi("PATCH", `/channels/${a.threadIn}/messages/${a.head}`, { content: headLine(t), allowed_mentions: { parse: [] } }).catch(() => {});
   }
 }
 
