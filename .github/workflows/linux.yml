@@ -81,6 +81,7 @@ jobs:
           sha256sum "$deb" "$rpm"
 
       - name: Use the browser tool
+        timeout-minutes: 10
         run: |
           # a password saved the way a user saves one (the keyring), read by the installed app
           cat > "$RUNNER_TEMP/browser.sh" <<'EOF'

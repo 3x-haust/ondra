@@ -23,10 +23,11 @@ server=$!
 trap '"$bin/ondra-browser$exe" --session smoke close >/dev/null 2>&1 || true; kill $server 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8765/login.html && break; sleep 0.5; done
 
+# each step is quick; a step still running after a minute is waiting on a pipe a daemon holds
 export ONDRA_BROWSER_SESSION=smoke ONDRA_BROWSER_KEYCHAIN=$(native "$bin/ondra$exe") BROWSE_BIN=$(native "$bin/ondra-browser$exe") APP_SCRATCH_DIR=$(native "$tmp")
-"$browse" open http://127.0.0.1:8765/login.html | tee "$tmp/open.txt"
+timeout 60 "$browse" open http://127.0.0.1:8765/login.html | tee "$tmp/open.txt"
 grep -q 'textbox "Email"' "$tmp/open.txt"
-"$bin/ondra-browser$exe" --session smoke auth login 127.0.0.1 --credential-provider keychain --no-navigate --url http://127.0.0.1:8765/login.html
-out=$("$bin/ondra-browser$exe" --session smoke get text '#out' | tr -d '\r')
+timeout 60 "$bin/ondra-browser$exe" --session smoke auth login 127.0.0.1 --credential-provider keychain --no-navigate --url http://127.0.0.1:8765/login.html
+out=$(timeout 60 "$bin/ondra-browser$exe" --session smoke get text '#out' | tr -d '\r')
 echo "$out"
 [ "$out" = "sent ci@example.com 9" ] || { echo "the keychain sign-in did not fill the form"; exit 1; }

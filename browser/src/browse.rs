@@ -1259,7 +1259,27 @@ fn cmd_shot(argv: &[String]) {
     println!("saved {file}");
 }
 
+/// Windows hands a child every inheritable handle (rust-lang/rust#38227): ondra-browser would
+/// pass our stdout on to the session daemon it starts, and whoever reads our output would wait
+/// for that daemon to exit.
+#[cfg(windows)]
+fn keep_std_handles_to_ourselves() {
+    use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE_FLAG_INHERIT};
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+    for h in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: our own standard handles; only their inherit flag changes.
+        unsafe {
+            let handle = GetStdHandle(h);
+            if !handle.is_null() {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    keep_std_handles_to_ourselves();
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.is_empty() || ["-h", "--help", "help"].contains(&argv[0].as_str()) {
         println!("{DOC}");

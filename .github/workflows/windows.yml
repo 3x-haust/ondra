@@ -115,6 +115,7 @@ jobs:
           }
 
       - name: Use the browser tool
+        timeout-minutes: 10
         shell: bash
         run: |
           # a password saved the way a user saves one (Credential Manager), read by the installed app
