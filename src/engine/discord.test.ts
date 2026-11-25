@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import type { DiscordEvent, DiscordInteraction, DiscordMessage } from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { freshState, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision } from "../state/types";
 
 const said = vi.hoisted(() => ({ hook: undefined as undefined | ((id: string) => void), endNote: undefined as undefined | ((t: { id: string; parentId?: string }) => string | undefined), thrown: [] as { text: string; space: string; note?: string; project?: string }[], prompts: [] as string[], answer: "" }));
@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, openThreads, closeThreads, channelOf, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -751,32 +751,61 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(native.discordInteractionReply).toHaveBeenCalledWith("i3", expect.objectContaining({ content: "다 돌고 있어" })));
   });
 
-  it("a job's question is posted there with its choices as buttons, and a number answers it", async () => {
+  it("a job's question is posted in its own thread with its choices as buttons, and a number answers it", async () => {
     said.answer = "";
     await ready();
+    vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path.endsWith("/threads") ? { id: "th1" } : { id: "b1" }));
     emit({ kind: "message", message: msg({ id: "m1", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 배포 준비해" }) });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     setState("captain", (m) => m.id === "reply1", { pending: false, reply: "시작했어", routes: [{ kind: "new", taskId: "t1" }] });
-    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
+    setState("tasks", [{ id: "t1", title: "배포 준비", status: "running", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
+    // its own thread, named after it, in the channel it was asked in
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/threads", expect.objectContaining({ name: "배포 준비" })), { timeout: 5000 });
+    await vi.waitFor(() => expect(taskById("t1")?.agent).toMatchObject({ thread: "th1", threadIn: "c1" }));
+    expect(channelOf("t1")).toBe("th1");
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages", expect.objectContaining({ content: "❓ 배포 준비\n어디에 먼저 올릴까요?" })), { timeout: 5000 });
-    const body = vi.mocked(native.discordApi).mock.calls[0][2] as any;
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/th1/messages", expect.objectContaining({ content: "❓ 배포 준비\n어디에 먼저 올릴까요?" })), { timeout: 5000 });
+    const body = vi.mocked(native.discordApi).mock.calls.find((c) => c[0] === "POST" && c[1] === "/channels/th1/messages")![2] as any;
     expect(body.components[0].components.map((b: any) => [b.label, b.custom_id])).toEqual([["스테이징", "ondra:pick:d5:a"], ["운영", "ondra:pick:d5:b"], ["직접 답하기", "ondra:own:d5"]]);
-    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PUT", "/channels/c1/messages/pins/b1"));
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PUT", "/channels/th1/messages/pins/b1"));
     const tasks = await import("./tasks");
     const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
-    emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
+    emit({ kind: "message", message: msg({ id: "m2", channel: "th1", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d5", "a"));
     expect(said.thrown).toHaveLength(1);
     // in words, too
     setState("decisions", [{ id: "d6", taskId: "t1", at: 2, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(vi.mocked(native.discordApi).mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/c1/messages")).toHaveLength(2), { timeout: 5000 });
+    await vi.waitFor(() => expect(vi.mocked(native.discordApi).mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/th1/messages")).toHaveLength(2), { timeout: 5000 });
     said.answer = "b";
-    emit({ kind: "message", message: msg({ id: "m3", author: { id: OWNER, name: "성윤", bot: false }, content: "그냥 운영으로 바로 가자" }) });
+    emit({ kind: "message", message: msg({ id: "m3", channel: "th1", author: { id: OWNER, name: "성윤", bot: false }, content: "그냥 운영으로 바로 가자" }) });
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d6", "b"));
     expect(said.thrown).toHaveLength(1);
-  }, 15_000);
+    // the user's other words in its thread go to main as that job's
+    said.answer = "";
+    emit({ kind: "message", message: msg({ id: "m4", channel: "th1", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 로그도 같이 봐줘" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2), { timeout: 5000 });
+    expect(said.thrown[1].note).toContain('the thread of your job t1 "배포 준비"');
+  }, 20_000);
+
+  it("a job's thread is put away a while after it ended; a job asked in a DM works in the DM", async () => {
+    await ready();
+    const api = vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path === "/users/@me/channels" ? { id: "dm1" } : { id: "x" }));
+    const now = Date.now();
+    setState("tasks", [
+      { id: "t2", title: "로그 정리", status: "done", finishedAt: now - 11 * 60_000, entries: [], agent: { channel: "c1", thread: "th2", threadIn: "c1" } } as never,
+      { id: "t3", title: "방금 끝남", status: "failed", finishedAt: now - 60_000, entries: [], agent: { channel: "c1", thread: "th3", threadIn: "c1" } } as never,
+      { id: "t4", title: "DM 작업", status: "running", entries: [], agent: { channel: "dm1" } } as never,
+    ]);
+    await closeThreads(now);
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/th2", { name: "✅ 로그 정리", archived: true });
+    expect(api).not.toHaveBeenCalledWith("PATCH", "/channels/th3", expect.anything());
+    expect(taskById("t2")?.agent?.threadClosed).toBe(true);
+    await openThreads();
+    expect(api).not.toHaveBeenCalledWith("POST", "/channels/dm1/threads", expect.anything());
+    expect(taskById("t4")?.agent).toMatchObject({ thread: "", threadIn: "dm1" });
+    expect(channelOf("t4")).toBe("dm1");
+  });
 
   it("a question already asked on Discord isn't asked again (after a restart too)", async () => {
     said.answer = "";

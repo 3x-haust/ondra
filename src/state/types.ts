@@ -280,7 +280,18 @@ export interface Task {
    *  and its end and questions go back to `channel` on Discord. While it works, what it says and does
    *  shows in `room` (the asking channel unless the agent picked another, e.g. the project's), unless
    *  the agent chose to keep it `quiet` or to leave pictures out (`shots: false`) */
-  agent?: { channel?: string; room?: string; quiet?: boolean; shots?: boolean };
+  agent?: {
+    channel?: string;
+    room?: string;
+    quiet?: boolean;
+    shots?: boolean;
+    /** its own thread on Discord (opened in its room or channel, `threadIn`): its words, questions and end go
+     *  there, as a job has its own view in the app; "" where none can be opened (a DM) */
+    thread?: string;
+    threadIn?: string;
+    /** its thread was put away once it had ended a while (named ✅/❌ and archived) */
+    threadClosed?: boolean;
+  };
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */

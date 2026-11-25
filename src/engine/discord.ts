@@ -37,7 +37,7 @@ import {
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { readWays, waysPath } from "./agentWays";
-import { workTick } from "./workLog";
+import { jobChannel, workTick } from "./workLog";
 import { expand, isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
@@ -212,7 +212,16 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(() => (postQuestions(), void postApprovals(), void unpinAnswered(), void scout(), void workTick()), 3000);
+  // a job's thread first: its questions and words go there from the start
+  let sweeping = false;
+  sweep ??= setInterval(() => {
+    if (sweeping) return;
+    sweeping = true;
+    void openThreads()
+      .catch(() => {})
+      .then(() => (postQuestions(), void postApprovals(), void unpinAnswered(), void closeThreads(), void scout(), void workTick()))
+      .finally(() => (sweeping = false));
+  }, 3000);
   // a turn into someone that outlived the app pops back now, else when its time is up
   keepTime();
   setStatus({ state: "connecting" });
@@ -293,7 +302,7 @@ export const OWNER_WAYS = `How you work here (every user's; their own ways, belo
 - People, servers and lessons go in your personal memory, not the work memory.`;
 
 /** How the work it starts shows on Discord: on by default, the where and whether is its own call. */
-export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps (and the pictures it puts in its words) shows on Discord as it happens, typing on, secrets hidden; nothing about its steps is added for it, it says those itself. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). When the work goes elsewhere, your line here just says where; your end line is said there; whether to say anything back where they asked, and what, is yours (the discord tool posts anywhere). "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
+export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps (and the pictures it puts in its words) shows on Discord as it happens, typing on, secrets hidden; nothing about its steps is added for it, it says those itself. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). Each job gets its own thread in that place, named after it (Ondra opens it; a DM has none, there it works in the DM): its words, its questions and your end line go in the thread, and the user's words in a thread are for its job. When the work goes elsewhere, your line here just says where; your end line is said there; whether to say anything back where they asked, and what, is yours (the discord tool posts anywhere). "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
@@ -1061,7 +1070,10 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const asking = open
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
-  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}), ...(m.interaction ? { interaction: m.interaction } : {}) } });
+  // a job's own thread: words there are about that job, as words typed in its view in the app
+  const job = threadJob(m.channel);
+  const inThread = job ? `This channel is the thread of your job ${job.id} "${job.title}" (${job.status}). Their words here are for that job, as if typed in its view: pass them on to it (an append; one that ended carries on) unless they plainly ask you something else.` : "";
+  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, inThread, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}), ...(m.interaction ? { interaction: m.interaction } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -1268,8 +1280,46 @@ export function channelOf(taskId: string): string | undefined {
   const t = taskById(taskId);
   // where it works (the project's channel it picked) before where it was asked
   const a = t?.agent ?? (t?.parentId ? taskById(t.parentId)?.agent : undefined);
-  return a?.room || a?.channel;
+  return jobChannel(a);
 }
+
+// ---- each job its own thread, as each job has its own view in the app: started from a server
+// channel, its words, questions and end go in a thread named after it, the channel keeps the talk.
+// A DM can't have threads: there it works in the DM as before. Ended a while, its thread is put
+// away (named ✅/❌ and archived), as the sidebar folds finished jobs; a word there opens it again.
+const THREAD_CLOSE_AFTER = 10 * 60_000;
+const jobOpen = (t: Task) => t.status !== "done" && t.status !== "failed";
+const setJobAgent = (id: string, patch: Partial<NonNullable<Task["agent"]>>) => setState("tasks", (x) => x.id === id, "agent", (a) => ({ ...(a ?? {}), ...patch }));
+
+export async function openThreads() {
+  if (!me) return;
+  for (const t of state.tasks) {
+    const a = t.agent;
+    const place = a?.room || a?.channel;
+    if (!a || !place || t.parentId || !jobOpen(t) || (a.thread !== undefined && a.threadIn === place)) continue;
+    // a DM (no threads): where it was asked
+    const dm = !servers.has(place) && place === (await dmChannel().catch(() => undefined));
+    const made = dm
+      ? undefined
+      : ((await discordApi("POST", `/channels/${place}/threads`, { name: cut(t.title || t.ask, 100), type: 11, auto_archive_duration: 1440 }).catch((e) => {
+          logError("agent", `thread: ${e instanceof Error ? e.message : String(e)}`);
+          return undefined;
+        })) as { id?: string } | undefined);
+    setJobAgent(t.id, { thread: made?.id ?? "", threadIn: place, threadClosed: false });
+  }
+}
+
+export async function closeThreads(now = Date.now()) {
+  for (const t of state.tasks) {
+    const a = t.agent;
+    if (!a?.thread || a.threadClosed || t.parentId || jobOpen(t) || (t.finishedAt ?? now) > now - THREAD_CLOSE_AFTER) continue;
+    setJobAgent(t.id, { threadClosed: true });
+    await discordApi("PATCH", `/channels/${a.thread}`, { name: cut(`${t.status === "failed" ? "❌" : "✅"} ${t.title || t.ask}`, 100), archived: true }).catch(() => {});
+  }
+}
+
+/** a job whose thread this is */
+const threadJob = (channel: string) => state.tasks.find((t) => t.agent?.thread === channel && !t.parentId);
 
 /** An alarm the agent was asked for rings: said in that channel, to the user (a mention pings them). */
 export async function sayOnDiscord(channel: string, text: string) {

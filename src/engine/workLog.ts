@@ -30,7 +30,12 @@ const QUIET_NOTE = (min: number) =>
 export const TYPING_EVERY = 8000;
 const MAX_LINE = 1800;
 
-const roomOf = (t: Task) => t.agent?.room || t.agent?.channel;
+/** where a job of the agent speaks on Discord: its own thread (opened in the place it works), else that place (the room it was given, else where it was asked) */
+export function jobChannel(a: Task["agent"]): string | undefined {
+  const place = a?.room || a?.channel;
+  return a?.thread && a.threadIn === place ? a.thread : place;
+}
+const roomOf = (t: Task) => jobChannel(t.agent);
 const out = (s: string) => redact(s).trim();
 const ended = (t: Task) => t.status === "done" || t.status === "failed" || t.status === "paused";
 
