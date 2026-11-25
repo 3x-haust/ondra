@@ -143,9 +143,12 @@ export function cacheName(host: string, path: string, modified: number): string 
   return `${(h >>> 0).toString(36)}-${modified.toString(36)}.${ext}`;
 }
 
+/** A picked file's name in the sender's filesystem (backslashes can be part of a Mac filename). */
+export const uploadBase = (path: string, home: string) => path.split(windowsHome(home) ? /[/\\]/ : "/").pop() || "file";
+
 /** A name for a file sent to another Mac: unique, and still readable ("shot.png" stays in it). */
 export function uploadName(path: string, stamp: number, rand: string): string {
-  const base = (path.split("/").pop() ?? "file").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+/, "").slice(-80) || "file";
+  const base = (path.split("/").pop() ?? "file").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+|\.+$/g, "").slice(-80) || "file";
   return `${stamp.toString(36)}-${rand}-${base}`;
 }
 

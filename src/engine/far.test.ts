@@ -21,7 +21,7 @@ vi.mock("../lib/native", async (orig) => {
 import { askHost, tellHost } from "./hosts";
 import { farPiece, fsFiles, gitChanges, revealPath } from "../lib/native";
 import { changesIn, farError, farTerm, listFiles, onMac, revealOn, sendFiles, srcOf } from "./far";
-import { refreshEngine } from "./rpc";
+import { engine, refreshEngine } from "./rpc";
 
 beforeAll(async () => {
   // outside the app: home /Users/me
@@ -71,6 +71,17 @@ describe("attachments for another Mac", () => {
     expect(vi.mocked(farPiece)).toHaveBeenCalledTimes(2);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatch(/^\/there\/[0-9a-z]+-[0-9a-z]+-shot\.png$/);
+  });
+  it("sends a Windows attachment under its basename, not its local drive or folder", async () => {
+    const info = vi.spyOn(engine, "info", "get").mockReturnValue({ ...engine.info, home: String.raw`C:\Users\viewer` });
+    try {
+      const p = String.raw`D:\private folder\photo.png`;
+      const out = await sendFiles("Mac", [p]);
+      expect(out).toEqual([expect.stringMatching(/^\/there\/[0-9a-z]+-[0-9a-z]+-photo\.png$/)]);
+      expect(farPiece).toHaveBeenCalledWith(p, 512 << 10, 512 << 10);
+    } finally {
+      info.mockRestore();
+    }
   });
   it("can't be folders", async () => {
     await expect(sendFiles("H", ["/Users/me/dir"])).rejects.toThrow();
