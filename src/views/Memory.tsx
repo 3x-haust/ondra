@@ -22,6 +22,7 @@ import { expand } from "../engine/rpc";
 import { fsRead, memoryFolder, revealPath, revealLabel } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
 import { state } from "../state/store";
+import { inSpace as spaceKey, kept, scrollKept } from "../state/viewState";
 import type { Memory, MemoryKind, ProjectNow } from "../state/types";
 import { memoryFocus, setMemoryFocus } from "../state/ui";
 import { ago } from "../ui/bits";
@@ -131,7 +132,8 @@ export function MemoryView() {
       return { bySpace, byProject };
     },
   );
-  const [sel, setSel] = createSignal<string>("");
+  // each workspace's memory opens on what was picked there last
+  const [sel, setSel] = kept(() => spaceKey(state.space, "memory.sel"), "");
   // opened from elsewhere (context viewer, a job): select that piece; "" = the overview (내 차례's 메모리 확인)
   createEffect(() => {
     const id = memoryFocus();
@@ -173,6 +175,11 @@ export function MemoryView() {
   const names = createMemo(() => memoryFileNames(state.memory));
   const input = () => ({ spaces: mySpaces(), projects: myProjects(), memory: myMemory(), files: files(), journal: myJournal(), now: nows(), expand, names: names(), journalName: journalFileName });
   const model = createMemo(() => buildModel(input()));
+  // a piece or a job picked before and gone since: back to the overview
+  createEffect(() => {
+    const s = sel(), M = model();
+    if ((s.startsWith("m:") && !M.memById.has(s.slice(2))) || (s.startsWith("j:") && !M.entryById.has(s.slice(2)))) setSel("");
+  });
   const tree = createMemo(() => (match() ? buildModel(input(), match(), q()) : model()));
   // 지금 lights its project in the graph; versions leave the graph as it is
   const graphSel = () => {
@@ -758,7 +765,8 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
 function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: string) => void; searching: boolean }) {
   let list!: HTMLDivElement;
   const [cursor, setCursor] = createSignal<string>();
-  const [more, setMore] = createSignal<Record<string, number>>({});
+  // "{n}개 더" opened in a folder stays open
+  const [more, setMore] = kept<Record<string, number>>(() => spaceKey(state.space, "memory.more"), {});
   const isOpen = (n: TreeNode) => props.searching || (openMap()[n.key] ?? (n.key === `s:${state.space}` || !!n.open0));
   const shown = (n: TreeNode) => more()[n.key] ?? LIMIT;
   const toggle = (n: TreeNode, v = !isOpen(n)) => {
@@ -934,7 +942,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
   };
   return (
     <aside class="mt">
-      <div class="mt-list" classList={{ searching: props.searching }} ref={list} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
+      <div class="mt-list" classList={{ searching: props.searching }} ref={(el) => ((list = el), scrollKept(() => spaceKey(state.space, "memory/tree"))(el))} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
         <For each={props.model.roots} fallback={<div class="mt-none">{t("없음")}</div>}>{(n) => <Row n={n} depth={0} />}</For>
         <RemoteMemoryRows sel={props.sel} onSel={props.onSel} />
       </div>
