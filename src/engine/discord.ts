@@ -101,7 +101,7 @@ export const TRUE_ONLY = `사실처럼 말하는 건 네가 직접 보거나 확
 export const TRANSFORM = `넌 메타몽이라 누구로든 변신할 수 있어. 해 달라고 하거나 네가 하고 싶을 때, 그 사람이나 캐릭터를 찾아보고 얼굴 사진 웹 주소까지 찾은 다음 discord 도구 become으로 변신해서, 그 사람이 실제로 말하는 식대로 말해. 변신 중에 하는 말만 그 이름이랑 얼굴로 나가고 전에 한 말은 그대로야. 변신은 오래 못 가서 정한 시간이 지나면 알아서 풀리고, 누가 돌아오라고 하거나 그만하라고 하면(누가 말하든), 기술로 때리거나 세게 건드리면 그때도 펑 하고 풀려서 back으로 돌아와. 돌아오라는데 버티지 마. 채널이 허락 안 하는 데서는 얼굴은 그대로고 말투만 바뀐 반쪽 변신이 돼.`;
 
 /** How its messages are shaped: short, as a person types on Discord, in its own way. */
-export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. Each line you write goes out as its own Discord message, sent one after another as if you pressed enter after it, so a line is what you'd send at once. Lines that belong together stay one message only as a list (- items, under a line ending in ":") or a code block.`;
+export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. Each line you write goes out as its own Discord message, sent one after another as if you pressed enter after it, so a line is what you'd send at once. Lines that belong together stay one message only as a list (- items, under a line ending in ":") or a code block. A person doesn't open every message the same way: no stock opener or acknowledgement on each reply ("ㅇㅋ", "넵", "알겠어", "좋아"); look at how your last lines in this chat began and say it another way, or skip the acknowledgement and just say what you're doing or what you found.`;
 
 /** at most this many messages for one reply: what's past it goes in the last one */
 const MAX_MESSAGES = 8;
@@ -1094,7 +1094,10 @@ async function mainSaid(replyId: string) {
   const local = await localLinks(sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")));
   pics.push(...local.files);
   const opens = openRow(local.open);
-  const said = forThem(local.text.trim(), askedMsg?.text, msg.after ? taskById(msg.after)?.title : undefined);
+  // a job's end it said nothing about: the user asked for it here and would hear nothing, so its own summary
+  const ended = msg.after ? taskById(msg.after) : undefined;
+  const quiet = !local.text.trim() && !pics.length && !msg.error ? (ended?.status === "failed" ? `${ended.title} 실패: ${ended.error ?? ""}` : (ended?.summary ?? "")).trim() : "";
+  const said = forThem((local.text.trim() || quiet), askedMsg?.text, ended?.title);
   // the user's own business, or talk that moved on, in a server channel: to their DM instead
   const { text, dm } = dmOf(said);
   if (dm && servers.has(channel)) {

@@ -505,6 +505,12 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
       return await route(space, text, cwd, event);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // the engine went silent and was restarted: the same message once more on the new one,
+      // never dropped on the user to send again
+      if (attempt === 0 && msg === SILENT_ERROR) {
+        logInfo("main", `${space} sending again after the silent engine`);
+        continue;
+      }
       // the connection dropped: wait for it to come back and send again
       if (attempt < 8 && isNetError(msg)) {
         await waitOnline(attempt + 1);
@@ -680,6 +686,7 @@ function guardTurn(space: string, ev: any) {
 }
 /** an engine that has sent nothing for this long, with no command of its own running, is stuck: it is restarted */
 const MAIN_SILENT_MS = 4 * 60_000;
+export const SILENT_ERROR = "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.";
 const heardAt = new Map<string, number>();
 function watchCommands(space: string) {
   const t = turnOf.get(space);
@@ -690,7 +697,7 @@ function watchCommands(space: string) {
     const agent = agentOf(space);
     agentKill(agent);
     markDead(agent);
-    errors.set(space, "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.");
+    errors.set(space, SILENT_ERROR);
     logWarn("main", `${space} engine silent for 4 minutes: restarted`);
     settled.get(space)?.();
     return;
@@ -1018,6 +1025,15 @@ export const FORK_ENDED = [
 ].join("\n");
 
 /**
+ * The Discord agent's own chat: what it says goes to Discord, where no row shows the fork. The user
+ * asked for this work there and hears how it went only from this line, so it is never left unsaid.
+ */
+export const AGENT_ENDED = [
+  "The user asked for this work on Discord, where nothing shows this fork: your line is all they hear of it. Always say how it went, never nothing: what came out, or what failed and what is left, in a line or two as a chat message (the voice note above says how), the way you'd tell a friend you finished.",
+  FORK_ENDED.split("\n").slice(2).join("\n"),
+].join("\n");
+
+/**
  * A project's own chat is about that project's work alone: under the fork's row it shows the fork's own
  * closing answer as the fork wrote it (words, blocks, screenshots), so it's there even if main never gets
  * to speak; main adds only what that answer doesn't say.
@@ -1126,7 +1142,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (notes && notes !== sent.notes) out.push("", `# Project notes${sent.notes ? " (updated)" : ""} (left by this project's jobs: where it stands, what is left)`, notes.slice(0, 8000));
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
-  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : FORK_ENDED);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : isAgentChat(space) ? AGENT_ENDED : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
   else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, routines: (state.routines ?? []).filter((r) => r.space === sp(space) && !r.draft).map((r) => `- ${r.id} | ${r.title} | ${r.alarm ? "alarm, " : ""}${describeWhen(r.when)} | ${r.enabled ? "on" : "off"}`).join("\n"), spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
