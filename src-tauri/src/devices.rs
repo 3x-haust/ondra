@@ -335,7 +335,7 @@ pub async fn device_shutdown(platform: String, id: String, serial: Option<String
             run(Command::new("xcrun").args(["simctl", "shutdown", &id]))
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            run(Command::new(adb()).args(["-s", &s, "emu", "kill"]))
+            run(crate::engine::background_command(adb()).args(["-s", &s, "emu", "kill"]))
         }
     })
     .await
@@ -350,7 +350,7 @@ pub async fn device_delete(platform: String, id: String) -> Result<(), String> {
         } else {
             let avdmanager = sdk().join(if cfg!(windows) { "cmdline-tools/latest/bin/avdmanager.bat" } else { "cmdline-tools/latest/bin/avdmanager" });
             if avdmanager.is_file() {
-                run(Command::new(avdmanager).args(["delete", "avd", "-n", &id]))
+                run(crate::engine::background_command(avdmanager).args(["delete", "avd", "-n", &id]))
             } else {
                 // without cmdline-tools: remove the AVD folder and its .ini
                 let dir = dirs_home().join(".android/avd");
@@ -377,7 +377,7 @@ pub async fn device_shot(app: AppHandle, platform: String, id: String, serial: O
             run(Command::new("xcrun").args(["simctl", "io", &id, "screenshot", "--type=jpeg", &p]))?;
         } else {
             let s = serial.ok_or("실행 중이 아니에요")?;
-            let o = Command::new(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+            let o = crate::engine::background_command(adb()).args(["-s", &s, "exec-out", "screencap", "-p"]).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
             if !o.status.success() || o.stdout.is_empty() {
                 return Err("화면을 못 가져왔어요".into());
             }
@@ -456,12 +456,12 @@ fn release_owned(worker: &str, m: &Owned) {
         }
     } else if let Some(serial) = m.serial.as_deref() {
         // the port may belong to another emulator by now: only the one this job booted
-        let avd = within(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
+        let avd = within(crate::engine::background_command(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
         if avd.lines().next().map(str::trim) == Some(m.name.as_str()) {
-            let _ = within(Command::new(adb()).args(["-s", serial, "emu", "kill"]), 15);
+            let _ = within(crate::engine::background_command(adb()).args(["-s", serial, "emu", "kill"]), 15);
             // the emulator lets go of its files a moment after it's told to quit
             for _ in 0..20 {
-                if within(Command::new(adb()).args(["-s", serial, "get-state"]), 3).is_none_or(|s| !s.contains("device")) {
+                if within(crate::engine::background_command(adb()).args(["-s", serial, "get-state"]), 3).is_none_or(|s| !s.contains("device")) {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -509,7 +509,7 @@ fn release_in(root: &std::path::Path, keep: &[String]) -> Vec<String> {
 pub mod live;
 
 fn android_size(serial: &str) -> Option<(f64, f64)> {
-    let txt = out(Command::new(adb()).args(["-s", serial, "shell", "wm", "size"]))?;
+    let txt = out(crate::engine::background_command(adb()).args(["-s", serial, "shell", "wm", "size"]))?;
     // "Override size" wins over "Physical size"
     let line = txt.lines().find(|l| l.starts_with("Override")).or_else(|| txt.lines().find(|l| l.contains("size")))?;
     let (w, h) = line.rsplit(' ').next()?.split_once('x')?;
@@ -554,7 +554,7 @@ pub async fn device_input(
             "enter" => vec!["keyevent".into(), "66".into()],
             _ => return Err("모르는 조작이에요".into()),
         };
-        let mut cmd = Command::new(adb());
+        let mut cmd = crate::engine::background_command(adb());
         cmd.args(["-s", &s, "shell", "input"]).args(&args);
         run(&mut cmd)
     })
