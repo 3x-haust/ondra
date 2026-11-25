@@ -107,6 +107,8 @@ export default function App() {
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs().then(() => m.sweepWorktrees(true))).catch(() => {});
     startScheduler();
     startRoutines();
+    // every workspace's terminal command ("work"), made or kept in step with its folders
+    if (!location.search.includes("fixture")) void import("./engine/spaceCli").then((m) => m.ensureCommands());
     // Ondra on Discord (Settings › 에이전트), when it is on
     if (!location.search.includes("fixture")) void import("./engine/discord").then((m) => m.startAgent());
     if (!location.search.includes("fixture")) void import("./engine/remote").then((m) => m.initRemote());

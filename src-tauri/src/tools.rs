@@ -903,3 +903,192 @@ pub fn space_git_identity(app: AppHandle, space: String, home: Option<String>, n
     }
     Ok(())
 }
+
+// ───────────────── a workspace's terminal command
+// `work` (any name the user gives a space) in the user's own terminal opens a shell with that
+// space's logins, as its jobs have them: gh, git, ssh, cloud CLIs, and claude / codex configs of
+// its own, with the user's own shell files, PATH and tools otherwise. `work COMMAND …` runs one
+// command so. Like a hand-made "company shell", made by Ondra for every workspace.
+
+/** account and provider overrides a parent shell may carry: the space's own logins must win */
+const UNSET_VARS: &str = "GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN GH_HOST GH_REPO \
+ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_PROFILE CLAUDE_CODE_OAUTH_TOKEN \
+OPENAI_API_KEY CODEX_API_KEY OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_ORGANIZATION \
+GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS \
+AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN SSH_AUTH_SOCK";
+/** the first line of every launcher Ondra writes: only such a file is ever replaced or removed */
+const LAUNCHER_MARK: &str = "# Ondra workspace shell";
+
+fn real_home() -> PathBuf {
+    std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/"))
+}
+fn launcher_path(command: &str) -> PathBuf {
+    real_home().join(".local/bin").join(command)
+}
+fn sq(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+fn is_ours(p: &Path) -> bool {
+    std::fs::read_to_string(p).map(|t| t.lines().nth(1) == Some(LAUNCHER_MARK)).unwrap_or(false)
+}
+/** a name a terminal command can have, and no command of the Mac's already has */
+fn check_command(command: &str) -> Result<(), String> {
+    let ok = !command.is_empty() && command.len() <= 32 && command.starts_with(|c: char| c.is_ascii_lowercase()) && command.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_');
+    if !ok {
+        return Err("명령 이름은 영어 소문자로 시작하고 소문자·숫자·-·_만 써요".into());
+    }
+    let mine = launcher_path(command);
+    for dir in std::env::split_paths(crate::engine::user_path()) {
+        let p = dir.join(command);
+        if p.is_file() && p != mine && !is_ours(&p) {
+            return Err(format!("{command}은(는) 이미 있는 명령이에요 ({})", p.display()));
+        }
+    }
+    if mine.exists() && !is_ours(&mine) {
+        return Err(format!("{}에 Ondra가 만들지 않은 파일이 있어요", mine.display()));
+    }
+    Ok(())
+}
+
+/** The launcher's text: the space's env (as its jobs get it), then the user's own shell. */
+fn launcher_text(label: &str, space: &str, base: &Path, env: &[(String, String)], folder: &str) -> String {
+    let mut s = format!("#!/bin/zsh\n{LAUNCHER_MARK}: {label} ({space}). Ondra rewrites this file; change the workspace in Ondra.\nset -eu\nunset {UNSET_VARS}\n");
+    let mut shims = Vec::new();
+    for (k, v) in env {
+        if k == "PATH" {
+            shims.push(v.clone());
+        } else {
+            s.push_str(&format!("export {k}={}\n", sq(v)));
+        }
+    }
+    let b = |rel: &str| sq(&base.join(rel).display().to_string());
+    s.push_str(&format!(
+        "export CLAUDE_CONFIG_DIR={}\nexport CODEX_HOME={}\nexport ANTHROPIC_CONFIG_DIR={}\nexport ONDRA_CLI_SPACE={}\nexport ONDRA_CLI_LABEL={}\nexport ZDOTDIR={}\n",
+        b(".claude"),
+        b(".codex"),
+        b(".config/anthropic"),
+        sq(space),
+        sq(label),
+        b(".zsh")
+    ));
+    if !shims.is_empty() {
+        s.push_str(&format!("export ONDRA_CLI_PATH={}\nexport PATH=\"$ONDRA_CLI_PATH:$PATH\"\n", sq(&shims.join(":"))));
+    }
+    s.push_str(&format!("if (( $# )); then exec \"$@\"; fi\ncd {} 2>/dev/null || true\nexec /bin/zsh -l\n", sq(folder)));
+    s
+}
+
+/** The space's own zsh dotfiles: the user's own ones first, then its history and its PATH ahead. */
+fn write_zdotdir(base: &Path) -> std::io::Result<()> {
+    let z = base.join(".zsh");
+    std::fs::create_dir_all(&z)?;
+    let own = |f: &str| format!("# Ondra: the user's own {f} first\n[[ -r \"$HOME/{f}\" ]] && source \"$HOME/{f}\"\n");
+    std::fs::write(z.join(".zshenv"), own(".zshenv"))?;
+    std::fs::write(z.join(".zprofile"), own(".zprofile"))?;
+    std::fs::write(z.join(".zlogin"), own(".zlogin"))?;
+    std::fs::write(
+        z.join(".zshrc"),
+        format!(
+            "{}HISTFILE=\"$ZDOTDIR/.zsh_history\"\n# this workspace's commands stay first\n[[ -n \"${{ONDRA_CLI_PATH:-}}\" ]] && export PATH=\"$ONDRA_CLI_PATH:$PATH\"\n# which workspace this shell is\nPROMPT=\"%F{{cyan}}[${{ONDRA_CLI_LABEL}}]%f $PROMPT\"\n",
+            own(".zshrc")
+        ),
+    )
+}
+
+#[derive(Serialize)]
+pub struct SpaceCli {
+    /** where the command is */
+    path: String,
+    /** ~/.local/bin isn't on the user's PATH: the command has to be typed with its path */
+    off_path: bool,
+}
+
+/** Install (or update) the space's terminal command; a previous name of it goes. */
+#[tauri::command(async)]
+pub fn space_cli_install(app: AppHandle, space: String, home: Option<String>, command: String, label: String, folder: String, previous: Option<String>) -> Result<SpaceCli, String> {
+    let command = command.trim().to_string();
+    check_command(&command)?;
+    let base = cli_home(&app, &space, home.clone()).ok_or("개인 워크스페이스는 Mac 그대로의 로그인을 써요")?;
+    let env = space_env(app.clone(), space.clone(), home);
+    write_zdotdir(&base).map_err(|e| e.to_string())?;
+    let folder = if folder.trim().is_empty() || folder.trim() == "~" { real_home().display().to_string() } else { expand_home(folder.trim()).display().to_string() };
+    let path = launcher_path(&command);
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    std::fs::write(&path, launcher_text(&label, &space, &base, &env, &folder)).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
+    if let Some(old) = previous.map(|p| p.trim().to_string()).filter(|p| !p.is_empty() && *p != command) {
+        space_cli_remove(old);
+    }
+    let bin = path.parent().unwrap().to_path_buf();
+    let off_path = !std::env::split_paths(crate::engine::user_path()).any(|d| d == bin);
+    Ok(SpaceCli { path: path.display().to_string(), off_path })
+}
+
+/** Remove a space's terminal command (only a launcher Ondra wrote). */
+#[tauri::command]
+pub fn space_cli_remove(command: String) {
+    let p = launcher_path(command.trim());
+    if !command.trim().is_empty() && is_ours(&p) {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn launcher_sets_the_space_and_leaves_the_rest() {
+        let env = vec![("GH_CONFIG_DIR".to_string(), "/s/home/.config/gh".to_string()), ("PATH".to_string(), "/s/bin".to_string())];
+        let t = launcher_text("회사", "sp1", Path::new("/s/home"), &env, "/Users/me/Work");
+        assert_eq!(t.lines().nth(1).map(|l| l.starts_with(LAUNCHER_MARK)), Some(true));
+        assert!(t.contains("export GH_CONFIG_DIR='/s/home/.config/gh'\n"));
+        assert!(t.contains("export CODEX_HOME='/s/home/.codex'\n"));
+        assert!(t.contains("export ZDOTDIR='/s/home/.zsh'\n"));
+        assert!(t.contains("export PATH=\"$ONDRA_CLI_PATH:$PATH\"\n"));
+        assert!(t.contains("unset GH_TOKEN"));
+        assert!(t.contains("if (( $# )); then exec \"$@\"; fi\ncd '/Users/me/Work'"));
+        assert!(!t.contains("export HOME"));
+    }
+
+    #[test]
+    fn command_names() {
+        assert!(check_command("Work").is_err());
+        assert!(check_command("회사").is_err());
+        assert!(check_command("").is_err());
+        // a command the Mac already has is never taken over
+        assert!(check_command("ls").is_err());
+    }
+}
+
+#[cfg(test)]
+mod cli_run_tests {
+    use super::*;
+
+    /** runs the launcher for real: one command, and the shell's own start (zsh -i) */
+    #[test]
+    #[ignore]
+    fn launcher_runs() {
+        let tmp = std::env::temp_dir().join(format!("ondra-cli-{}", std::process::id()));
+        let base = tmp.join("home");
+        std::fs::create_dir_all(base.join(".config/gh")).unwrap();
+        write_zdotdir(&base).unwrap();
+        let env = vec![("GH_CONFIG_DIR".to_string(), base.join(".config/gh").display().to_string()), ("PATH".to_string(), tmp.join("bin").display().to_string())];
+        let script = tmp.join("work");
+        std::fs::write(&script, launcher_text("회사", "sp1", &base, &env, "/tmp")).unwrap();
+        let out = Command::new("/bin/zsh").arg(&script).args(["/bin/sh", "-c", "echo \"$GH_CONFIG_DIR|$ZDOTDIR|$GH_TOKEN|${PATH%%:*}\""]).env("GH_TOKEN", "x").output().unwrap();
+        let said = String::from_utf8_lossy(&out.stdout);
+        eprintln!("one: {said} / {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(said.trim(), format!("{}||{}|{}", base.join(".config/gh").display(), "", tmp.join("bin").display()).replacen("||", &format!("|{}|", base.join(".zsh").display()), 1));
+        let out = Command::new("/bin/zsh").arg(&script).args(["/bin/zsh", "-i", "-c", "echo \"$HISTFILE|${PATH%%:*}|$PROMPT\""]).output().unwrap();
+        let said = String::from_utf8_lossy(&out.stdout);
+        eprintln!("interactive: {said} / {}", String::from_utf8_lossy(&out.stderr));
+        assert!(said.contains(&format!("{}/.zsh_history|{}|", base.join(".zsh").display(), tmp.join("bin").display())));
+        assert!(said.contains("[${ONDRA_CLI_LABEL}]") || said.contains("[회사]"));
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+}

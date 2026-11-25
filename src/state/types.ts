@@ -29,6 +29,8 @@ export interface Space {
   /** Home folder for this space's command-line logins (gh, git, aws, vercel …).
    * Empty: 개인 uses the Mac's own, every other space a folder of its own. */
   cliHome?: string;
+  /** Its terminal command ("work"): a shell with its logins, made by Ondra (engine/spaceCli.ts). */
+  command?: string;
   /** The user's own simulators, emulators and phones that belong to this space (device ids). */
   devices?: string[];
   /** made for another Mac's workspace of this name (Settings › 연결): its work runs there, none here */
