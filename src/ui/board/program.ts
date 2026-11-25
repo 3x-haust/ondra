@@ -116,16 +116,88 @@ function __edge(a, tx, ty, pad) {
 }
 const __ok = (a) => __isG(a) || (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "number" && isFinite(a[0]) && isFinite(a[1]));
 const __c = (a) => (__isG(a) ? [a.cx, a.cy] : __pt(a));
-/** an arrow from one shape (or point) to another, edge to edge; {bend: 40} curves it, {label} names it */
+/** the three points of a line from p to q bowed sideways by bend */
+function __bent(p, q, bend) {
+  const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+  return [p, [mx - ((q[1] - p[1]) / l) * bend, my + ((q[0] - p[0]) / l) * bend], q];
+}
+const __routes = [];
+/** an arrow from one shape (or point) to another, edge to edge; {bend: 40} curves it, {label} names it.
+ *  It goes around the other shapes on the board (once all are drawn); {avoid: false} keeps it as given. */
 function connect(a, b, o) {
   o = o || {};
   if (!__ok(a) || !__ok(b)) return undefined;
   const ca = __c(a), cb = __c(b);
   const p = __edge(a, cb[0], cb[1], 6), q = __edge(b, ca[0], ca[1], 8);
   const bend = __n(o.bend);
-  if (!bend) return line(p[0], p[1], q[0], q[1], Object.assign({ arrow: o.arrow !== false }, o));
-  const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
-  pen([p, [mx - ((q[1] - p[1]) / l) * bend, my + ((q[0] - p[0]) / l) * bend], q], Object.assign({ arrow: o.arrow !== false }, o));
+  const at = __o.marks.length;
+  const opts = Object.assign({ arrow: o.arrow !== false }, o);
+  const g = bend ? pen(__bent(p, q, bend), opts) : line(p[0], p[1], q[0], q[1], opts);
+  if (o.avoid !== false && __o.marks[at]) __routes.push({ m: __o.marks[at], a: __isG(a) ? a : undefined, b: __isG(b) ? b : undefined, p, q, bend });
+  return g;
+}
+/** where a mark sits, for lines to keep off (a frame or a line is no obstacle) */
+function __boxOf(m) {
+  if (m.kind === "box") return m.bare ? undefined : [m.x, m.y, m.w, m.h];
+  if (m.kind === "circle") return [m.x - m.r, m.y - m.r, 2 * m.r, 2 * m.r];
+  if (m.kind === "icon") { const w = Math.max(m.size, m.label ? measure(m.label, 14) : 0); return [m.x + m.size / 2 - w / 2, m.y, w, m.size + (m.label ? 26 : 0)]; }
+  if (m.kind === "text") { const w = measure(m.text, m.size); const x0 = m.align === "center" || m.align === "middle" ? m.x - w / 2 : m.align === "right" ? m.x - w : m.x; return [x0, m.y - m.size * 0.62, w, m.size * 1.24]; }
+  return undefined;
+}
+const __in = (r, x, y, pad) => x >= r[0] - pad && x <= r[0] + r[2] + pad && y >= r[1] - pad && y <= r[1] + r[3] + pad;
+const __meet = (r, s, pad) => r[0] - pad < s[0] + s[2] && s[0] < r[0] + r[2] + pad && r[1] - pad < s[1] + s[3] && s[1] < r[1] + r[3] + pad;
+/** points along the drawn stroke (the view's curve through the points) */
+function __along(pts) {
+  if (pts.length === 2) return Array.from({ length: 25 }, (_, i) => [pts[0][0] + ((pts[1][0] - pts[0][0]) * i) / 24, pts[0][1] + ((pts[1][1] - pts[0][1]) * i) / 24]);
+  const P = (i) => pts[Math.max(0, Math.min(pts.length - 1, i))], out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = P(i - 1), b = P(i), c = P(i + 1), e = P(i + 2);
+    const c1 = [b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6], c2 = [c[0] - (e[0] - b[0]) / 6, c[1] - (e[1] - b[1]) / 6];
+    for (let k = 0; k <= 16; k++) {
+      const t = k / 16, u = 1 - t;
+      out.push([u * u * u * b[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * c[0], u * u * u * b[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * c[1]]);
+    }
+  }
+  return out;
+}
+/** where the view writes a line's label: by the middle leg, above it (beside it when it runs up or down) */
+function __labelBox(pts, s) {
+  const i = Math.floor((pts.length - 1) / 2), m = pts[i], n = pts[i + 1], w = measure(s, 15);
+  const up = Math.abs(n[0] - m[0]) < Math.abs(n[1] - m[1]), x = (m[0] + n[0]) / 2, y = (m[1] + n[1]) / 2;
+  return up ? [x + 10, y - 10, w, 20] : [x - w / 2, y - 24, w, 20];
+}
+/** Every connect that runs over another shape (or writes its label on one) takes the bend that
+ *  clears the most, nearest the one asked for. Run once the board is drawn. */
+function __reroute() {
+  const all = __o.marks.map((m) => ({ m, r: __boxOf(m) })).filter((x) => x.r).slice(0, 300);
+  for (const R of __routes.slice(0, 60)) {
+    const own = [R.a, R.b].filter(Boolean).map((g) => [g.x, g.y, g.w, g.h]);
+    const walls = all.filter((x) => !own.some((o) => __meet(o, x.r, 2)) && !__in(x.r, R.p[0], R.p[1], 10) && !__in(x.r, R.q[0], R.q[1], 10)).map((x) => x.r);
+    if (!walls.length) continue;
+    const L = Math.hypot(R.q[0] - R.p[0], R.q[1] - R.p[1]);
+    const cost = (bend) => {
+      const pts = bend ? __bent(R.p, R.q, bend) : [R.p, R.q];
+      const way = __along(pts);
+      let hit = 0, deep = 0;
+      for (const w of walls) {
+        const n = way.filter((q) => __in(w, q[0], q[1], 6)).length;
+        if (n) { hit++; deep += n; }
+        if (R.m.label && __meet(w, __labelBox(pts, R.m.label), 2)) hit++;
+      }
+      const out = way.filter((q) => q[0] < 0 || q[1] < 0 || q[0] > __o.w || q[1] > __o.h).length;
+      return hit * 1000 + deep + out * 50;
+    };
+    if (cost(R.bend) === 0) continue;
+    const tries = [R.bend, 0, ...[0.12, 0.2, 0.3, 0.42, 0.55].flatMap((k) => [k * L, -k * L])];
+    let best = R.bend, low = Infinity;
+    for (const b of tries) {
+      const c = cost(b) + Math.abs(b - R.bend) / 100;
+      if (c < low) { low = c; best = b; }
+    }
+    if (best === R.bend) continue;
+    R.m.pts = best ? __bent(R.p, R.q, best) : [R.p, R.q];
+    R.m.kind = best ? "curve" : R.m.head ? "arrow" : "line";
+  }
 }
 /** a short note at (x, y) with a thin leader to what it is about (a shape or a point) */
 function label(x, y, s, to, o) {
@@ -418,6 +490,10 @@ export function runProgram(code: string): { board: Board; broken: boolean } | un
       broken = e?.name === "SyntaxError";
       run.error.dispose();
     } else run.value.dispose();
+    // lines that run over other shapes go around them, once everything is drawn
+    const routed = vm.evalCode("try { __reroute(); } catch (e) {}", "route.js");
+    if (routed.error) routed.error.dispose();
+    else routed.value.dispose();
     const out = vm.evalCode("JSON.stringify(__o)", "out.js");
     if (out.error) { out.error.dispose(); return { board: boardOf({ error: error || "no drawing came back" }), broken: true }; }
     const text = vm.getString(out.value);

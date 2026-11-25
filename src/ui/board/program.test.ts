@@ -112,4 +112,28 @@ pulse(b)`)!;
     // a bad icon name or a way with no points is dropped
     expect(boardOf({ marks: [{ kind: "icon", name: "<script>", x: 0, y: 0 }, { kind: "travel", pts: [[0, 0]] }] }).marks).toEqual([]);
   });
+  it("a connect goes around the shapes between its ends, its label off them too", async () => {
+    await loadEngine();
+    // the picture that showed it: 기준선 → 벤치 bowed over 최적화, which sits between them
+    const draw = (avoid: string) => runProgram(`size(900, 500)
+const base = icon("gauge", 100, 160, { label: "기준선" })
+const opt = icon("scissors", 400, 140, { label: "최적화" })
+const bench = icon("square", 700, 200, { label: "벤치" })
+connect(base, opt)
+connect(base, bench, { bend: -30, label: "전후 비교"${avoid} })`)!.board;
+    const box = (m: any) => [m.x + m.size / 2 - 40, m.y, 80, m.size + 26];
+    const over = (b: any) => {
+      const r = box(b.marks[1]);
+      const way = b.marks[4].pts as [number, number][];
+      // the stroke through its points, roughly: the points and the halfway between them
+      const pts = way.flatMap((p, i) => (i ? [[(p[0] + way[i - 1][0]) / 2, (p[1] + way[i - 1][1]) / 2], p] : [p]));
+      return pts.some(([x, y]) => x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]);
+    };
+    expect(over(draw(", avoid: false"))).toBe(true);
+    const routed = draw("");
+    expect(over(routed)).toBe(false);
+    expect(routed.marks[4]).toMatchObject({ kind: "curve", label: "전후 비교" });
+    // one with nothing in its way stays as drawn
+    expect((routed.marks[3] as any).pts).toEqual((draw(", avoid: false").marks[3] as any).pts);
+  });
 });

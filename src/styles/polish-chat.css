@@ -2511,6 +2511,24 @@
 .bd-tag[hidden] {
   display: none;
 }
+/* drag across a drawing to pick a part of it (to quote it) */
+.bd-stage.bd-pickable {
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.bd-lasso {
+  position: absolute;
+  z-index: 1;
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: var(--r-4, 4px);
+  pointer-events: none;
+}
+.bd-stage svg.bd-picking .bd-mark:not(.bd-picked) {
+  opacity: 0.25;
+}
 .bd-steps {
   margin: 0;
   padding: var(--s-4) var(--s-16) var(--s-12) calc(var(--s-16) + 1.4em);

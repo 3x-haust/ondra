@@ -405,6 +405,10 @@ export class BoardView {
       this.ink = el("g", {});
       this.svg.append(this.underLayer, this.ink);
       this.stage.appendChild(this.svg);
+      if (this.opts.onAsk) {
+        this.stage.appendChild(this.tag);
+        this.lasso();
+      }
     }
     if (b.title) this.svg.setAttribute("aria-label", b.title);
     const marks = headings(b.marks);
@@ -554,6 +558,7 @@ export class BoardView {
     let next: number | null | undefined;
     if (e.key === "ArrowRight") next = at === null ? 0 : at >= last ? null : at + 1;
     else if (e.key === "ArrowLeft") next = at === null ? last : at <= 0 ? null : at - 1;
+    else if (e.key === "Escape" && this.svg?.classList.contains("bd-picking")) return void (e.preventDefault(), this.unpick());
     else if (e.key === "Escape" && at !== null) next = null;
     if (next === undefined) return;
     e.preventDefault();
@@ -645,6 +650,94 @@ export class BoardView {
       }
     });
     this.io.observe(this.stage);
+  }
+
+  /** A drag across the drawing picks what it covers: the rest steps back, and what the picked
+   *  marks say can go to the composer as a quote (인용). */
+  private lasso() {
+    let from: { x: number; y: number; cx: number; cy: number } | null = null;
+    let box: HTMLDivElement | null = null;
+    const stage = this.stage;
+    stage.classList.add("bd-pickable");
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !this.svg || this.three || (e.target as Element).closest(".bd-tag")) return;
+      this.unpick();
+      const r = stage.getBoundingClientRect();
+      from = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!from) return;
+      if (!box && Math.hypot(e.clientX - from.cx, e.clientY - from.cy) < 6) return;
+      if (!box) {
+        box = document.createElement("div");
+        box.className = "bd-lasso";
+        stage.appendChild(box);
+        stage.setPointerCapture(e.pointerId);
+      }
+      const r = stage.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      Object.assign(box.style, { left: `${Math.min(x, from.x)}px`, top: `${Math.min(y, from.y)}px`, width: `${Math.abs(x - from.x)}px`, height: `${Math.abs(y - from.y)}px` });
+    });
+    const end = (e: PointerEvent) => {
+      if (box && from) this.pickArea(from.cx, from.cy, e.clientX, e.clientY);
+      box?.remove();
+      box = null;
+      from = null;
+    };
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", () => (box?.remove(), (box = null), (from = null)));
+  }
+
+  /** the marks inside a dragged area (screen points), what they say, and a 인용 button by it */
+  private pickArea(x1: number, y1: number, x2: number, y2: number) {
+    const ctm = this.svg?.getScreenCTM()?.inverse();
+    if (!ctm) return;
+    const a = new DOMPoint(Math.min(x1, x2), Math.min(y1, y2)).matrixTransform(ctm);
+    const b = new DOMPoint(Math.max(x1, x2), Math.max(y1, y2)).matrixTransform(ctm);
+    const picked = this.drawn
+      .filter((d) => d.g.getAttribute("visibility") !== "hidden")
+      .map((d) => {
+        try {
+          return { d, r: d.g.getBBox() };
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((x): x is { d: Drawn; r: DOMRect } => !!x && x.r.x < b.x && x.r.x + x.r.width > a.x && x.r.y < b.y && x.r.y + x.r.height > a.y);
+    // what they say, top to bottom, left to right, each once
+    const said = [...new Set(
+      picked
+        .sort((p, q) => p.r.y - q.r.y || p.r.x - q.r.x)
+        .flatMap((p) => [...p.d.g.querySelectorAll("text")].map((x) => x.textContent?.trim() ?? ""))
+        .filter(Boolean),
+    )];
+    if (!picked.length || !said.length) return;
+    this.svg!.classList.add("bd-picking");
+    for (const p of picked) p.d.g.classList.add("bd-picked");
+    this.tag.textContent = "";
+    const name = document.createElement("b");
+    name.textContent = short(said.join(" · "));
+    this.tag.append(name);
+    const ask = document.createElement("button");
+    ask.className = "btn sm";
+    ask.textContent = t("인용");
+    ask.onclick = (e) => {
+      e.stopPropagation();
+      this.opts.onAsk!(`${this.board?.title ? `${this.board.title} · ` : ""}${said.join(", ")}`);
+      this.unpick();
+    };
+    this.tag.append(ask);
+    const s = this.stage.getBoundingClientRect();
+    this.tag.style.left = `${Math.max(8, Math.min(Math.max(x1, x2) - s.left - 120, this.stage.clientWidth - 220))}px`;
+    this.tag.style.top = `${Math.max(8, Math.min(y1, y2) - s.top - 44)}px`;
+    this.tag.hidden = false;
+  }
+
+  private unpick() {
+    if (!this.svg?.classList.contains("bd-picking")) return;
+    this.svg.classList.remove("bd-picking");
+    for (const g of this.svg.querySelectorAll(".bd-picked")) g.classList.remove("bd-picked");
+    this.tag.hidden = true;
   }
 
   /** a part clicked: its name by it, and a way to ask about it */
