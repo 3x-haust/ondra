@@ -10,24 +10,24 @@
 // Idempotent: anything already up to date is left alone.
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
 import { analyzerSigned } from "./signed.mjs";
 import { pack, plan, previousManifest, treeHash } from "./components.mjs";
+import { CHROME_VARIANT, CHROME_VERSION, chromeZip } from "./chrome.mjs";
 import { engineNotices, writeAppNotices } from "./notices.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 if (process.platform === "win32" || process.env.TAURI_ENV_TARGET_TRIPLE?.includes("-windows-")) {
   const { bundleWindows } = await import("./bundle-windows.mjs");
-  bundleWindows(root);
+  await bundleWindows(root);
   process.exit(0);
 }
 if (process.platform === "linux" || process.env.TAURI_ENV_TARGET_TRIPLE?.includes("-linux-")) {
   const { bundleLinux } = await import("./bundle-linux.mjs");
-  bundleLinux(root);
+  await bundleLinux(root);
   process.exit(0);
 }
 
@@ -106,27 +106,11 @@ writeFileSync(join(engineRes, "THIRD_PARTY_NOTICES.txt"), engineNotices(dirname(
 log("engine assets");
 
 // ── Chrome for Testing (headless shell), cached so it downloads once ──
-// Pinned: a new version is a new component every user downloads, so it changes only when bumped here.
-const CHROME_VERSION = process.env.ONDRA_CHROME_VERSION ?? "157.0.8103.38";
-const variant = process.env.ONDRA_CHROME_VARIANT ?? "chrome-headless-shell";
+const variant = CHROME_VARIANT;
 const platform = nodeArch === "arm64" ? "mac-arm64" : "mac-x64";
 const chromeDest = join(resDir, "chrome");
 const stamp = join(chromeDest, ".version");
-const cache = join(homedir(), ".cache", "ondra-build");
-mkdirSync(cache, { recursive: true });
-
-const zip = join(cache, `${variant}-${platform}-${CHROME_VERSION}.zip`);
-if (!existsSync(zip)) {
-  const url = `https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${platform}/${variant}-${platform}.zip`;
-  log(`downloading ${variant} ${CHROME_VERSION}…`);
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error(`bundle: could not get Chrome ${CHROME_VERSION} (HTTP ${res.status})`);
-    process.exit(1);
-  }
-  writeFileSync(`${zip}.part`, Buffer.from(await res.arrayBuffer()));
-  execFileSync("mv", [`${zip}.part`, zip]);
-}
+const zip = await chromeZip(platform, log);
 const want = `${variant} ${CHROME_VERSION}`;
 if (existsSync(stamp) && readFileSync(stamp, "utf8") === want) {
   log(`chrome (up to date: ${want})`);
