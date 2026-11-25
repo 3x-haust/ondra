@@ -95,9 +95,13 @@ jobs:
       - name: Start the installed app
         run: |
           export XDG_RUNTIME_DIR=$(mktemp -d) HOME=$(mktemp -d)
-          xvfb-run -a dbus-run-session -- sh -c 'ondra > app.log 2>&1 & pid=$!; sleep 25; kill -0 $pid && kill $pid' || { cat app.log; exit 1; }
+          chrome="$HOME/.local/share/dev.3xhaust.ondra/components/chrome/*/chrome-headless-shell-linux64/chrome-headless-shell"
+          # running, and (within 3 minutes) the browser component fetched from components.json and unpacked
+          xvfb-run -a dbus-run-session -- sh -c "ondra > app.log 2>&1 & pid=\$!; sleep 25; kill -0 \$pid || exit 1
+            for i in \$(seq 1 80); do ls $chrome >/dev/null 2>&1 && break; sleep 2; done; kill \$pid" || { cat app.log; exit 1; }
           cat app.log
           test -d "$HOME/.local/share/dev.3xhaust.ondra" || { echo "the app never wrote its data folder"; exit 1; }
+          test -x $chrome || { echo "the app did not install the browser component"; exit 1; }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
