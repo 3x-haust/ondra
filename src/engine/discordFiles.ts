@@ -42,10 +42,11 @@ export type Local = { text: string; files: string[]; open: { label: string; path
  * places to open with a button, and a path that isn't there left as its name and path in code.
  */
 export async function localLinks(text: string, kind: (p: string) => Promise<Kind> = kindOf): Promise<Local> {
-  const found: { all: string; label: string; path: string }[] = [];
-  for (const m of text.matchAll(/(?<!!)\[([^\]\n]+)\]\(\s*(<[^>]+>|[^)\s]+)\s*\)/g)) {
-    const path = localPath(m[2]);
-    if (path) found.push({ all: m[0], label: m[1], path });
+  const found: { all: string; label: string; path: string; pic?: boolean }[] = [];
+  // a picture ("![](/tmp/board.png)") goes up as well, and its words go away
+  for (const m of text.matchAll(/(!?)\[([^\]\n]*)\]\(\s*(<[^>]+>|[^)\s]+)\s*\)/g)) {
+    const path = localPath(m[3]);
+    if (path && (m[1] || m[2])) found.push({ all: m[0], label: m[2] || nameOf(path), path, pic: !!m[1] });
   }
   for (const m of text.matchAll(/(?<![(<\w])file:\/\/[^\s)>\]]+/gi)) {
     const path = localPath(m[0]);
@@ -55,12 +56,16 @@ export async function localLinks(text: string, kind: (p: string) => Promise<Kind
   for (const f of found) {
     const k = await kind(f.path);
     let said = f.label;
-    if (k === "file" && out.files.length < 4) out.files.push(f.path);
+    if (k === "file" && out.files.length < 4) {
+      out.files.push(f.path);
+      if (f.pic) said = "";
+    }
     else if (k === "none") said = `${f.label} (\`${home(f.path)}\`)`;
     else if (out.open.length < 5) out.open.push({ label: f.label, path: f.path });
     else said = `${f.label} (\`${home(f.path)}\`)`;
     out.text = out.text.replace(f.all, said);
   }
+  if (found.some((f) => f.pic)) out.text = out.text.replace(/\n{3,}/g, "\n\n").trim();
   return out;
 }
 

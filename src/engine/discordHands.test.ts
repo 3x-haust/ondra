@@ -70,8 +70,12 @@ describe("the Discord agent's hands", () => {
     const react = vi.spyOn(native, "discordReact").mockResolvedValue();
     const reply = vi.spyOn(native, "discordInteractionReply").mockResolvedValue({ id: "r1" });
     const rows = [{ type: 1, components: [{ type: 2, style: 1, label: "배포", custom_id: "deploy" }] }];
-    expect(await discordHands("captain:home~@agent", { action: "send", channel: "c1", text: "할까?", components: rows, files: ["/tmp/a.png"] })).toEqual({ sent: ["m9"] });
+    expect(await discordHands("captain:home~@agent", { action: "send", channel: "c1", text: "할까?", components: rows, files: ["/tmp/a.png"] })).toEqual({ sent: ["m9"], attached: ["a.png"] });
     expect(api).toHaveBeenLastCalledWith("POST", "/channels/c1/messages", { content: "할까?", components: rows, allowed_mentions: { parse: [] } }, ["/tmp/a.png"]);
+    // a picture on this Mac written into the words goes up with them, its words out
+    vi.spyOn(native, "fsRead").mockResolvedValue({ text: "", size: 2048 } as any);
+    await discordHands("captain:home~@agent", { action: "send", channel: "c1", text: "판 올렸어\n![](/tmp/metachess/board.png)", components: rows });
+    expect(api).toHaveBeenLastCalledWith("POST", "/channels/c1/messages", { content: "판 올렸어", components: rows, allowed_mentions: { parse: [] } }, ["/tmp/metachess/board.png"]);
     await discordHands("captain:home~@agent", { action: "edit", channel: "c1", message: "m9", components: [] });
     expect(api).toHaveBeenLastCalledWith("PATCH", "/channels/c1/messages/m9", { components: [], allowed_mentions: { parse: [] } });
     await discordHands("captain:home~@agent", { action: "react", channel: "c1", message: "m9", emoji: "👍" });
