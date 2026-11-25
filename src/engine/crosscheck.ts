@@ -10,12 +10,12 @@ export const LENSES = [
   {
     lens: "design",
     title: "설계 검토",
-    how: "Use the code-review skill with the 설계 검토 (design) lens: does the approach solve the user's whole problem end to end, and does it fit the project's architecture, decisions and memory. The 코드 검토 lens reviews the same change beside you; don't do its job.",
+    how: "Use the code-review skill with the 설계 검토 (design) lens: does the approach solve the user's whole problem end to end, and does it fit the project's architecture, decisions and memory; what the change touches and who outside it relies on that. The 코드 검토 lens reviews the same change beside you; don't do its job.",
   },
   {
     lens: "code",
     title: "코드 검토",
-    how: "Use the code-review skill with the 코드 검토 (code) lens: contracts, data and control flow, realistic edge cases, failure paths, tests against what is claimed. The 설계 검토 lens reviews the same change beside you; don't do its job.",
+    how: "Use the code-review skill with the 코드 검토 (code) lens: contracts, data and control flow, realistic edge cases, failure paths, tests against what is claimed; security, dependencies and the project's linters and scanners on the changed files. The 설계 검토 lens reviews the same change beside you; don't do its job.",
   },
 ] as const;
 
