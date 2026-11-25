@@ -169,11 +169,12 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
   // opened or closed by hand: kept (per machine, as the sections are) until the job goes
   const open = () => fold(`t:${t().id}`);
   const setOpen = (v: boolean) => setFold(`t:${t().id}`, v);
-  // open by itself while something under it is going on, needs you, or is open
+  // open by itself while something under it is going on, needs you, or is open. Opening the job
+  // itself leaves its subagents as they were; one of them open in the center opens the row, so it shows.
+  const holdsOpen = () => openId() !== t().id && (openTop() === t().id || (ups().length > 0 && openRoot() === t().id));
   const showKids = () =>
     open() ??
-    (openTop() === t().id ||
-      (ups().length > 0 && openRoot() === t().id) ||
+    (holdsOpen() ||
       kids().some((k) => k.status === "waiting" || k.status === "failed") ||
       ups().some((f) => !ended(f) || needsYou(f)));
   // folded, a line whose newest follow-up is still going stands for that one: its state shows on
