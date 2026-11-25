@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { Cache, Pace, passages } from "./web";
+import { browserSearch, Cache, onTopic, Pace, passages, type Run } from "./web";
 
 const dir = () => mkdtempSync(join(tmpdir(), "web-test-"));
 
@@ -52,5 +52,51 @@ describe("passages", () => {
     const out = passages(text, "월 9,900원", 1);
     expect(out).toEqual(["b\n가격은 월 9,900원이에요\nc\nd"]);
     expect(passages(text, "없는 말")).toEqual([]);
+  });
+});
+
+describe("browserSearch (the engine turned us away: the job's own tab)", () => {
+  const page = (hits: { title: string; url: string; snippet: string }[], blocked = false) => JSON.stringify(JSON.stringify({ blocked, hits }));
+  const run = (pages: Record<string, string>): Run & { opened: string[] } => {
+    const opened: string[] = [];
+    let at = "";
+    const f = (async (args: string[]) => {
+      if (args[0] === "open") {
+        at = Object.keys(pages).find((k) => args[1].includes(k)) ?? "";
+        opened.push(args[1]);
+        return { code: 0, out: "" };
+      }
+      if (args[0] === "eval") return { code: 0, out: pages[at] ?? page([]) };
+      return { code: 0, out: "" };
+    }) as Run & { opened: string[] };
+    f.opened = opened;
+    return f;
+  };
+
+  it("skips an engine that shows a captcha or junk, and returns the next one's results on the topic", async () => {
+    const r = run({
+      "google.com": page([], true),
+      "bing.com": page([
+        { title: "CGEventTap confine cursor to a display", url: "https://example.com/a", snippet: "use CGWarpMouseCursorPosition" },
+        { title: "Restricting the cursor with CGEventTap", url: "https://example.com/b", snippet: "" },
+        { title: "피폐 역하렘 남주들의 막내 처제", url: "https://novel.example/x", snippet: "웹소설" },
+      ]),
+    });
+    const got = await browserSearch("CGEventTap confine cursor", r, mkdtempSync(join(tmpdir(), "web-bench-")));
+    expect(got.engine).toBe("bing");
+    expect(got.hits.map((h) => h.url)).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(got.tried[0]).toContain("google: captcha");
+  });
+
+  it("no browser: stops at once and says why", async () => {
+    const none: Run = async () => ({ code: 1, out: "spawn ondra-browser ENOENT" });
+    const got = await browserSearch("맥 핫코너", none, mkdtempSync(join(tmpdir(), "web-bench-")));
+    expect(got.hits).toEqual([]);
+    expect(got.tried).toHaveLength(1);
+  });
+
+  it("a result is on the topic when it shares enough of the query's words", () => {
+    expect(onTopic("macOS hot corner sleep", { title: "Hot corners on macOS", url: "https://x", snippet: "" })).toBe(true);
+    expect(onTopic("macOS hot corner sleep", { title: "Minesweeper Online", url: "https://y", snippet: "" })).toBe(false);
   });
 });
