@@ -20,7 +20,7 @@ export function Sheet(props: { title: string; onClose: () => void; children: any
       <div class="backdrop cx-backdrop" onClick={props.onClose}>
         <div class={`sheet ${props.class ?? "sk-sheet"}`} role="dialog" aria-modal="true" aria-label={props.title} onClick={(e) => e.stopPropagation()}>
           <div class="sheet-head">
-            {props.title}
+            <span class="sheet-title" title={props.title}>{props.title}</span>
             <span class="spacer" />
             <button class="icon-btn" title={t("닫기")} aria-label={t("닫기")} onClick={props.onClose}><Icon name="x" size={16} /></button>
           </div>

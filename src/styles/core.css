@@ -107,6 +107,39 @@ code,
   color: var(--bad);
 }
 
+/* ───────────── long text (DESIGN §9.16) ─────────────
+   Text never wraps one letter per line and never runs over its neighbours.
+   Korean breaks between words; a word wider than its whole line breaks only then.
+   Not `anywhere`: that lets a flex or grid item shrink to one letter (변/경). */
+body {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+/* a page never pushes the work area wider: its own rows ellipsize or wrap */
+.main > * {
+  min-width: 0;
+}
+/* short labels keep one line; the longer text beside them gives way */
+.btn,
+.chip,
+.pill,
+.seg button,
+kbd {
+  white-space: nowrap;
+}
+.icon-btn,
+.switch,
+kbd {
+  flex-shrink: 0;
+}
+/* a sheet's title: one line, cut with … (a workspace can have a long name) */
+.sheet-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* ───────────── controls ───────────── */
 .btn {
   display: inline-flex;
@@ -615,6 +648,11 @@ button.chip:hover,
 }
 .head-title {
   font-weight: var(--fw-strong);
+}
+/* a view's name keeps its room (메인, Memory); what sits beside it gives way first */
+.head > h1 {
+  flex-shrink: 0;
+  max-width: 50%;
 }
 .head-space {
   font-size: var(--fs-xs);
@@ -1232,7 +1270,12 @@ button.strip:hover {
 .md a:hover {
   text-decoration: underline;
 }
+/* a wide table scrolls sideways; its cells keep whole words (1KB, main.ts), never one letter a line */
 .md table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 0 0 var(--s-12);
   font-size: var(--fs-sm);
@@ -1242,6 +1285,7 @@ button.strip:hover {
   border: 1px solid var(--line);
   padding: var(--s-6) var(--s-10);
   text-align: left;
+  overflow-wrap: break-word;
 }
 .md th {
   background: var(--muted);
@@ -2178,11 +2222,6 @@ kbd:empty {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent var(--s-6), #000 var(--s-40));
   mask-image: linear-gradient(to bottom, transparent 0, transparent var(--s-6), #000 var(--s-40));
 }
-body {
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-
 .branch-card .branch-line,
 .branch-card .branch-actions {
   display: contents;

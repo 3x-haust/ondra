@@ -180,11 +180,13 @@
   padding: var(--s-12);
 }
 .review .rv-bar {
-  height: 28px;
-  gap: var(--s-8);
+  min-height: 28px;
+  flex-wrap: wrap;
+  gap: var(--s-4) var(--s-8);
   padding: 0 var(--s-4);
   font-size: var(--fs-sm);
   color: var(--ink-2);
+  white-space: nowrap;
 }
 .review .rv-bar .link-btn {
   font-size: var(--fs-sm);
@@ -1052,6 +1054,10 @@
   flex: 0 1 auto;
   min-width: 48px;
 }
+/* the crumbs never get narrower than the title's own minimum, so nothing is drawn over it */
+.task-head .crumbs {
+  min-width: 52px;
+}
 .task-head.crumb-tight .crumbs > .crumb-proj,
 .task-head.crumb-tight .crumbs > .crumb-sep {
   display: none;
@@ -1545,6 +1551,12 @@ button.pf-ref:hover {
   white-space: nowrap;
   color: var(--ink-3);
 }
+/* narrow: the command and the note give way before the check's name does */
+.pf-row > .pf-ref,
+.pf-row > .pf-out,
+.pf-row > .pf-note {
+  flex-shrink: 4;
+}
 .pf-badge {
   flex: none;
   margin-left: auto;
@@ -1773,6 +1785,18 @@ button.pf-ref:hover {
 }
 @container task-head (max-width: 560px) {
   .task-head .status-chip .chip-todo {
+    display: none;
+  }
+}
+/* narrower still: only the first state stays, then none (the sidebar row shows it too), so the
+   title keeps room to be read */
+@container task-head (max-width: 480px) {
+  .task-head .status-chip + .status-chip {
+    display: none;
+  }
+}
+@container task-head (max-width: 400px) {
+  .task-head .status-chip {
     display: none;
   }
 }

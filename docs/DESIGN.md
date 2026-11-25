@@ -383,6 +383,14 @@ Tones: neutral (`--muted`/`--ink-2`), accent, ok, warn, bad. Never two pills for
 - Cards: §9.5 work-item card, 8 apart.
 - Quick-filter row above the board: pills h 28, padding 0 10, gap 6, radius `--r-md`, 14 icon + `--fs-sm` 500. Off: `--muted`, `--ink-2`. On: `--accent-soft`, `--accent-text`: a flat soft fill, no gradient.
 
+### 9.16 Long text
+Names, paths, links and model text can be any length, and English is longer than Korean. Text never wraps one letter per line (변/경) and never runs over its neighbours.
+- The base (`src/styles/core.css`, "long text") is `word-break: keep-all; overflow-wrap: break-word`: Korean breaks between words, and a word wider than its line breaks only then. Don't set `overflow-wrap: anywhere` on a row of labels: it lets a flex or grid item shrink to one letter. Use it only on the one element that takes the row's leftover room (a message, a to-do, a path), next to `min-width: 0`.
+- Every flex or grid row decides who gives way. Short labels (buttons, "변경", counts, times, chips) get `white-space: nowrap; flex-shrink: 0`. The long one gets `min-width: 0` plus either `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` or wrapping. Grid columns that hold text are `minmax(0, 1fr)`, not `1fr`.
+- When a row can't hold everything, something drops whole: a control moves under its name, a state chip hides at a container width, button labels go to their icons. Nothing is cut in half or drawn under another element.
+- Tables in messages scroll sideways; their cells keep whole words.
+- Before calling UI done, look at it with a very long name, a long path with no spaces, and the English language, in a narrow pane (Zoom 150% on a 1040px window leaves about 700px).
+
 ---
 
 ## 10. Header bars

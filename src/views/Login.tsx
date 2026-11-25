@@ -191,7 +191,7 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
           <Show when={step().kind === "busy"}>
             <button class="icon-btn" title={t("뒤로")} aria-label={t("뒤로")} onClick={cancel}><Icon name="back" size={16} /></button>
           </Show>
-          {props.title ?? t("로그인")}
+          <span class="sheet-title">{props.title ?? t("로그인")}</span>
           <span class="spacer" />
           <button class="icon-btn" title={t("닫기")} aria-label={t("닫기")} onClick={props.onClose}><Icon name="x" size={16} /></button>
         </div>
