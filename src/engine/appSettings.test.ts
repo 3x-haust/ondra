@@ -12,29 +12,30 @@ describe("ondra_settings (appSettings)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setState("settings", "theme", "system");
-    setState("settings", "slots", { light: 3, heavy: 1 });
+    setState("settings", "isolate", true);
+    setState("settings", "permission", "auto");
   });
 
   it("reads every setting with where it is and what it takes, and only whether a token is set", async () => {
     native.has.mockResolvedValueOnce(true);
     const all = (await readSettings()) as Record<string, { value: unknown; where: string }>;
     expect(all.theme.value).toBe("system");
-    expect(all["slots.light"].where).toContain("동시 작업");
+    expect(all.isolate.where).toContain("워크트리");
     expect(all["agent.token"].value).toBe("set (in the keychain)");
   });
 
   it("changes what the user asked and says what it was", async () => {
-    const r = (await writeSettings({ theme: "dark", "slots.light": 5 })) as Record<string, { changed: boolean; was?: unknown; now?: unknown }>;
+    const r = (await writeSettings({ theme: "dark", isolate: false })) as Record<string, { changed: boolean; was?: unknown; now?: unknown }>;
     expect(r.theme).toEqual({ changed: true, was: "system", now: "dark" });
-    expect(state.settings.slots.light).toBe(5);
+    expect(state.settings.isolate).toBe(false);
   });
 
   it("refuses values a setting doesn't take, and keys that aren't settings", async () => {
-    const r = (await writeSettings({ "slots.light": 40, theme: "pink", accounts: [] })) as Record<string, { changed: boolean; why?: string }>;
-    expect(r["slots.light"].changed).toBe(false);
+    const r = (await writeSettings({ permission: "everything", theme: "pink", accounts: [] })) as Record<string, { changed: boolean; why?: string }>;
+    expect(r.permission.changed).toBe(false);
     expect(r.theme.changed).toBe(false);
     expect(r.accounts).toEqual({ changed: false, why: "no setting accounts" });
-    expect(state.settings.slots.light).toBe(3);
+    expect(state.settings.permission).toBe("auto");
     expect(state.settings.theme).toBe("system");
   });
 
@@ -51,8 +52,7 @@ describe("ondra_settings (appSettings)", () => {
     expect(discord.setAgent).toHaveBeenCalledWith({ channels: ["1", "2"] });
   });
 
-  it("booleans and numbers given as text still count", () => {
+  it("booleans given as text still count", () => {
     expect(checked("isolate", "false")).toEqual({ ok: true, value: false });
-    expect(checked("slots.heavy", "2")).toEqual({ ok: true, value: 2 });
   });
 });

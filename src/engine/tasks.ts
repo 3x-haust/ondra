@@ -1,6 +1,6 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
-// model when one is rejected, and schedule queued work into free slots.
+// model when one is rejected, and start queued work once what it waits on is done.
 import { liveKey } from "./live";
 import { mcpArgs } from "./services";
 import { formAnswer, readFields, type FormValues } from "./form";
@@ -3769,11 +3769,11 @@ export function setTaskAccount(id: string, accountId: string) {
 
 // ─────────────────────────────── scheduler
 
-/** Start queued work in priority order while slots are free (both spaces share one Mac). */
+/** Start queued work in priority order: all of it at once, no cap on how many run (a step waits for the steps it builds on). */
 export function schedule() {
   if (!inTauri || !loaded() || !engine.checked || !engine.ready) return;
   endOrphanKids();
-  // subagents run beside their fork (up to 4 at once per fork), outside the slots
+  // subagents run beside their fork (up to 4 at once per fork)
   for (const p of state.tasks.filter((t) => !t.parentId && (t.status === "running" || t.status === "waiting"))) {
     const kids = childrenOf(p.id);
     let running = kids.filter((k) => k.status === "running").length;
@@ -3797,18 +3797,11 @@ export function schedule() {
     }
     void startTask(k.id, !k.legs[k.legs.length - 1].endedAt);
   }
-  const busy = state.tasks.filter((t) => !t.parentId && (t.status === "running" || (t.status === "waiting" && isAlive(agentOf(t.id)))));
-  let light = busy.filter((t) => t.weight === "light").length;
-  // a heavy job waiting on the user isn't using the screen or a device: it
-  // gives up its slot, so other heavy jobs don't queue behind a question
-  let heavy = busy.filter((t) => t.weight === "heavy" && t.status === "running").length;
   // a step waits until the steps it builds on are done
   const ready = (t: Task) => !(t.after ?? []).some((id) => { const d = taskById(id); return d && d.status !== "done"; });
   const queue = state.tasks.filter((t) => t.status === "queued" && !t.parentId && ready(t)).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
   for (const t of queue) {
     if (waitsOnKids(t)) continue;
-    if (t.weight === "heavy" ? heavy >= state.settings.slots.heavy : light >= state.settings.slots.light) continue;
-    t.weight === "heavy" ? heavy++ : light++;
     // A task that already had a session continues it.
     void startTask(t.id, t.legs.length > 0 && !t.legs[t.legs.length - 1].endedAt);
   }
@@ -3847,7 +3840,7 @@ export function startScheduler() {
   createRoot(() => {
     createEffect(
       on(
-        () => [state.tasks.map((t) => t.status).join(), state.settings.slots.light, state.settings.slots.heavy],
+        () => state.tasks.map((t) => t.status).join(),
         () => queueMicrotask(schedule),
       ),
     );

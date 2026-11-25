@@ -67,7 +67,7 @@ export const freshState = (): AppState => ({
   side: [],
   projects: [],
   canvas: {},
-  settings: { slots: { light: 3, heavy: 1 }, captainModel: "", theme: "system", instructions: "", learn: true, isolate: true, focusGuard: true, forkModel: "", forkThinking: "", permission: "auto", watchPullRequests: false },
+  settings: { captainModel: "", theme: "system", instructions: "", learn: true, isolate: true, focusGuard: true, forkModel: "", forkThinking: "", permission: "auto", watchPullRequests: false },
 });
 
 const [state, writeState] = createStore<AppState>(freshState());

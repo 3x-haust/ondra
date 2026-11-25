@@ -43,7 +43,7 @@ projects, jobs and subagents as a live map), **메모리**, **결과물** (every
 | 다른 Mac | Run jobs on another of the user's Macs (Settings › 연결), end-to-end encrypted |
 | 에이전트 | Ondra on Discord, as itself: the user's words there go to the agent's own chat (Ondra main with its own session), not the user's main. Its talk, its jobs (kept out of projects, 내 차례, canvas and 결과물), its questions and its memory (people, the server, lessons) are in the sidebar's 에이전트 tab, view only; work memory is shared. Others only get talk. The `discord` tool (servers, channels, make or remove one, post, read a channel's recent messages, delete messages) is the agent chat's |
 
-Settings tabs: 일반 (theme, size, language, links, default model and permission, parallel jobs,
+Settings tabs: 일반 (theme, size, language, links, default model and permission,
 worktrees, GitHub push/PR, merging checked fixes, running the app before finishing, auto memory, rules into checks, skill fix suggestions, the job browser, alert sound,
 common instructions, updates, telemetry; PR review follow-up is not on the page, only `watchPullRequests` in ondra_settings), 계정과 워크스페이스, 연결, 에이전트, 펫, then
 도구, 스킬, 훅, 루틴, 시크릿 (agents), then macOS 권한, 가져오기, 단축키 (this Mac).

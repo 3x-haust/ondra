@@ -728,7 +728,6 @@ export interface AgentNote {
 }
 
 export interface Settings {
-  slots: { light: number; heavy: number };
   /** "provider/id" for the captain; empty = the account's model */
   captainModel: string;
   theme: "system" | "dark" | "light";
