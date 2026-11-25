@@ -183,11 +183,17 @@ export function keepScroll(el: Scroller, key: () => string, vs: Pick<typeof view
   let want: Spot | undefined;
   let tries = 0;
   let id = 0;
+  /** where the last try left it, to see whether something else moved it since */
+  let at: { top: number; left: number } | undefined;
+  const note = () => vs.keepSpot(k, { top: el.scrollTop, left: el.scrollLeft });
   const reach = () => {
     if (!want) return;
+    // something else moved it meanwhile (a jump to a found row): that wins
+    if (at && (Math.abs(el.scrollTop - at.top) > 1 || Math.abs(el.scrollLeft - at.left) > 1)) return void ((want = undefined), note());
     const top = topFor(want, el);
     el.scrollTop = top;
     el.scrollLeft = want.left;
+    at = { top: el.scrollTop, left: el.scrollLeft };
     if ((Math.abs(el.scrollTop - top) <= 1 && Math.abs(el.scrollLeft - want.left) <= 1) || ++tries > TRIES) want = undefined;
     else id = frame(reach);
   };
@@ -196,14 +202,14 @@ export function keepScroll(el: Scroller, key: () => string, vs: Pick<typeof view
     k = key();
     want = vs.spot(k);
     tries = 0;
+    at = undefined;
     // another key with nothing kept starts at the start
     if (!want && fresh) want = { top: 0, left: 0 };
     // not in the page yet (a ref runs before it is put in): from the next tick
     queueMicrotask(reach);
   };
   const onScroll = () => {
-    if (want) return;
-    vs.keepSpot(k, { top: el.scrollTop, left: el.scrollLeft });
+    if (!want) note();
   };
   // the user moving it themselves wins over a place still being put back
   const mine = () => {

@@ -171,6 +171,20 @@ describe("scroll places", () => {
     expect(vs.spot("list")?.top).toBe(450);
   });
 
+  it("lets a jump made meanwhile win (a row found by the search)", async () => {
+    const vs = createViewState(memory());
+    vs.keepSpot("settings/general", { top: 800, left: 0 });
+    const el = new Box(300);
+    keepScroll(el, () => "settings/general", vs);
+    await Promise.resolve();
+    expect(el.scrollTop).toBe(200);
+    el.height = 2000;
+    el.scrollTop = 1500;
+    vi.advanceTimersByTime(100);
+    expect(el.scrollTop).toBe(1500);
+    expect(vs.spot("settings/general")?.top).toBe(1500);
+  });
+
   it("stops putting it back once the user scrolls", async () => {
     const vs = createViewState(memory());
     vs.keepSpot("list", { top: 800, left: 0 });
