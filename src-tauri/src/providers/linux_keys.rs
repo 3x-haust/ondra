@@ -28,6 +28,35 @@ pub(crate) fn lookup(service: &str, account: &str) -> Option<String> {
     out.status.success().then(|| String::from_utf8(out.stdout).ok()).flatten()
 }
 
+/// Every unlocked item with these attributes: (its attributes, its secret). The secret comes on
+/// stdout into this process only.
+pub(crate) fn search(attrs: &[(&str, &str)]) -> Vec<(std::collections::HashMap<String, String>, String)> {
+    let mut args = vec!["search", "--all", "--unlock"];
+    for (k, v) in attrs {
+        args.extend([*k, *v]);
+    }
+    let Ok(out) = tool(&args).stdout(Stdio::piped()).stderr(Stdio::piped()).output() else { return vec![] };
+    parse_search(&String::from_utf8_lossy(&out.stdout), &String::from_utf8_lossy(&out.stderr))
+}
+
+/// `secret-tool search` prints each item's `[/path]`, `label = …`, `secret = …` lines on stdout
+/// and its `attribute.<name> = …` lines on stderr, item after item: an item's attributes end
+/// where a name comes again.
+fn parse_search(stdout: &str, stderr: &str) -> Vec<(std::collections::HashMap<String, String>, String)> {
+    let secrets: Vec<String> = stdout.lines().filter_map(|l| l.strip_prefix("secret = ").map(String::from)).collect();
+    let mut attrs: Vec<std::collections::HashMap<String, String>> = vec![];
+    for (k, v) in stderr.lines().filter_map(|l| l.strip_prefix("attribute.")?.split_once(" = ")) {
+        if attrs.last().is_none_or(|a| a.contains_key(k)) {
+            attrs.push(Default::default());
+        }
+        if let Some(a) = attrs.last_mut() {
+            a.insert(k.to_string(), v.to_string());
+        }
+    }
+    attrs.resize(secrets.len(), Default::default());
+    attrs.into_iter().zip(secrets).collect()
+}
+
 pub(crate) fn clear(service: &str, account: &str) {
     let _ = tool(&["clear", "service", service, "account", account]).status();
 }
@@ -62,4 +91,19 @@ pub fn ref_account(service: &str, value: &str) -> Option<String> {
     let rest = value.strip_prefix(&format!("!{SECRET_TOOL} lookup service '{service}' account '"))?;
     let acct = rest.strip_suffix('\'')?;
     super::safe_name(acct).then(|| acct.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn search_output() {
+        let out = "[/1]\nlabel = example.com\nsecret = pa = ss\ncreated = 2026-11-25 10:00:00\n[/2]\nsecret = two\n";
+        let err = "attribute.user = me@x.io\nattribute.server = example.com\nattribute.server = example.com\nattribute.user = you\n";
+        let items = super::parse_search(out, err);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].1, "pa = ss");
+        assert_eq!(items[0].0.get("user").map(String::as_str), Some("me@x.io"));
+        assert_eq!(items[1].0.get("user").map(String::as_str), Some("you"));
+        assert_eq!(items[1].1, "two");
+    }
 }

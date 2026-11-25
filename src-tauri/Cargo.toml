@@ -38,8 +38,14 @@ quick-xml = "0.38"
 fastembed = { version = "=4.9.1", default-features = false, features = ["ort-download-binaries", "hf-hub-native-tls"] }
 portable-pty = "0.9"
 
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+# the browser component (Chrome for Testing) comes as a zip on Windows and Linux
+zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Power", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Browser.close to the shared browser (no signals to end it gently)
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+windows-sys = { version = "0.61", features = ["Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 rfd = { version = "0.15", default-features = false }
 # copy_image (fs.rs): the system clipboard, and the PNG read into its pixels
 arboard = { version = "3.7", default-features = false, features = ["image-data"] }

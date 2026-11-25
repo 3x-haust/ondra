@@ -26,8 +26,9 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager};
-#[cfg(not(windows))]
-use std::{process::Command, sync::OnceLock};
+#[cfg(unix)]
+use std::process::Command;
+use std::sync::OnceLock;
 
 /// A job's session daemon goes away after this long without a command; its tab stays.
 const IDLE_MS: &str = "900000";
@@ -95,35 +96,87 @@ fn stable_port(app: &AppHandle, space: &str) -> u16 {
     p
 }
 
+#[cfg(windows)]
+fn stable_port_on_file(app: &AppHandle, space: &str) -> Option<u16> {
+    std::fs::read_to_string(space_dir(app, space).join("port")).ok()?.trim().parse().ok()
+}
+
 fn read_port(app: &AppHandle, space: &str) -> Option<u16> {
     std::fs::read_to_string(port_file(app, space)).ok()?.lines().next()?.trim().parse().ok()
 }
 
-/// A Chrome DevTools endpoint answers on this port.
-fn answers(port: u16) -> bool {
+/// The browser's DevTools WebSocket, when a Chrome DevTools endpoint answers on this port.
+fn ws_url(port: u16) -> Option<String> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let Ok(mut s) = TcpStream::connect_timeout(&addr, Duration::from_millis(400)) else { return false };
+    let mut s = TcpStream::connect_timeout(&addr, Duration::from_millis(400)).ok()?;
     let _ = s.set_read_timeout(Some(Duration::from_millis(1500)));
-    if s.write_all(b"GET /json/version HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").is_err() {
-        return false;
-    }
+    s.write_all(b"GET /json/version HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").ok()?;
     let mut buf = Vec::new();
     let _ = s.read_to_end(&mut buf);
     let text = String::from_utf8_lossy(&buf);
-    text.lines().next().is_some_and(|l| l.contains(" 200")) && text.contains("webSocketDebuggerUrl")
+    if !text.lines().next().is_some_and(|l| l.contains(" 200")) {
+        return None;
+    }
+    let body = text.split_once("\r\n\r\n")?.1;
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    v.get("webSocketDebuggerUrl")?.as_str().map(String::from)
 }
 
-/// Sites turn away "HeadlessChrome"; present the same build as plain Chrome.
-#[cfg(not(windows))]
+/// A Chrome DevTools endpoint answers on this port.
+fn answers(port: u16) -> bool {
+    ws_url(port).is_some()
+}
+
+#[cfg(windows)]
+/// Ask the browser on `port` to quit (it writes its cookies out first); true once it is gone.
+fn close_over_cdp(port: u16) -> bool {
+    let Some(url) = ws_url(port) else { return true };
+    let Ok((mut ws, _)) = tungstenite::connect(url.as_str()) else { return false };
+    let _ = ws.send(tungstenite::Message::text(r#"{"id":1,"method":"Browser.close"}"#));
+    let until = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < until {
+        if !answers(port) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
+/// The Chrome build a program is: `--version` where that only prints it; on Windows (where
+/// chrome.exe --version may open a window) the version folder Chrome for Testing unpacks
+/// into, or the one beside chrome.exe.
+fn chrome_version(chrome: &std::path::Path) -> Option<String> {
+    let is_version = |s: &str| s.split('.').count() == 4 && s.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
+    #[cfg(windows)]
+    {
+        let named = chrome.ancestors().filter_map(|a| a.file_name()?.to_str()).find(|n| is_version(n)).map(String::from);
+        let beside = || std::fs::read_dir(chrome.parent()?).ok()?.flatten().filter_map(|e| e.file_name().to_str().map(String::from)).filter(|n| is_version(n)).max();
+        named.or_else(beside)
+    }
+    #[cfg(not(windows))]
+    {
+        let out = Command::new(chrome).arg("--version").stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.split_whitespace().find(|w| is_version(w)).map(String::from)
+    }
+}
+
+/// Sites turn away "HeadlessChrome"; present the same build as plain Chrome on this system.
 fn user_agent(chrome: &std::path::Path) -> Option<String> {
     static UA: OnceLock<String> = OnceLock::new();
     if let Some(ua) = UA.get() {
         return Some(ua.clone());
     }
-    let out = Command::new(chrome).arg("--version").stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    let version = text.split_whitespace().find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()) && w.contains('.'))?;
-    let ua = format!("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version} Safari/537.36");
+    let version = chrome_version(chrome)?;
+    let platform = if cfg!(target_os = "macos") {
+        "Macintosh; Intel Mac OS X 10_15_7"
+    } else if cfg!(windows) {
+        "Windows NT 10.0; Win64; x64"
+    } else {
+        "X11; Linux x86_64"
+    };
+    let ua = format!("Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version} Safari/537.36");
     Some(UA.get_or_init(|| ua).clone())
 }
 
@@ -190,13 +243,18 @@ fn kill_profile_chrome(app: &AppHandle, space: &str, inner: &mut Inner) {
         let _ = c.wait();
     }
     // this space's profile, and the old shared one (a Chrome left from before the split)
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     let old = crate::engine::data_dir(app).join("browser").join("profile");
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     for dir in [profile_dir(app, space), old] {
         let flag = format!("--user-data-dir={}", dir.display());
         // `--` first: without it pkill reads the pattern as an option and kills nothing
-        let _ = Command::new("/usr/bin/pkill").args(["-f", "--", &flag]).status();
+        let _ = Command::new("pkill").args(["-f", "--", &flag]).status();
+    }
+    // no command lines to search on Windows: the profile's Chrome listens on its port, so ask it to quit
+    #[cfg(windows)]
+    for port in read_port(app, space).into_iter().chain([stable_port_on_file(app, space)].into_iter().flatten()) {
+        close_over_cdp(port);
     }
     std::thread::sleep(Duration::from_millis(800));
     inner.port = None;
@@ -253,7 +311,10 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
     let _ = std::fs::remove_file(port_file(app, space));
     let mut cmd = crate::engine::background_command(&chrome);
     #[cfg(target_os = "macos")]
-    cmd.args(["--use-mock-keychain", "--password-store=basic"]);
+    cmd.arg("--use-mock-keychain");
+    // the profile's own store, never the desktop keyring (no unlock prompt on Linux)
+    #[cfg(not(windows))]
+    cmd.arg("--password-store=basic");
     let port = stable_port(app, space);
     cmd.arg(format!("--user-data-dir={}", profile.display()))
         .arg(format!("--remote-debugging-port={port}"))
@@ -266,11 +327,9 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
             "--disable-renderer-backgrounding",
             "--window-size=1280,800",
         ]);
-    if !chrome.ends_with("chrome-headless-shell") {
+    if chrome.file_stem().is_none_or(|s| s != "chrome-headless-shell") {
         cmd.arg("--headless=new");
     }
-    // chrome.exe --version may open a normal browser window. Keep the native Windows UA.
-    #[cfg(not(windows))]
     if let Some(ua) = user_agent(&chrome) {
         cmd.arg(format!("--user-agent={ua}"));
     }
@@ -302,11 +361,16 @@ fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, Stri
     }
 }
 
-/// Quit the browsers Ondra started (SIGTERM first, so cookies are flushed to disk).
+/// Quit the browsers Ondra started (SIGTERM, or on Windows Browser.close, first, so cookies
+/// are flushed to disk).
 pub fn stop(app: &AppHandle) {
     let shared = app.state::<Shared>();
     let Ok(mut all) = shared.0.lock() else { return };
     let mut children: Vec<Child> = all.values_mut().filter_map(|inner| {
+        #[cfg(windows)]
+        if let Some(p) = inner.port {
+            close_over_cdp(p);
+        }
         inner.port = None;
         inner.child.take()
     }).collect();
