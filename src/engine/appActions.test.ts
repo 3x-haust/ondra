@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, projectsIn, setState, state, taskById } from "../state/store";
+import { freshState, projectsIn, projectsShown, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { view } from "../state/ui";
 import { handle } from "./bridge";
@@ -52,6 +52,23 @@ describe("ondra_app: what the user could press, main and a job press too", () =>
     // the project whose chat is asking stays: the user removes it
     expect((await app("project.remove", { id: "p-site" }, "captain:home~p-site")).error).toMatch(/user removes it/);
     expect(await app("project.remove", { id: "p-site" })).toEqual({ removed: "p-site" });
+  });
+
+  it("projects go where they're put in the sidebar's list, and the list reads in that order", async () => {
+    vi.spyOn(native, "pathsExist").mockImplementation(async (ps: string[]) => ps.map(() => true));
+    const a = (await app("project.add", { folder: "/repo/a", name: "에이" })).project as string;
+    const b = (await app("project.add", { folder: "/repo/b", name: "비" })).project as string;
+    const before = projectsShown("home").map((p) => p.id);
+    expect(before.slice(-2)).toEqual([a, b]);
+    const moved = await app("project.move", { id: "비", to: 1 });
+    expect(moved).toEqual({ order: expect.arrayContaining(["비"]) });
+    expect(moved.order[0]).toBe("비");
+    expect(projectsShown("home")[0].id).toBe(b);
+    expect((await app("project.list"))[0].id).toBe(b);
+    // past the end: the bottom; a project added later goes after the ones moved
+    await app("project.move", { id: b, to: 99 });
+    expect(projectsShown("home").slice(-1)[0].id).toBe(b);
+    expect((await app("project.move", { id: a, to: 0 })).error).toMatch(/from 1/);
   });
 
   it("another Mac's link needs this Mac open to others first, and a link to add one", async () => {

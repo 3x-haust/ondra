@@ -10,7 +10,7 @@ import { createEffect, createMemo, createRoot, createSignal, For, Match, onClean
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
-import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
+import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
@@ -318,6 +318,48 @@ function projectMenu(id: string): MenuEntry[] {
 }
 const [renamingProject, setRenamingProject] = createSignal<string | null>(null);
 
+// a project row dragged up or down goes there (pointer events: the webview keeps HTML drag-and-drop for files)
+const [dragProj, setDragProj] = createSignal<{ id: string; to: number } | null>(null);
+let dragFrom: { id: string; y: number; pointer: number } | undefined;
+let justDragged = false;
+function projDown(e: PointerEvent, id: string) {
+  if (e.button !== 0 || renamingProject() === id) return;
+  dragFrom = { id, y: e.clientY, pointer: e.pointerId };
+}
+function projMove(e: PointerEvent & { currentTarget: HTMLElement }) {
+  if (!dragFrom || e.pointerId !== dragFrom.pointer) return;
+  if (!dragProj()) {
+    if (Math.abs(e.clientY - dragFrom.y) < 5) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  const id = dragFrom.id;
+  const others = [...document.querySelectorAll<HTMLElement>(".sb-projects [data-project]")].filter((r) => r.dataset.project !== id);
+  const to = others.filter((r) => {
+    const b = r.getBoundingClientRect();
+    return b.top + b.height / 2 < e.clientY;
+  }).length;
+  setDragProj({ id, to });
+}
+function projUp() {
+  const d = dragProj();
+  dragFrom = undefined;
+  setDragProj(null);
+  if (!d) return;
+  // the click that ends a drag doesn't open the project
+  justDragged = true;
+  setTimeout(() => (justDragged = false), 0);
+  moveProject(state.space, d.id, d.to);
+}
+/** where the dragged project would land: the line above this row, or below the last */
+function dropAt(id: string): "above" | "below" | undefined {
+  const d = dragProj();
+  if (!d || d.id === id) return undefined;
+  const others = projectsShown(state.space).filter((x) => x.id !== d.id);
+  if (others[d.to]?.id === id) return "above";
+  if (d.to >= others.length && others[others.length - 1]?.id === id) return "below";
+  return undefined;
+}
+
 /** 내 차례: the tasks waiting on you, in a popover beside the row (§9.8) */
 const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; keyboard?: boolean } | null>(null);
 function NeedsMenu() {
@@ -579,6 +621,8 @@ export function Sidebar() {
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   // the agent: on, or something of it here
   const agentShown = () => !!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space);
+  // its jobs going now, counted as a project row counts its own (top-level jobs only)
+  const agentLive = () => state.tasks.filter((x) => x.agent && x.space === state.space && !x.parentId && x.status === "running").length;
   const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");
   const agentAsks = () => agentDecisions().filter((d) => taskById(d.taskId)?.space === state.space).length;
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -664,7 +708,7 @@ export function Sidebar() {
           <button class="sb-row sb-main" classList={{ on: view().name === "agent" }} onClick={() => setView({ name: "agent" })}>
             <Icon name="pet" size={16} class="sb-main-ic" />
             <span class="sb-title">{state.settings.agent?.name || tr("에이전트")}</span>
-            <Show when={agentAsks()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}>
+            <Show when={agentAsks()} fallback={<Show when={agentLive()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: agentLive() })}><span class="spin xs" />{agentLive()}</span></Show>}>
               <span class="sb-live sb-agent-ask" title={tr("물어보는 중 {n}개", { n: agentAsks() })}>{agentAsks()}</span>
             </Show>
           </button>
@@ -713,7 +757,7 @@ export function Sidebar() {
             {(p) => {
               const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
               // top-level tasks only, like every running count (a subagent is part of its task)
-              const live = () => tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && t.status === "running").length;
+              const live = () => tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.agent && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = createMemo(() => shown().filter((t) => t.project === p.id));
               const done = createMemo(() => roots().filter((t) => isOld(t) && t.project === p.id));
@@ -724,9 +768,13 @@ export function Sidebar() {
                 <>
                   <button
                     class="sb-row sb-proj"
-                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: ctxFor() === `project:${p.id}`, away: !!p.host && mirror.hosts[p.host]?.status !== "ok" }}
+                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: ctxFor() === `project:${p.id}`, away: !!p.host && mirror.hosts[p.host]?.status !== "ok", dragging: dragProj()?.id === p.id, "drop-above": dropAt(p.id) === "above", "drop-below": dropAt(p.id) === "below" }}
                     data-project={p.id}
-                    onClick={() => renamingProject() !== p.id && goMain(p.id)}
+                    onPointerDown={(e) => projDown(e, p.id)}
+                    onPointerMove={projMove}
+                    onPointerUp={projUp}
+                    onPointerCancel={projUp}
+                    onClick={() => !justDragged && renamingProject() !== p.id && goMain(p.id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);

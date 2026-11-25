@@ -772,6 +772,8 @@ export interface Settings {
   /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 Mac", its letters, a tint from the name) */
   thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
+  /** the sidebar's project order, by id (dragged there); a project not in it goes after, as added */
+  projectOrder?: string[];
   /** where new work goes from each workspace here (the run location): another Mac, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */
   computers?: Record<string, { host: string; account?: string; model?: string; thinking?: string }>;

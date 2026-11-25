@@ -217,7 +217,27 @@ export const projectById = (id?: string, space?: SpaceId) =>
 /** projects added from other Macs (Settings › 연결) */
 const remoteProjects = createRoot(() => createMemo(() => linkedProjects(state.settings.hostProjects, (h) => state.settings.hosts?.find((x) => x.id === h)?.name ?? "Mac")));
 /** what the sidebar lists: this Mac's projects and those added from other Macs */
-export const projectsShown = (space: SpaceId) => [...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)];
+export const projectsShown = (space: SpaceId) => inOrder([...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)], state.settings.projectOrder);
+/** projects in the order the user put them; those never moved keep their place after, as added */
+export function inOrder<T extends { id: string }>(list: T[], order: string[] | undefined): T[] {
+  if (!order?.length) return list;
+  const at = new Map(order.map((id, i) => [id, i]));
+  return list
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => (at.get(a.p.id) ?? order.length + a.i) - (at.get(b.p.id) ?? order.length + b.i))
+    .map((x) => x.p);
+}
+/** Move a project to `to` (its place among the space's projects as the sidebar shows them). */
+export function moveProject(space: SpaceId, id: string, to: number) {
+  const ids = projectsShown(space).map((p) => p.id);
+  const from = ids.indexOf(id);
+  if (from < 0) return;
+  ids.splice(from, 1);
+  ids.splice(Math.max(0, Math.min(to, ids.length)), 0, id);
+  // other spaces' order stays as it is
+  const mine = new Set(ids);
+  setState("settings", "projectOrder", [...(state.settings.projectOrder ?? []).filter((x) => !mine.has(x)), ...ids]);
+}
 /** Each space's jobs, this Mac's first and then the other Macs' shown there: kept as jobs come
  *  and go or move, not rebuilt on each read (the sidebar reads it for every row, every second). */
 const bySpace = createRoot(() =>

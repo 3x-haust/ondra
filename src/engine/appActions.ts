@@ -6,7 +6,7 @@
 // Kept for the user alone: letting another Mac in (its pairing ask) and secret values. A job or
 // main acts in its own workspace: its jobs and projects, never another workspace's.
 import { pathsExist } from "../lib/native";
-import { addProject, projectsIn, removeProject, renameProject, setState, state, taskById, uid } from "../state/store";
+import { addProject, inOrder, moveProject, projectsIn, projectsShown, removeProject, renameProject, setState, state, taskById, uid } from "../state/store";
 import type { SpaceId, Task } from "../state/types";
 import { mirror } from "../state/mirror";
 import { goMain, openTask, setView, type SettingsTab } from "../state/ui";
@@ -111,8 +111,8 @@ export const ACTIONS: Record<string, Action> = {
   // ───────── 프로젝트 (사이드바)
   "project.list": {
     where: "사이드바 › 프로젝트",
-    about: "This workspace's projects: id, name, folder",
-    run: (_a, who) => projectsIn(who.space).map((p) => ({ id: p.id, name: p.name, folder: p.folder })),
+    about: "This workspace's projects, in the sidebar's order: id, name, folder",
+    run: (_a, who) => inOrder(projectsIn(who.space), state.settings.projectOrder).map((p) => ({ id: p.id, name: p.name, folder: p.folder })),
   },
   "project.add": {
     where: "사이드바 › 프로젝트 › +",
@@ -125,6 +125,19 @@ export const ACTIONS: Record<string, Action> = {
       if (!ok) return fail(`no folder ${folder}`);
       const id = addProject(who.space, folder, str(a, "name") || undefined);
       return { project: id };
+    },
+  },
+  "project.move": {
+    where: "사이드바 › 프로젝트 (끌어서 옮기기)",
+    about: "Put a project at another place in the sidebar's list",
+    takes: { id: "a project id or name", to: "its new place, 1 = top (a number larger than the list = bottom)" },
+    run: (a, who) => {
+      const p = projectOf(who, a);
+      if (isErr(p)) return p;
+      const to = Number(a.to);
+      if (!Number.isInteger(to) || to < 1) return fail("to is a place from 1 (the top)");
+      moveProject(who.space, p.id, to - 1);
+      return { order: projectsShown(who.space).map((x) => x.name) };
     },
   },
   "project.rename": {
@@ -292,6 +305,6 @@ export async function appHands(worker: string | undefined, a: Args): Promise<unk
   const act = ACTIONS[name];
   if (!act) return fail(`no action ${name} (action "list" shows them)`);
   const args = a.args && typeof a.args === "object" ? (a.args as Args) : {};
-  for (const k of Object.keys(act.takes ?? {})) if (!k.endsWith("?") && !str(args, k) && typeof args[k] !== "boolean") return fail(`${name} takes ${k}`);
+  for (const k of Object.keys(act.takes ?? {})) if (!k.endsWith("?") && !str(args, k) && typeof args[k] !== "boolean" && typeof args[k] !== "number") return fail(`${name} takes ${k}`);
   return act.run(args, who);
 }
