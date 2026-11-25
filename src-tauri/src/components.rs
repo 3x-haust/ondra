@@ -195,9 +195,9 @@ fn dev_dir() -> Option<PathBuf> {
 
 /// The folder `name` runs from, if any copy of it is here.
 pub fn path(app: &AppHandle, name: &str) -> Option<PathBuf> {
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     if name == "engine" {
-        // The Windows installer carries the engine and its assets together, not a component archive.
+        // The Windows and Linux installers carry the engine and its assets together, not a component archive.
         return app.path().resource_dir().ok().map(|d| d.join("engine")).filter(|d| complete(name, d));
     }
     let want = manifest(app).get(name).map(|c| c.version.as_str());

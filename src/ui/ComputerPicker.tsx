@@ -68,13 +68,16 @@ export function hostAccount(p: Place, mine: string, own?: string): HostAccount |
 export const remoteModels = (a: HostAccount | undefined): RemoteModels | undefined =>
   a ? { models: a.models ?? [], auto: a.model, name: a.name, levels: a.levels, names: a.names } : undefined;
 
+/** what this computer is called until it is given a name: "this Mac" only on a Mac */
+export const thisComputer = () => (/Macintosh/.test(navigator.userAgent) ? t("이 Mac") : t("이 기기"));
+
 /** the chip: which Mac; a menu to change it unless it's fixed (a project's own Mac) */
 export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: string }) {
   const mine = () => props.space ?? state.space;
   const status = () => (props.value ? (mirror.hosts[props.value.host]?.status ?? "connecting") : "ok");
-  const label = () => (props.value ? hostName(props.value.host) : t("이 Mac"));
+  const label = () => (props.value ? hostName(props.value.host) : thisComputer());
   const items = (): MenuEntry[] => [
-    ...(localHere(mine()) ? [{ id: "local", label: t("이 Mac"), icon: "monitor", checked: !props.value, run: () => setComputer(mine(), undefined) }] : []),
+    ...(localHere(mine()) ? [{ id: "local", label: thisComputer(), icon: "monitor", checked: !props.value, run: () => setComputer(mine(), undefined) }] : []),
     ...macsHere(mine()).map((h) => ({
       id: h.id,
       label: mirror.hosts[h.id]?.status === "ok" ? h.name : `${h.name} · ${hostState(h.id)}`,

@@ -434,6 +434,7 @@ export default {
   "잠자기 방지": "Keep awake",
   "원격 연결을 켜 두면 이 PC가 자동으로 잠들지 않아요": "Keep this PC awake while remote hosting is on",
   "전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요": "This Mac won't sleep while it's plugged in",
+  "Ondra가 켜져 있는 동안 이 기기가 잠들지 않아요": "This computer won't sleep while Ondra is open",
   "{name}의 계정": "Account on {name}",
   "이 프로젝트는 {name}에 있어요": "This project is on {name}",
   "어느 Mac에서 할지": "Which Mac it runs on",

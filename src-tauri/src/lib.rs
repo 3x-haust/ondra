@@ -222,11 +222,11 @@ pub fn plugin_mode() -> Option<i32> {
 /// `.env`). Variables already set win. Jobs inherit them.
 fn load_env() {
     let mut files = vec![];
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     if let Some(dir) = dirs::data_dir() {
         files.push(dir.join("dev.3xhaust.ondra/.env"));
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     if let Some(home) = std::env::var_os("HOME") {
         files.push(std::path::PathBuf::from(home).join("Library/Application Support/dev.3xhaust.ondra/.env"));
     }
@@ -274,6 +274,9 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(windows)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| show_main(app)));
+    // a D-Bus name element can't start with a digit ("3xhaust"): the spec's escape is a leading "_"
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(tauri_plugin_single_instance::Builder::new().dbus_id("dev._3xhaust.ondra").callback(|app, _, _| show_main(app)).build());
     let app = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(

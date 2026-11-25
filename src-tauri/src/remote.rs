@@ -116,7 +116,10 @@ pub fn remote_host_name() -> String {
     #[cfg(windows)]
     return std::env::var("COMPUTERNAME").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "Windows PC".into());
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    return std::fs::read_to_string("/proc/sys/kernel/hostname").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "Linux PC".into());
+
+    #[cfg(target_os = "macos")]
     Command::new("/usr/sbin/scutil")
         .args(["--get", "ComputerName"])
         .output()
@@ -126,24 +129,23 @@ pub fn remote_host_name() -> String {
         .unwrap_or_else(|| "Mac".into())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(windows))]
 static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
 
 #[cfg(windows)]
 mod power;
 
-/// The sleep request belongs to this host and ends with the app.
+/// Keep this computer from sleeping while others may work on it, never longer than this app runs:
+/// a Windows power request, a `caffeinate` (on power only) or a `systemd-inhibit` lock.
 #[tauri::command]
 pub fn remote_awake(on: bool) -> Result<(), String> {
     #[cfg(windows)]
     return power::keep_awake(on).map_err(|e| e.to_string());
-    #[cfg(not(any(target_os = "macos", windows)))]
-    return if on { Err("Keep awake is unavailable on this platform".into()) } else { Ok(()) };
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     keep_awake(on)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(windows))]
 fn keep_awake(on: bool) -> Result<(), String> {
     let mut slot = AWAKE.lock().map_err(|e| e.to_string())?;
     if let Some(mut c) = slot.take() {
@@ -151,8 +153,17 @@ fn keep_awake(on: bool) -> Result<(), String> {
         let _ = c.wait();
     }
     if on {
-        let child = Command::new("/usr/bin/caffeinate")
-            .args(["-s", "-i", "-w", &std::process::id().to_string()])
+        let pid = std::process::id().to_string();
+        #[cfg(target_os = "macos")]
+        let mut cmd = Command::new("/usr/bin/caffeinate");
+        #[cfg(target_os = "macos")]
+        cmd.args(["-s", "-i", "-w", &pid]);
+        // holds the lock until `tail` sees this app exit
+        #[cfg(target_os = "linux")]
+        let mut cmd = Command::new("systemd-inhibit");
+        #[cfg(target_os = "linux")]
+        cmd.args(["--what=sleep:idle", "--who=Ondra", "--why=Remote devices may start jobs here", "--mode=block", "tail", &format!("--pid={pid}"), "-f", "/dev/null"]);
+        let child = cmd
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

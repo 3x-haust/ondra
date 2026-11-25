@@ -12,18 +12,18 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-#[cfg(any(not(windows), test))]
+#[cfg(any(target_os = "macos", test))]
 use std::io::Write;
 use std::path::{Path, PathBuf};
-#[cfg(any(not(windows), test))]
+#[cfg(any(target_os = "macos", test))]
 use std::process::Command;
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 use std::process::Stdio;
 use std::time::Duration;
 use tauri::AppHandle;
 
 pub const SERVICE: &str = "dev.3xhaust.ondra.provider";
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 const SECURITY: &str = "/usr/bin/security";
 /// what a keyless provider gets: the engine lists a provider's models only once it has some key
 pub const NO_KEY: &str = "none";
@@ -35,7 +35,7 @@ fn safe_name(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | ':'))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn hex(s: &str) -> String {
     s.bytes().map(|b| format!("{b:02x}")).collect()
 }
@@ -44,9 +44,13 @@ fn hex(s: &str) -> String {
 mod windows_keys;
 #[cfg(windows)]
 pub use windows_keys::{secret_set, secret_get, secret_exists, secret_delete, secret_ref, ref_account};
+#[cfg(target_os = "linux")]
+pub(crate) mod linux_keys;
+#[cfg(target_os = "linux")]
+pub use linux_keys::{secret_set, secret_get, secret_exists, secret_delete, secret_ref, ref_account};
 
 /// Stores (or replaces) a secret. It goes to `security` on stdin as hex, never on a command line.
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
     if !safe_name(service) || !safe_name(account) {
         return Err("bad keychain name".into());
@@ -73,7 +77,7 @@ pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), Strin
 }
 
 /// Whether an item is there (attributes only; the secret is not read).
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn secret_exists(service: &str, account: &str) -> bool {
     Command::new(SECURITY)
         .args(["find-generic-password", "-s", service, "-a", account])
@@ -85,7 +89,7 @@ pub fn secret_exists(service: &str, account: &str) -> bool {
 }
 
 /// The secret, for a request made from here (listing models, the check). Never returned to the webview.
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn secret_get(service: &str, account: &str) -> Option<String> {
     let out = Command::new(SECURITY)
         .args(["find-generic-password", "-s", service, "-a", account, "-w"])
@@ -103,7 +107,7 @@ pub fn secret_get(service: &str, account: &str) -> Option<String> {
     (!v.is_empty()).then_some(v)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn secret_delete(service: &str, account: &str) {
     // a name can have several items (made twice by hand): delete until none is left
     for _ in 0..8 {
@@ -121,13 +125,13 @@ pub fn secret_delete(service: &str, account: &str) {
 }
 
 /// The engine's command form for a keychain item: `!security find-generic-password … -w`.
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn secret_ref(service: &str, account: &str) -> Result<String, String> {
     Ok(format!("!{SECURITY} find-generic-password -s '{service}' -a '{account}' -w"))
 }
 
 /// The keychain account a `secret_ref` value names, when it is one of ours.
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 pub fn ref_account(service: &str, value: &str) -> Option<String> {
     let rest = value.strip_prefix(&format!("!{SECURITY} find-generic-password -s '{service}' -a '"))?;
     let (acct, tail) = rest.split_once('\'')?;
@@ -867,8 +871,10 @@ mod tests {
     #[test]
     fn keychain_refs_round_trip() {
         let r = secret_ref(SERVICE, "acc-1/direct-x").unwrap();
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
         assert_eq!(r, "!/usr/bin/security find-generic-password -s 'dev.3xhaust.ondra.provider' -a 'acc-1/direct-x' -w");
+        #[cfg(target_os = "linux")]
+        assert_eq!(r, "!/usr/bin/secret-tool lookup service 'dev.3xhaust.ondra.provider' account 'acc-1/direct-x'");
         assert_eq!(ref_account(SERVICE, &r).as_deref(), Some("acc-1/direct-x"));
         assert_eq!(ref_account("other", &r), None);
         assert_eq!(ref_account(SERVICE, "sk-literal"), None);

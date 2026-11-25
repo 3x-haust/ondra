@@ -12,6 +12,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 #[cfg(windows)]
 mod windows;
+#[cfg(target_os = "linux")]
+pub(crate) mod linux;
 
 fn state_file(app: &AppHandle) -> PathBuf {
     data_dir(app).join("state.json")
@@ -572,13 +574,13 @@ pub fn account_remove(app: AppHandle, account_id: String) {
 /// Choose an existing local folder. Cancellation leaves the current project alone.
 #[tauri::command]
 pub async fn pick_folder(prompt: String) -> Option<String> {
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     { rfd::AsyncFileDialog::new().set_title(prompt).pick_folder().await.map(|f| f.path().display().to_string()) }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     { pick_folder_mac(prompt) }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn pick_folder_mac(prompt: String) -> Option<String> {
     let out = Command::new("/usr/bin/osascript")
         .arg("-e")
@@ -592,13 +594,13 @@ fn pick_folder_mac(prompt: String) -> Option<String> {
 /// Files to attach to a message (several allowed). Empty if cancelled.
 #[tauri::command]
 pub async fn pick_files(prompt: String) -> Vec<String> {
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     { rfd::AsyncFileDialog::new().set_title(prompt).pick_files().await.unwrap_or_default().into_iter().map(|f| f.path().display().to_string()).collect() }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     { pick_files_mac(prompt) }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn pick_files_mac(prompt: String) -> Vec<String> {
     let script = format!(
         "set fs to choose file with prompt \"{}\" with multiple selections allowed\nset out to \"\"\nrepeat with f in fs\nset out to out & POSIX path of f & linefeed\nend repeat\nout",
@@ -615,7 +617,9 @@ fn pick_files_mac(prompt: String) -> Vec<String> {
 pub fn reveal_path(path: String) {
     #[cfg(windows)]
     windows::reveal(&path);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    linux::reveal(&path);
+    #[cfg(target_os = "macos")]
     let _ = Command::new("/usr/bin/open").arg("-R").arg(path).spawn();
 }
 
@@ -626,7 +630,9 @@ pub fn open_url(url: String) {
     if ["https://", "http://", "mailto:", "tel:"].iter().any(|p| url.starts_with(p)) {
         #[cfg(windows)]
         windows::open_url(&url);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "linux")]
+        let _ = linux::open(&url);
+        #[cfg(target_os = "macos")]
         let _ = Command::new("/usr/bin/open").arg(url).spawn();
     }
 }
@@ -643,7 +649,9 @@ pub fn open_notices(app: tauri::AppHandle) -> Result<(), String> {
         .ok_or("라이선스 파일이 없어요")?;
     #[cfg(windows)]
     crate::engine::system_command("notepad.exe").arg(file).spawn().map_err(|e| e.to_string())?;
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    linux::open(&file.to_string_lossy())?;
+    #[cfg(target_os = "macos")]
     Command::new("/usr/bin/open").arg("-t").arg(file).spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -678,7 +686,9 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
     }
     #[cfg(windows)]
     let mut fallback = windows::editor_fallback(Path::new(&path));
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    let mut fallback = linux::editor_fallback(Path::new(&path));
+    #[cfg(target_os = "macos")]
     let mut fallback = Command::new("/usr/bin/open");
     fallback.arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
@@ -688,7 +698,8 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
 #[cfg(not(windows))]
 fn shell_script(path: &str, env: &[(String, String)]) -> String {
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-    let mut lines = vec!["#!/bin/zsh".to_string(), format!("cd {} || exit 1", q(path))];
+    let sh = crate::engine::DEFAULT_SHELL;
+    let mut lines = vec![format!("#!{sh}"), format!("cd {} || exit 1", q(path))];
     let mut shims = String::new();
     for (k, v) in env {
         if k == "PATH" {
@@ -699,8 +710,8 @@ fn shell_script(path: &str, env: &[(String, String)]) -> String {
     }
     // a login shell rebuilds PATH, so the space's commands go back in front after it
     lines.push(format!(
-        "exec \"${{SHELL:-/bin/zsh}}\" -l -c {}",
-        q(&format!("export PATH={}:\"$PATH\"; exec \"${{SHELL:-/bin/zsh}}\" -i", q(&shims)))
+        "exec \"${{SHELL:-{sh}}}\" -l -c {}",
+        q(&format!("export PATH={}:\"$PATH\"; exec \"${{SHELL:-{sh}}}\" -i", q(&shims)))
     ));
     lines.join("\n") + "\n"
 }
@@ -725,11 +736,19 @@ fn space_shell_script(app: &AppHandle, path: &str, env: &[(String, String)]) -> 
 pub fn open_in_terminal(app: AppHandle, path: String, env: Option<Vec<(String, String)>>) -> Result<(), String> {
     #[cfg(windows)]
     { let _ = app; windows::terminal(&path, &env.unwrap_or_default()) }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let script = match env.filter(|e| !e.is_empty()) {
+            Some(env) => Some(space_shell_script(&app, &path, &env)?),
+            None => None,
+        };
+        linux::terminal(&path, script.as_deref())
+    }
+    #[cfg(target_os = "macos")]
     { open_mac_terminal(app, path, env) }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn open_mac_terminal(app: AppHandle, path: String, env: Option<Vec<(String, String)>>) -> Result<(), String> {
     let has = |app: &str| Path::new(&format!("/Applications/{app}.app")).exists();
     let mut cmd = Command::new("/usr/bin/open");
@@ -1149,7 +1168,7 @@ mod terminal_tests {
         // run it with a stand-in SHELL that prints what the user's shell would see
         let file = dir.join("t.command");
         std::fs::write(&file, &script).unwrap();
-        let out = std::process::Command::new("/bin/zsh")
+        let out = std::process::Command::new(crate::engine::DEFAULT_SHELL)
             .arg(&file)
             .env("SHELL", "/bin/sh")
             .env("ENV", "/dev/null")
