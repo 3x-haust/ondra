@@ -1933,13 +1933,15 @@ final class Backdrop {
         guard let v = made else { dbgLog("display: create failed"); return false }
         let t1 = nowMs()
         while !onlineDisplays().contains(v.displayID), nowMs() - t1 < 2000 { usleep(10_000) }
-        // Its place: off the bottom-right corner of the real displays, touching them only at a
-        // corner, so the pointer can never wander onto it; past another job's display if one is
-        // there. Saved for this set of displays, so it's already there next time.
-        var corner = CGPoint(x: CGDisplayBounds(CGMainDisplayID()).maxX, y: CGDisplayBounds(CGMainDisplayID()).maxY)
-        for other in onlineDisplays() where other != v.displayID && Backdrop.isOurs(other) {
-            let b = CGDisplayBounds(other)
-            if b.maxX > corner.x { corner = CGPoint(x: b.maxX, y: b.maxY) }
+        // Its place: above and right of every screen of the user's, touching them only at a
+        // corner; past another job's display if one is there. A window's top never goes above
+        // its screen's menu bar, so no window the user drags or the app moves can reach it (one
+        // dragged off the bottom-right corner lands on a display there). Saved for this set of
+        // displays, so it's already there next time.
+        let screens = userDisplayBounds()
+        var corner = CGPoint(x: screens.map(\.maxX).max()!, y: screens.map(\.minY).min()! - CGDisplayBounds(v.displayID).height)
+        for other in onlineDisplays() where other != v.displayID && Backdrop.isOurs(other) && CGDisplayBounds(other).maxY <= corner.y + CGDisplayBounds(v.displayID).height {
+            corner.x = max(corner.x, CGDisplayBounds(other).maxX)
         }
         if CGDisplayBounds(v.displayID).origin != corner {
             var cfg: CGDisplayConfigRef?
@@ -3176,12 +3178,13 @@ func clearedOrigin(_ f: CGRect, off: [CGRect], screen: CGRect) -> CGPoint? {
 }
 
 /// The off-screen display is for jobs only. macOS always places a display touching another (it
-/// moves one set apart back against it), so the pointer can cross onto it, even at a corner,
-/// and a window dragged into that corner lands on it, out of the user's sight. While the app
-/// holds the display, the pointer is put back on the user's screen the moment it gets there,
-/// and a window of the app in front (the user's: a job's app is never brought to the front)
-/// that reaches onto it is moved back onto the user's screen when a drag ends, and checked
-/// each second otherwise (a window moved by keys, or by the app), never during a drag.
+/// moves one set apart back against it), so the pointer can cross onto it at the corner it
+/// touches. While the app holds the display, a pointer event that lands there is moved back
+/// onto the user's screen before any app gets it, and the pointer with it. No window reaches
+/// the display where it sits (see Backdrop.ensure); one moved onto it another way (a
+/// window-manager tool, a menu command) is put back: a window of the app in front (the
+/// user's: a job's app is never brought to the front) that reaches onto it is moved back onto
+/// the user's screen when a drag ends, and checked each second otherwise, never during a drag.
 func keepUserOffBackdrop() -> Never {
     let mask = [CGEventType.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .leftMouseUp]
         .reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
@@ -3194,6 +3197,8 @@ func keepUserOffBackdrop() -> Never {
         let p = event.location
         if off.contains(where: { $0.contains(p) }) {
             let back = nearestUserPoint(p, in: userDisplayBounds())
+            // the event goes on from the user's screen, so no app sees the pointer there
+            event.location = back
             CGWarpMouseCursorPosition(back)
             dbgLog("keeper: pointer \(Int(p.x)),\(Int(p.y)) put back at \(Int(back.x)),\(Int(back.y))")
             // a warp holds the pointer still for a moment; the user's mouse keeps moving it
@@ -3204,7 +3209,7 @@ func keepUserOffBackdrop() -> Never {
         }
         return Unmanaged.passUnretained(event)
     }
-    let tapRef = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .listenOnly,
+    let tapRef = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
                                eventsOfInterest: mask, callback: callback, userInfo: nil)
     if let tap = tapRef {
         keeperTap = tap

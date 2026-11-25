@@ -22,17 +22,19 @@ using only **public** APIs:
   screen.
 - **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
   so the user's frontmost app stays in front.
-- **Off-screen display**: an app the job opens runs on a `CGVirtualDisplay` just off
-  the corner of the real screens (`Backdrop`). The app holds one for as long as it runs
+- **Off-screen display**: an app the job opens runs on a `CGVirtualDisplay` above and
+  right of the real screens, touching them only at a corner (`Backdrop`). The app holds one for as long as it runs
   (`ondra-cuhost --hold-display`, started at launch, gone with the app) and every job's
   helper shares it: attaching or dropping any display makes macOS leave and re-enter
   Stage Manager, and a window of the user's it remembers elsewhere jumps there and back
   (it shrinks for a moment). Nothing done to the window beforehand stops that, so no
-  job attaches or drops one. macOS always places a display touching another, so the
-  pointer could cross onto it, even at a corner, and a window dragged into that corner
-  would land on it out of sight: the holder puts the pointer back on the user's screen
-  the moment it gets there, and moves a window of the app in front that reaches onto it
-  back when a drag ends (and each second, never during a drag). The process is
+  job attaches or drops one. A window's top never goes above its screen's menu bar, so
+  no window reaches the display there (off the bottom-right corner, a window dragged
+  into the corner landed on it, out of sight). macOS always places a display touching
+  another, so the pointer could cross at that corner: the holder's HID event tap moves
+  such an event back onto the user's screen before any app gets it, and the pointer
+  with it. A window moved onto the display another way (a window-manager tool) is put
+  back when a drag ends and each second. The process is
   spawned suspended, assigned to that display's desktop (`SLSProcessAssignToSpace`),
   then resumed, so its first window opens off-screen — no flash, no Dock tile
   (it runs from an `LSBackgroundOnly` copy), no focus taken. Capture and pointer/key
