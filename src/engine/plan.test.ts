@@ -158,6 +158,9 @@ describe("waitsOnly", () => {
       "for i in $(seq 1 30); do gh run view 1 --json status | jq -r .status; sleep 20; done",
       `ssh -n ubuntu-125-186-161-87 'kubectl get cm,secret -A 2>/dev/null | grep -i mmhs'`,
       "docker logs -f web",
+      // a CI wait with its run id kept in a variable and a jq filter piping inside its quotes
+      `cd "$APP_SCRATCH_DIR/probe"; R=45578109180; for i in $(seq 1 50); do s=$(gh run view $R --json jobs -q '[.jobs[] | .name[7:14] + ":" + .status + ":" + .conclusion + ":" + ([.steps[]|select(.status=="completed")|.name]|last)] | join(" | ")'); echo "$s"; echo "$s" | grep -q "ubuntu-:completed" && break; sleep 25; done`,
+      `for i in $(seq 1 60); do s=$(gh pr checks 839 -R 3x-haust/ondra 2>/dev/null | rg -c 'pending' ); [ "\${s:-0}" = 0 ] && break; sleep 10; done`,
     ])
       expect(waitsOnly(c), c).toBe(true);
   });
@@ -171,6 +174,10 @@ describe("waitsOnly", () => {
       "curl -sL -o app.zip https://example.com/app.zip",
       "curl -X POST https://example.com/hook",
       "pnpm test",
+      // work inside $(…) or a double-quoted $(…) is still work
+      "for i in $(seq 1 3); do out=$(pnpm build); sleep 1; done",
+      `echo "$(pnpm build)"`,
+      `R=1; gh run rerun $R`,
     ])
       expect(waitsOnly(c), c).toBe(false);
   });

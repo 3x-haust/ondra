@@ -6,7 +6,7 @@
 //           nothing changed since is wasted
 //   other — everything else
 
-const WAIT = /^(sleep|tail|head|cat|less|ls|ps|pgrep|date|grep|rg|wc|cut|echo|printf|test|\[|cd|for|while|do|done|if|then|else|fi|break|true|jq|sed -n|awk|sort|uniq|stat|file|which|pwd)\b/;
+const WAIT = /^(sleep|tail|head|cat|less|ls|ps|pgrep|date|grep|rg|wc|cut|echo|printf|test|\[|cd|for|while|do|done|if|then|else|fi|break|true|jq|sed -n|awk|sort|uniq|stat|file|which|pwd|seq)(?=\W|$)|^\w+=(?:"[^"]*"|'[^']*'|\S*)$/;
 const MUTATE = /\s(-X\s*|--method[= ]\s*|--request[= ]\s*)(POST|PUT|PATCH|DELETE)\b|\s(-d|--data[\w-]*|-F|--form|-f|--field|--raw-field|--input|-T|--upload-file)\b/i;
 const STATUS = [
   /^gh\s+(run\s+(view|list|watch)|pr\s+(view|checks|list|status|diff)|release\s+(view|list)|issue\s+(view|list)|repo\s+view|workflow\s+(view|list)|api)\b/,
@@ -55,8 +55,19 @@ export const isTestRun = (cmd: string) => steps(unwrap(cmd)).some((p) => !onlyRe
 /** A command that runs `program` itself, not one that reads or searches for its name (`rg ondra-browser`). */
 export const runsProgram = (cmd: string, program: RegExp) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && program.test(p));
 
+/**
+ * What runs, for telling a look from work: a quoted argument is text, not commands (a jq filter's
+ * `|`, `grep "a;b"`), and `$(…)` runs its own command (`s=$(gh run view …)` is a gh run view).
+ * Single quotes go whole; in double quotes only what would cut the chain goes, `$(…)` stays.
+ */
+const asRun = (cmd: string) =>
+  cmd
+    .replace(/'[^']*'/g, "''")
+    .replace(/"[^"]*"/g, (q) => q.replace(/[|;&]/g, " "))
+    .replace(/\$\(/g, "\n");
+
 export function commandKind(cmd: string): "poll" | "check" | "other" {
-  const ps = steps(cmd);
+  const ps = steps(asRun(cmd));
   if (!ps.length) return "other";
   // -f/-d are a request's body for curl and gh; `docker logs -f` and `kubectl get -f` only follow or read
   const look = (p: string) => (STATUS.some((re) => re.test(p)) && (/^(kubectl|docker)\s/.test(p) || !MUTATE.test(` ${p}`))) || HELP.test(p);
