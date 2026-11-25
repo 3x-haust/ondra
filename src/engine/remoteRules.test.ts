@@ -31,6 +31,14 @@ describe("what a Mac allowed in may reach", () => {
   it("not a project it doesn't keep, another device's job, a job of a third Mac, or nothing", () => {
     for (const id of ["inSecret", "theirs", "far", "missing"]) expect(mayReach(reach, byId(id), byId), id).toBe(false);
   });
+  it("asked for the work done there: every listed job of its workspaces, not quick answers, archived or the agent's", () => {
+    const all = [...tasks, job("loose"), job("answer", { answer: true }), job("old", { archived: true }), job("agent", { agent: {} }), job("looseKid", { parentId: "loose" })];
+    const by = (id: string) => all.find((x) => x.id === id);
+    const r: Reach = { ...reach, sessions: true };
+    for (const id of ["loose", "looseKid", "inSecret", "theirs"]) expect(mayReach(r, by(id), by), id).toBe(true);
+    for (const id of ["answer", "old", "agent", "far"]) expect(mayReach(r, by(id), by), id).toBe(false);
+    expect(mayReach({ ...r, spaces: new Set(["work"]) }, by("loose"), by)).toBe(false);
+  });
   it("only in the workspaces it may use", () => {
     const home: Reach = { ...reach, spaces: new Set(["home"]) };
     expect(mayReach(home, byId("inApp"), byId)).toBe(true);
@@ -73,7 +81,7 @@ describe("a Mac this one works on, removed", () => {
     const s = {
       hosts: [{ id: DEV, name: "A" }, { id: OTHER, name: "B" }],
       hostProjects: [{ host: DEV, id: "app", space: "home" as const }, { host: OTHER, id: "web", space: "home" as const }],
-      computers: { home: { host: DEV, account: "x" }, work: { host: OTHER } },
+      computers: { home: { host: DEV, account: "x" }, work: { host: OTHER }, [`h:${DEV}:home`]: { host: OTHER } },
     };
     const rest = withoutHost(s, DEV);
     expect(rest.hosts.map((h) => h.id)).toEqual([OTHER]);
@@ -85,7 +93,7 @@ describe("a Mac this one works on, removed", () => {
 });
 
 describe("which of a Mac's projects show here", () => {
-  const spaceFor = (label?: string) => (label === "없음" ? undefined : "home");
+  const spaceFor = (p: { space?: string }) => (p.space === "없음" ? undefined : "home");
   const list = [{ id: "app" }, { id: "web" }, { id: "docs" }, { id: "nowhere", space: "없음" }];
   it("adds new ones, but not hidden ones or ones with no tab", () => {
     expect(linkPlan(list, [{ id: "app" }], ["docs"], spaceFor)).toEqual({ gone: [], add: [{ id: "web" }] });

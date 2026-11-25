@@ -14,8 +14,8 @@ export interface HostMirror {
   reason?: string;
   /** connected once and then not: since when */
   since?: number;
-  /** every project on that device (to pick from) */
-  projects: { id: string; name: string; folder: string; space?: string }[];
+  /** every project on that device (to pick from): its workspace's name there, and its id (newer devices) */
+  projects: { id: string; name: string; folder: string; space?: string; spaceId?: string }[];
   /** the jobs of the projects added here, as that device has them (ids as there) */
   tasks: Task[];
   /** its workspaces, accounts and their plan use (sent by that device, refreshed as they change) */
@@ -81,6 +81,13 @@ export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirro
 export const remoteProjectId = (host: string, id: string) => `r:${host}:${id}`;
 export function splitProjectId(id?: string): { host: string; id: string } | undefined {
   const m = id?.match(/^r:([0-9a-f]{64}):(.+)$/);
+  return m ? { host: m[1], id: m[2] } : undefined;
+}
+
+/** another device's workspace, as this app names it: h:<host>:<its id> (one tab per device and workspace) */
+export const hostSpaceId = (host: string, id: string) => `h:${host}:${id}`;
+export function splitSpaceId(id?: string): { host: string; id: string } | undefined {
+  const m = id?.match(/^h:([0-9a-f]{64}):(.+)$/);
   return m ? { host: m[1], id: m[2] } : undefined;
 }
 

@@ -6,7 +6,7 @@
 // Kept for the user alone: letting another device in (its pairing ask) and secret values. A job or
 // main acts in its own workspace: its jobs and projects, never another workspace's.
 import { pathsExist } from "../lib/native";
-import { addProject, inOrder, moveProject, projectsIn, projectsShown, removeProject, renameProject, setState, state, taskById, uid } from "../state/store";
+import { addProject, inOrder, moveProject, projectsIn, projectsShown, removeProject, renameProject, setState, state, taskById, uid, ownSpaces } from "../state/store";
 import type { SpaceId, Task } from "../state/types";
 import { mirror } from "../state/mirror";
 import { goMain, openTask, setView, type SettingsTab } from "../state/ui";
@@ -227,7 +227,7 @@ export const ACTIONS: Record<string, Action> = {
   "space.list": {
     where: "사이드바 위 워크스페이스 탭",
     about: "The workspaces: id, name, folder, terminal command; which one is on screen",
-    run: () => ({ on_screen: state.space, spaces: state.spaces.map((s) => ({ id: s.id, name: s.label, folder: s.folder, command: s.command })) }),
+    run: () => ({ on_screen: state.space, spaces: ownSpaces().map((s) => ({ id: s.id, name: s.label, folder: s.folder, command: s.command })) }),
   },
   "space.add": {
     where: "설정 › 계정과 워크스페이스 › 워크스페이스 추가",
@@ -236,7 +236,7 @@ export const ACTIONS: Record<string, Action> = {
     run: async (a) => {
       const label = str(a, "name").slice(0, 40);
       if (!label) return fail("name is empty");
-      if (state.spaces.some((s) => s.label === label)) return fail(`there is already a workspace ${label}`);
+      if (ownSpaces().some((s) => s.label === label)) return fail(`there is already a workspace ${label}`);
       const id = uid("sp") as SpaceId;
       setState("spaces", (l) => [...l, { id, label, folder: str(a, "folder") || "~", rules: "" }]);
       const made = state.spaces.find((s) => s.id === id)!;

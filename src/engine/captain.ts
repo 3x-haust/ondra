@@ -19,7 +19,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid, ownSpaces } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { mcpArgs, mcpSig } from "./services";
@@ -1117,10 +1117,10 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   out.push(forksBlock(forks, sent.forks));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   // spaces are separate; the user pointing at another one opens it for this message
-  const others0 = state.spaces.filter((s) => s.id !== sp(space));
+  const others0 = ownSpaces().filter((s) => s.id !== sp(space));
   const spacesLine = others0.map((s) => `- ${s.id}: ${s.label} (${s.folder})`).join("\n");
   if (spacesLine && spacesLine !== sent.spaces) out.push("", "# Other spaces (separate; open one only when the user asks, with \"reach\")", spacesLine);
-  for (const id of event ? [] : namedSpaces(text, sp(space), state.spaces)) {
+  for (const id of event ? [] : namedSpaces(text, sp(space), ownSpaces())) {
     const s = spaceById(id);
     const theirs = state.memory.filter((m) => isLive(m) && m.scope === "space" && m.space === id);
     const found = recall(theirs, text, { max: 4, budget: 700 });
@@ -1436,8 +1436,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         display: work === 1 ? original : undefined,
         isolate: isolateOf.get(space),
         // another space only when the user asked: main's "reach", or the message pointing at it
-        reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...(fromUser ? namedSpaces(original, sp(space), state.spaces) : [])])]
-          .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
+        reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...(fromUser ? namedSpaces(original, sp(space), ownSpaces()) : [])])]
+          .map((x) => ownSpaces().find((s) => s.id === x || s.label === x)?.id)
           .filter((x): x is SpaceId => !!x && x !== sp(space)),
         after,
         follows: from?.id,

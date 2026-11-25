@@ -9,7 +9,7 @@ import { binding, chordLabel, defaultChord, shortcutHint, ignoredKey, isShortcut
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
+import { deviceSpaces, ownSpaces, projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
 import { mirror, setMirror } from "../state/mirror";
 import { scrollKept } from "../state/viewState";
 import type { Account, SpaceId } from "../state/types";
@@ -674,8 +674,8 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
       ? { id: "edit", label: t("편집"), icon: "pencil", run: props.onEdit }
       : { id: "login", label: t(loginWord(a())), icon: "key", run: props.onLogin },
     { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: () => requestAnimationFrame(() => (nameEl.focus(), nameEl.select())) },
-    ...(state.spaces.length > 1
-      ? (["sep", ...state.spaces.filter((s) => s.id !== a().space).map((s) => ({ id: `to-${s.id}`, label: t("{name}(으)로 옮기기", { name: t(s.label) }), icon: "arrow", run: () => updateAccount(props.id, (x) => (x.space = s.id)) }))] as MenuEntry[])
+    ...(ownSpaces().length > 1
+      ? (["sep", ...ownSpaces().filter((s) => s.id !== a().space).map((s) => ({ id: `to-${s.id}`, label: t("{name}(으)로 옮기기", { name: t(s.label) }), icon: "arrow", run: () => updateAccount(props.id, (x) => (x.space = s.id)) }))] as MenuEntry[])
       : []),
     ...(props.id === "default"
       ? []
@@ -796,7 +796,8 @@ function Accounts() {
       <PageHead tab="accounts">
         <button class="btn sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} />{t("워크스페이스 추가")}</button>
       </PageHead>
-      <For each={state.spaces}>
+      {/* this device's own workspaces (another device's are set up on it) */}
+      <For each={ownSpaces()}>
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
@@ -980,7 +981,7 @@ function keyRows(): KeyRow[] {
   const commands = appCommands();
   const rows: KeyRow[] = SHORTCUT_EXTRAS.map(([id, label]) => ({ id, label: t(label), section: t("일반") }));
   const places = () => Array.from({ length: 9 }, (_, i): KeyRow => {
-    const space = state.spaces[i];
+    const space = deviceSpaces()[i];
     return { id: `ws${i + 1}` as ShortcutId, label: t("워크스페이스 {n}", { n: i + 1 }), section: t("워크스페이스"), note: space && t(space.label) };
   });
   const macRows = () => Array.from({ length: 9 }, (_, i): KeyRow => {

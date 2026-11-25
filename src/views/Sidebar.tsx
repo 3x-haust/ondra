@@ -10,7 +10,7 @@ import { createEffect, createMemo, createRoot, createSignal, For, Match, onClean
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
-import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
+import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, deviceSpaces, spaceById, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath, revealLabel } from "../lib/native";
@@ -632,6 +632,9 @@ export function Sidebar() {
   const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");
   const agentAsks = () => agentDecisions().filter((d) => taskById(d.taskId)?.space === state.space).length;
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
+  const tabs = () => deviceSpaces();
+  // another device's workspace: its projects are that device's own, added there
+  const theirs = () => !!spaceById(state.space)?.host;
   const addFolder = async () => {
     const dir = await pickFolder(tr("프로젝트 폴더 선택"));
     if (!dir) return;
@@ -652,11 +655,12 @@ export function Sidebar() {
           <Icon name="panelLeft" size={16} />
         </button>
       </div>
-      <Show when={state.spaces.length > 1}>
-      <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
-        <For each={state.spaces}>
-          {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={shortcutHint(`ws${state.spaces.indexOf(s) + 1}` as ShortcutId) || undefined} aria-pressed={state.space === s.id}>
+      {/* the workspaces of the device picked in the Mac bar below (each device has its own) */}
+      <Show when={tabs().length > 1}>
+      <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, tabs().length)}, minmax(0, 1fr))` }}>
+        <For each={tabs()}>
+          {(s, i) => (
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={shortcutHint(`ws${i() + 1}` as ShortcutId) || undefined} aria-pressed={state.space === s.id}>
               <span class="space-name">{tr(s.label)}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>
@@ -743,7 +747,7 @@ export function Sidebar() {
             <Show when={needs()}><span class="sb-need">{needs()}</span></Show>
           </button>
         <Head id="projects" label={tr("프로젝트")} count={projectsShown(state.space).length}>
-          <Show when={projectsShown(state.space).length}>
+          <Show when={projectsShown(state.space).length && !theirs()}>
             <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
               <Icon name="plus" size={14} />
             </button>
@@ -754,10 +758,12 @@ export function Sidebar() {
           <For
             each={projectsShown(state.space)}
             fallback={
+              <Show when={!theirs()}>
               <button class="sb-row sb-proj sb-add" onClick={() => void addFolder()}>
                 <Icon name="plus" size={16} class="sb-main-ic" />
                 <span class="sb-title">{tr("프로젝트 추가")}</span>
               </button>
+              </Show>
             }
           >
             {(p) => {

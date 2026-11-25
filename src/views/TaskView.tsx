@@ -500,7 +500,7 @@ export function TaskView(props: { id: string }) {
                   draftKey={`task:${task().id}`}
                   top={<><BtwCard scope={`task:${task().id}`} />{strips()}</>}
                   plus={plusFor({})}
-                  status={task().host ? <HostStatus place={{ host: task().host! }} fixed account={task().accountId} space={task().space} /> : <StatusLine
+                  status={task().host ? <HostStatus place={{ host: task().host! }} account={task().accountId} space={task().space} /> : <StatusLine
                   accountId={task().accountId}
                   space={task().space}
                   running={task().status === "running"}

@@ -2,7 +2,7 @@
 // and where it talks with others. Channels are picked from the servers the bot is in.
 import { createResource, createSignal, For, Show, type Accessor } from "solid-js";
 import { discordChannels, discordGuilds } from "../lib/native";
-import { state } from "../state/store";
+import { state, ownSpaces } from "../state/store";
 import type { AgentPlace, SpaceId } from "../state/types";
 import { setAgent } from "../engine/discord";
 import { accountName } from "../ui/AccountPicker";
@@ -39,7 +39,7 @@ function Where(props: { space: SpaceId | undefined; account: string | undefined;
   return (
     <div class="ag-where">
       <select class="select" aria-label={t("워크스페이스")} value={props.space ?? ""} onChange={(e) => props.set({ space: e.currentTarget.value, account: undefined })}>
-        <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+        <For each={ownSpaces()}>{(s) => <option value={s.id}>{s.label}</option>}</For>
       </select>
       <select class="select" aria-label={t("AI 계정")} value={props.account ?? "auto"} onChange={(e) => props.set({ space: props.space, account: e.currentTarget.value === "auto" ? undefined : e.currentTarget.value })}>
         <option value="auto">{t("자동")}</option>
@@ -77,7 +77,7 @@ function AddRoom(props: { label: string; rooms: Room[]; pick: (r: Room) => void;
 export function WorkPlaces(props: { rooms: Accessor<Room[]> }) {
   const a = () => state.settings.agent;
   const list = () => a()?.places ?? [];
-  const base = () => (a()?.space && state.spaces.some((s) => s.id === a()!.space) ? a()!.space : state.spaces[0]?.id);
+  const base = () => (a()?.space && ownSpaces().some((s) => s.id === a()!.space) ? a()!.space : ownSpaces()[0]?.id);
   const save = (next: AgentPlace[]) => setAgent({ places: next });
   const at = (i: number, p: Partial<AgentPlace>) => save(list().map((x, j) => (j === i ? { ...x, ...p } : x)));
   const open = () => props.rooms().filter((r) => !list().some((p) => p.channel === r.id));

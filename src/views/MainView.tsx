@@ -43,7 +43,7 @@ import { effortFor, setModelEffort } from "../engine/models";
 import { notesPath, notesVersion, readNotes } from "../engine/notes";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { ComputerPicker, HostModel, HostStatus, chosenComputer, hostAccount, type Place } from "../ui/ComputerPicker";
+import { HostModel, HostStatus, chosenComputer, hostAccount, type Place } from "../ui/ComputerPicker";
 
 /** the model picked for work on another device, when that account there has it */
 const hostPick = (p: Place) => {
@@ -426,7 +426,8 @@ function SetupNotice(props: { quiet?: boolean }) {
       <Show when={engine.checked && !engine.ready}>
         <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>{t("앱을 시작하지 못했어요")}</b><p>{t("다시 설치해 주세요.")}</p></div></div>
       </Show>
-      <Show when={engine.checked && engine.ready && !loggedIn() && !(none() && props.quiet)}>
+      {/* another device's workspace runs on that device's accounts */}
+      <Show when={engine.checked && engine.ready && !loggedIn() && !(none() && props.quiet) && !spaceById(state.space)?.host}>
         <div class="notice">
           <Icon name="key" size={16} />
           {/* no account at all: add one; an account not signed in: its row in Settings */}
@@ -685,9 +686,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           status={
             <Show
               when={computer()}
-              fallback={<StatusLine lead={<ComputerPicker fixed={!!p()} />} accountId={account()} space={state.space} />}
+              fallback={<StatusLine accountId={account()} space={state.space} />}
             >
-              <HostStatus place={computer()!} fixed={!!p()} />
+              <HostStatus place={computer()!} />
             </Show>
           }
           left={
@@ -870,9 +871,9 @@ export function MainView() {
         <Show
           when={raw()}
           // main's own account (here); a project of another device names that device
-          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} value={computer()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+          fallback={<StatusLine accountId={account()} space={state.space} agent={`captain:${key()}`} />}
         >
-          <HostStatus place={raw()!} fixed={!!project()} />
+          <HostStatus place={raw()!} />
         </Show>
       }
       plus={plusFor({ main: true })}

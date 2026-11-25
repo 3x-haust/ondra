@@ -209,6 +209,12 @@ const none: Task[] = [];
 
 // ── reads ──
 export const spaceById = (id: SpaceId) => state.spaces.find((s) => s.id === id)!;
+/** this device's own workspaces (not those of the devices added in Settings › 연결) */
+export const ownSpaces = () => state.spaces.filter((s) => !s.host);
+/** the workspaces of one device: this one's (undefined), or an added device's */
+export const spacesOf = (host?: string) => state.spaces.filter((s) => s.host === host);
+/** the workspaces of the device whose workspace is open (the tabs, ⌘1…⌘9) */
+export const deviceSpaces = () => spacesOf(state.spaces.find((s) => s.id === state.space)?.host);
 export const tasksIn = (space: SpaceId) => state.tasks.filter((t) => t.space === space);
 export const projectsIn = (space: SpaceId) => (state.projects ?? []).filter((p) => p.space === space);
 /** A project by id; with `space`, only that space's (ids are unique, but older state may share one). */
@@ -216,8 +222,12 @@ export const projectById = (id?: string, space?: SpaceId) =>
   id ? ((state.projects ?? []).find((p) => p.id === id && (!space || p.space === space)) ?? (id.startsWith("r:") ? remoteProjects().find((p) => p.id === id && (!space || p.space === space)) : undefined)) : undefined;
 /** projects added from other Macs (Settings › 연결) */
 const remoteProjects = createRoot(() => createMemo(() => linkedProjects(state.settings.hostProjects, (h) => state.settings.hosts?.find((x) => x.id === h)?.name ?? "Mac")));
-/** what the sidebar lists: this Mac's projects and those added from other Macs */
-export const projectsShown = (space: SpaceId) => inOrder([...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)], state.settings.projectOrder);
+/** what the sidebar lists: the projects of that workspace's device (this one's, or another device's in
+ *  its own tab; a link left from before each device had its own tabs waits for that device) */
+export const projectsShown = (space: SpaceId) => {
+  const host = state.spaces.find((s) => s.id === space)?.host;
+  return inOrder(host ? remoteProjects().filter((p) => p.space === space && p.host === host) : projectsIn(space), state.settings.projectOrder);
+};
 /** projects in the order the user put them; those never moved keep their place after, as added */
 export function inOrder<T extends { id: string }>(list: T[], order: string[] | undefined): T[] {
   if (!order?.length) return list;

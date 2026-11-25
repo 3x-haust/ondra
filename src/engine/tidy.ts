@@ -25,7 +25,7 @@ import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
 import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, sourcesOf, unionSources, userOwned } from "./memory";
 import { inTauri, pathsExist, skillSave } from "../lib/native";
-import { projectById, projectFor, setState, spaceById, state, taskById, uid } from "../state/store";
+import { projectById, projectFor, setState, spaceById, state, taskById, uid, ownSpaces } from "../state/store";
 import type { Memory, MemoryConflict, MemoryKind, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { memorySentence, t as tr } from "../i18n";
@@ -403,7 +403,7 @@ export async function tidyMemory(force = false, only?: SpaceId) {
           total.retired++;
         }
     }
-    for (const sp of state.spaces.filter((s) => !only || s.id === only)) {
+    for (const sp of ownSpaces().filter((s) => !only || s.id === only)) {
       // this space's own pieces; global ones (the user's, for every space) and pieces no space owns are left alone
       const list = state.memory.filter((m) => isLive(m) && m.scope !== "global" && placeOf(m) === sp.id).slice(-160);
       // the last finished jobs here: new ones (past the cursor) are read, older ones are evidence for patterns

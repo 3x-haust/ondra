@@ -10,10 +10,10 @@
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { hostOfTask, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, type FarAsk, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
-import { accountsIn, projectsIn, setState, state, tasksIn, uid } from "../state/store";
+import { hostOfTask, hostSpaceId, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, splitSpaceId, type FarAsk, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
+import { accountsIn, projectsIn, setState, spacesOf, state, tasksIn } from "../state/store";
 import { switchSpace } from "../state/workspace";
-import type { Decision, Entry, SpaceId, Task } from "../state/types";
+import type { Decision, Entry, Space, Task } from "../state/types";
 import { goMain, toast, view } from "../state/ui";
 import { t } from "../i18n";
 import { BYE_GIVE_UP, byeWait, linkPlan, withoutHost } from "./remoteRules";
@@ -118,15 +118,11 @@ export function startFar(host: string, task: Task, ask: FarAsk) {
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
 }
 
-/** the space and name a job of that device takes here: those of the project it was added to */
-function place(host: string, t: Task, list: Task[]) {
+/** a job of that device as it shows here: its project and its workspace are that device's (its tab here) */
+function place(host: string, t: Task) {
   t.host = host;
   if (t.project && !t.project.startsWith("r:")) t.project = remoteProjectId(host, t.project);
-  let root: Task | undefined = t;
-  for (let i = 0; root?.parentId && i < 20; i++) root = list.find((x) => x.id === root!.parentId) ?? root;
-  const pid = (root?.project ?? t.project)?.split(":").pop();
-  const link = state.settings.hostProjects?.find((l) => l.host === host && l.id === pid);
-  t.space = (link?.space ?? root?.from?.space ?? t.from?.space ?? state.space) as SpaceId;
+  if (t.space && !splitSpaceId(t.space)) t.space = hostSpaceId(host, t.space);
 }
 
 interface Patch { id: string; head?: Omit<Task, "entries">; from?: number; entries?: Entry[]; n?: number }
@@ -166,7 +162,7 @@ export function apply(host: string, patches: Patch[], gone: string[] = [], all =
           for (const k of Object.keys(x)) if (k !== "entries" && !(k in p.head)) delete (x as unknown as Record<string, unknown>)[k];
           Object.assign(x, p.head);
         }
-        if (p.head) place(host, x, list);
+        if (p.head) place(host, x);
         if (p.entries) {
           x.entries.splice(p.from ?? 0, x.entries.length - (p.from ?? 0), ...p.entries);
           if (p.n !== undefined && x.entries.length > p.n) x.entries.length = p.n;
@@ -214,10 +210,11 @@ export async function farDecide(d: Decision, optionId: string, values?: FormValu
   if (!ok && mirror.hosts[host] && !mirror.hosts[host].decisions?.some((x) => x.id === d.id)) setMirror("hosts", host, "decisions", (l) => [...(l ?? []), d]);
 }
 
-/** what this Mac wants from that one: the jobs of its projects added here */
+/** what this Mac wants from that one: the jobs of its projects added here, and the work done in its
+ *  workspaces (a device too old to know `sessions` sends only the first) */
 function watch(host: string) {
   const projects = (state.settings.hostProjects ?? []).filter((l) => l.host === host).map((l) => l.id);
-  void sendTo(host, { t: "watch", projects }).catch(() => {});
+  void sendTo(host, { t: "watch", projects, sessions: true }).catch(() => {});
 }
 
 async function dial(host: string) {
@@ -337,17 +334,11 @@ export function onPeer(ev: Record<string, unknown>) {
       setMirror("hosts", host, "projects", (d.list as HostMirror["projects"]) ?? []);
       linkAll(host);
       break;
-    case "info": {
-      const info = d.info as HostInfo;
-      setMirror("hosts", host, "info", info);
-      const labels = info.spaces.map((s) => s.label);
-      if (JSON.stringify(state.settings.hosts?.find((x) => x.id === host)?.spaces) !== JSON.stringify(labels)) {
-        setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, spaces: labels } : x)));
-        syncSpaces();
-      }
+    case "info":
+      setMirror("hosts", host, "info", d.info as HostInfo);
+      syncSpaces();
       linkAll(host);
       break;
-    }
     case "patch":
       apply(host, (d.tasks as Patch[]) ?? [], (d.gone as string[]) ?? [], !!d.all);
       break;
@@ -391,20 +382,41 @@ export async function addHost(text: string): Promise<boolean> {
 }
 
 /**
- * The workspace tabs: this Mac's, and those of the Macs added here, matched by name. A workspace
- * only another device has gets a tab of its own here (its work runs on that device); it goes when no
- * added Mac has it anymore, unless something of this Mac's was put in it since.
+ * The workspace tabs of the devices added here: each workspace of a device is a tab of its own under
+ * that device, never merged with this device's workspace of the same name. One gone there goes here
+ * (a device not connected keeps the ones it had); a device removed takes all of its own along.
+ * Older state made a tab by name for another device's workspace (`only`): one holding nothing of
+ * this device's goes, one that does stays this device's own.
  */
 function syncSpaces() {
-  const want = new Set((state.settings.hosts ?? []).flatMap((h) => h.spaces ?? []));
-  const add = [...want].filter((l) => !state.spaces.some((s) => s.label === l));
-  const drop = state.spaces.filter((s) => s.only && !want.has(s.label) && !accountsIn(s.id).length && !projectsIn(s.id).length && !tasksIn(s.id).length).map((s) => s.id);
-  if (!add.length && !drop.length) return;
-  if (drop.includes(state.space)) {
-    const to = state.spaces.find((s) => !drop.includes(s.id));
+  const hosts = new Set((state.settings.hosts ?? []).map((h) => h.id));
+  const theirs = (host: string) => mirror.hosts[host]?.info?.spaces;
+  const held = (id: string) => accountsIn(id).length || projectsIn(id).length || tasksIn(id).length || state.captain.some((m) => m.space === id);
+  const drop = new Set(
+    state.spaces
+      .filter((s) => (s.host ? !hosts.has(s.host) || !!theirs(s.host)?.every((x) => hostSpaceId(s.host!, x.id) !== s.id) : s.only && !held(s.id)))
+      .map((s) => s.id),
+  );
+  const add: Space[] = [];
+  for (const host of hosts)
+    for (const x of theirs(host) ?? []) {
+      const id = hostSpaceId(host, x.id);
+      const had = state.spaces.find((s) => s.id === id);
+      if (!had) add.push({ id, label: x.label, folder: "~", rules: "", host });
+      else if (had.label !== x.label) setState("spaces", (s) => s.id === id, "label", x.label);
+    }
+  // an older tab with something of this device's in it is this device's own from now on
+  if (state.spaces.some((s) => s.only && !drop.has(s.id))) setState("spaces", (s) => !!s.only && !drop.has(s.id), "only", undefined);
+  if (!drop.size && !add.length) return;
+  if (add.length) setState("spaces", (l) => [...l, ...add]);
+  if (drop.has(state.space)) {
+    const was = state.spaces.find((s) => s.id === state.space);
+    const after = state.spaces.filter((s) => !drop.has(s.id));
+    // the same workspace on that device, else another of that device's, else this device's first
+    const to = after.find((s) => s.host && s.label === was?.label && (!was.host || s.host === was.host)) ?? after.find((s) => !!was?.host && s.host === was.host) ?? after.find((s) => !s.host) ?? after[0];
     if (to) switchSpace(to.id, { name: "main" });
   }
-  setState("spaces", (l) => [...l.filter((s) => !drop.includes(s.id)), ...add.map((label) => ({ id: uid("sp"), label, folder: "~", rules: "", only: true }))]);
+  if (drop.size) setState("spaces", (l) => l.filter((s) => !drop.has(s.id)));
 }
 
 /** the view leaves what was that device's (its project's chat, one of its jobs) */
@@ -450,12 +462,21 @@ export function removeHost(id: string) {
 function linkAll(host: string) {
   const list = mirror.hosts[host]?.projects ?? [];
   const mine = (state.settings.hostProjects ?? []).filter((l) => l.host === host);
-  // a Mac too old to say the workspace: its projects go to the first tab
-  const spaceFor = (label?: string) => (label ? state.spaces.find((s) => s.label === label)?.id : state.spaces[0]?.id);
+  // its workspace's tab here: by its id there, or by name from a device too old to send the id
+  const spaceFor = (p: HostMirror["projects"][number]) => {
+    const tabs = spacesOf(host);
+    return (p.spaceId ? tabs.find((s) => s.id === hostSpaceId(host, p.spaceId!)) : tabs.find((s) => s.label === p.space))?.id;
+  };
   const { gone, add } = linkPlan(list, mine, hostOf(host)?.hidden, spaceFor);
-  if (!gone.length && !add.length) return;
-  const rest = (state.settings.hostProjects ?? []).filter((l) => !(l.host === host && gone.includes(l.id)));
-  setState("settings", "hostProjects", [...rest, ...add.map((p) => ({ host, id: p.id, space: spaceFor(p.space)!, name: p.name, folder: p.folder }))]);
+  // links made before each device had its own tabs (or a workspace moved there) go to their tab
+  const moved = new Map(mine.flatMap((l) => {
+    const p = list.find((x) => x.id === l.id);
+    const sp = p && !gone.includes(l.id) ? spaceFor(p) : undefined;
+    return sp && sp !== l.space ? [[l.id, sp] as const] : [];
+  }));
+  if (!gone.length && !add.length && !moved.size) return;
+  const rest = (state.settings.hostProjects ?? []).filter((l) => !(l.host === host && gone.includes(l.id))).map((l) => (l.host === host && moved.has(l.id) ? { ...l, space: moved.get(l.id)! } : l));
+  setState("settings", "hostProjects", [...rest, ...add.map((p) => ({ host, id: p.id, space: spaceFor(p)!, name: p.name, folder: p.folder }))]);
   watch(host);
 }
 
@@ -494,6 +515,7 @@ export const helperGone = () => void (helper = false);
 
 /** at launch: connect to every Mac added before (not one disconnected for now), and tell the removed ones */
 export async function connectHosts() {
+  syncSpaces();
   if (!wantsHelper()) return;
   await startHosts();
   for (const h of state.settings.hosts ?? []) {

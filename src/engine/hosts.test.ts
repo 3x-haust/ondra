@@ -1,6 +1,7 @@
 import { reconcile } from "solid-js/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { freshState, setState, state } from "../state/store";
+import { freshState, projectsShown, setState, state, tasksShown } from "../state/store";
+import type { Task } from "../state/types";
 import { mirror, remoteProjectId } from "../state/mirror";
 
 const sent: Record<string, unknown>[] = [];
@@ -27,7 +28,66 @@ beforeEach(() => {
   setState("settings", "leaving", []);
   peer("ok");
   said({ t: "projects", list: [{ id: "app", name: "app", folder: "~/app", space: "개인" }, { id: "web", name: "web", folder: "~/web", space: "개인" }] });
+  said({ t: "info", info: { spaces: [{ id: "home", label: "개인" }], accounts: [], pick: {} } });
   said({ t: "patch", tasks: [{ id: "t1", head: { id: "t1", space: "home", project: "app", title: "x", status: "running" }, from: 0, entries: [] }] });
+});
+
+const theirHome = `h:${A}:home`;
+
+describe("each device's own workspaces", () => {
+  it("a workspace of the same name stays two tabs: this device's and that device's, each with its own work", () => {
+    setState("projects", [{ id: "mine", space: "home", name: "mine", folder: "~/mine" }]);
+    setState("tasks", [{ ...(mirror.hosts[A].tasks[0] as Task), id: "local", host: undefined, project: "mine", space: "home", entries: [] }]);
+    expect(state.spaces.map((s) => [s.id, s.label, s.host])).toEqual([["home", "개인", undefined], [theirHome, "개인", A]]);
+    expect(projectsShown("home").map((p) => p.id)).toEqual(["mine"]);
+    expect(projectsShown(theirHome).map((p) => p.id)).toEqual([`r:${A}:app`, `r:${A}:web`]);
+    expect(tasksShown("home").map((t) => t.id)).toEqual(["local"]);
+    expect(tasksShown(theirHome).map((t) => t.id)).toEqual(["t1"]);
+  });
+  it("asks that device for the work done in its workspaces too", () => {
+    expect(sent.filter((c) => c.cmd === "peer-send").pop()).toMatchObject({ data: { t: "watch", sessions: true } });
+  });
+  it("a job lands in the tab of its own workspace there, project or not", () => {
+    said({ t: "info", info: { spaces: [{ id: "home", label: "개인" }, { id: "w", label: "회사" }], accounts: [], pick: {} } });
+    said({ t: "patch", tasks: [{ id: "t2", head: { id: "t2", space: "w", title: "y", status: "done" }, from: 0, entries: [] }] });
+    expect(mirror.hosts[A].tasks.find((t) => t.id === "t2")?.space).toBe(`h:${A}:w`);
+    expect(state.spaces.find((s) => s.id === `h:${A}:w`)?.label).toBe("회사");
+  });
+  it("follows that device: a workspace renamed or gone there is renamed or gone here", () => {
+    said({ t: "info", info: { spaces: [{ id: "home", label: "집" }], accounts: [], pick: {} } });
+    expect(state.spaces.find((s) => s.id === theirHome)?.label).toBe("집");
+    setState("space", theirHome);
+    said({ t: "info", info: { spaces: [{ id: "w", label: "회사" }], accounts: [], pick: {} } });
+    expect(state.spaces.some((s) => s.id === theirHome)).toBe(false);
+    expect(state.space).toBe(`h:${A}:w`);
+  });
+  it("moves what was merged before: an old link goes to that device's tab, an old empty tab goes", () => {
+    setState("settings", "hostProjects", [{ host: A, id: "app", space: "home" }]);
+    setState("spaces", (l) => [...l.filter((s) => s.id !== theirHome), { id: "old", label: "스튜디오", folder: "~", rules: "", only: true }, { id: "kept", label: "메모", folder: "~", rules: "", only: true }]);
+    setState("projects", [{ id: "note", space: "kept", name: "note", folder: "~/note" }]);
+    setState("space", "old");
+    said({ t: "info", info: { spaces: [{ id: "home", label: "개인" }, { id: "s", label: "스튜디오" }], accounts: [], pick: {} } });
+    expect(state.settings.hostProjects?.find((l) => l.id === "app")?.space).toBe(theirHome);
+    expect(state.spaces.some((s) => s.id === "old")).toBe(false);
+    // something of this device's is in it: it stays, this device's own now
+    const kept = state.spaces.find((s) => s.id === "kept");
+    expect([kept?.label, kept?.only, kept?.host]).toEqual(["메모", undefined, undefined]);
+    expect(state.space).toBe(`h:${A}:s`);
+  });
+  it("work asked in that device's workspace runs there, in its own workspace", async () => {
+    const { createTask } = await import("./tasks");
+    const id = createTask({ space: theirHome, title: "x", topic: "", ask: "hi", accountId: "" });
+    expect(state.tasks.some((t) => t.id === id)).toBe(false);
+    const asked = sent.filter((c) => c.cmd === "peer-send").pop() as { data: { seq: number } };
+    expect(asked).toMatchObject({ peer: A, data: { t: "call", fn: "create", args: [{ id, hostSpace: "home" }] } });
+    said({ t: "ret", seq: asked.data.seq, value: id });
+  });
+  it("removing that device takes its tabs along", () => {
+    setState("space", theirHome);
+    removeHost(A);
+    expect(state.spaces.map((s) => s.id)).toEqual(["home"]);
+    expect(state.space).toBe("home");
+  });
 });
 
 describe("removing a Mac this one works on", () => {
