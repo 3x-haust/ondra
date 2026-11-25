@@ -349,7 +349,7 @@ JSON.stringify(out)"#;
         .collect()
 }
 
-/// A picture (PNG bytes) onto the macOS clipboard. The web view's own clipboard
+/// A picture (PNG bytes) onto the system clipboard. The web view's own clipboard
 /// refuses images once the click's permission has lapsed, which drawing the picture
 /// takes long enough to do.
 #[tauri::command]
@@ -371,7 +371,18 @@ pub fn copy_image(bytes: Vec<u8>) -> Result<(), String> {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    Err("이 운영체제에서는 이미지를 복사할 수 없어요".into())
+    {
+        // On Linux the app itself serves what it put on the clipboard: the board stays open for later pastes.
+        static BOARD: std::sync::Mutex<Option<arboard::Clipboard>> = std::sync::Mutex::new(None);
+        let picture = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).map_err(|_| "이미지를 읽지 못했어요".to_string())?.into_rgba8();
+        let (width, height) = picture.dimensions();
+        let data = arboard::ImageData { width: width as usize, height: height as usize, bytes: picture.into_raw().into() };
+        let mut board = BOARD.lock().unwrap_or_else(|e| e.into_inner());
+        if board.is_none() {
+            *board = Some(arboard::Clipboard::new().map_err(|_| "클립보드를 열지 못했어요".to_string())?);
+        }
+        board.as_mut().map_or(Ok(()), |b| b.set_image(data)).map_err(|_| "클립보드에 넣지 못했어요".into())
+    }
 }
 
 /// Make a new project folder (main can start a project somewhere new). Only inside home.
