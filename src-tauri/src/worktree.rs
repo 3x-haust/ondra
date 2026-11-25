@@ -47,8 +47,10 @@ fn with_env<T>(env: Vec<(String, String)>, f: impl FnOnce() -> T) -> T {
 }
 
 fn git_cmd(cwd: &str) -> Command {
-    let mut cmd = Command::new("git");
+    let mut cmd = crate::engine::background_command("git");
     cmd.current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0");
+    #[cfg(windows)]
+    cmd.env("GCM_INTERACTIVE", "never");
     ENV.with(|e| crate::git::space_env_into(&mut cmd, &e.borrow()));
     cmd
 }

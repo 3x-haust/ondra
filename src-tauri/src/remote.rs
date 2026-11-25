@@ -26,13 +26,7 @@ pub fn remote_start(app: AppHandle) -> Result<(), String> {
     }
     let bin = crate::tools::sidecar("ondra-remote").ok_or("ondra-remote is not bundled")?;
     let dir = crate::engine::data_dir(&app).join("remote");
-    let mut command = Command::new(bin);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW for this stdin/stdout helper
-    }
-    let mut child = command
+    let mut child = crate::engine::background_command(bin)
         .arg("--data")
         .arg(&dir)
         .stdin(Stdio::piped())
