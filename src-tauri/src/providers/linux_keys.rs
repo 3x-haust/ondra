@@ -28,33 +28,31 @@ pub(crate) fn lookup(service: &str, account: &str) -> Option<String> {
     out.status.success().then(|| String::from_utf8(out.stdout).ok()).flatten()
 }
 
-/// Every unlocked item with these attributes: (its attributes, its secret). The secret comes on
-/// stdout into this process only.
-pub(crate) fn search(attrs: &[(&str, &str)]) -> Vec<(std::collections::HashMap<String, String>, String)> {
-    let mut args = vec!["search", "--all", "--unlock"];
+/// The attributes of the first unlocked item that has these. `secret-tool search` prints them
+/// on stderr (its secret goes to stdout, which is dropped here).
+pub(crate) fn first_attributes(attrs: &[(&str, &str)]) -> Option<std::collections::HashMap<String, String>> {
+    let mut args = vec!["search", "--unlock"];
     for (k, v) in attrs {
         args.extend([*k, *v]);
     }
-    let Ok(out) = tool(&args).stdout(Stdio::piped()).stderr(Stdio::piped()).output() else { return vec![] };
-    parse_search(&String::from_utf8_lossy(&out.stdout), &String::from_utf8_lossy(&out.stderr))
+    let out = tool(&args).stderr(Stdio::piped()).output().ok()?;
+    let found = parse_attributes(&String::from_utf8_lossy(&out.stderr));
+    (!found.is_empty()).then_some(found)
 }
 
-/// `secret-tool search` prints each item's `[/path]`, `label = …`, `secret = …` lines on stdout
-/// and its `attribute.<name> = …` lines on stderr, item after item: an item's attributes end
-/// where a name comes again.
-fn parse_search(stdout: &str, stderr: &str) -> Vec<(std::collections::HashMap<String, String>, String)> {
-    let secrets: Vec<String> = stdout.lines().filter_map(|l| l.strip_prefix("secret = ").map(String::from)).collect();
-    let mut attrs: Vec<std::collections::HashMap<String, String>> = vec![];
-    for (k, v) in stderr.lines().filter_map(|l| l.strip_prefix("attribute.")?.split_once(" = ")) {
-        if attrs.last().is_none_or(|a| a.contains_key(k)) {
-            attrs.push(Default::default());
-        }
-        if let Some(a) = attrs.last_mut() {
-            a.insert(k.to_string(), v.to_string());
-        }
+fn parse_attributes(stderr: &str) -> std::collections::HashMap<String, String> {
+    stderr.lines().filter_map(|l| l.strip_prefix("attribute.")?.split_once(" = ")).map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+/// The secret of the item with exactly these attributes, as stored (`secret-tool lookup` writes it
+/// to stdout unchanged).
+pub(crate) fn lookup_by(attrs: &[(&str, &str)]) -> Option<String> {
+    let mut args = vec!["lookup"];
+    for (k, v) in attrs {
+        args.extend([*k, *v]);
     }
-    attrs.resize(secrets.len(), Default::default());
-    attrs.into_iter().zip(secrets).collect()
+    let out = tool(&args).stdout(Stdio::piped()).output().ok()?;
+    (out.status.success()).then(|| String::from_utf8(out.stdout).ok()).flatten()
 }
 
 pub(crate) fn clear(service: &str, account: &str) {
@@ -96,14 +94,9 @@ pub fn ref_account(service: &str, value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn search_output() {
-        let out = "[/1]\nlabel = example.com\nsecret = pa = ss\ncreated = 2026-11-25 10:00:00\n[/2]\nsecret = two\n";
-        let err = "attribute.user = me@x.io\nattribute.server = example.com\nattribute.server = example.com\nattribute.user = you\n";
-        let items = super::parse_search(out, err);
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0].1, "pa = ss");
-        assert_eq!(items[0].0.get("user").map(String::as_str), Some("me@x.io"));
-        assert_eq!(items[1].0.get("user").map(String::as_str), Some("you"));
-        assert_eq!(items[1].1, "two");
+    fn search_attributes() {
+        let found = super::parse_attributes("attribute.user = me@x.io\nattribute.server = example.com\n");
+        assert_eq!(found.get("user").map(String::as_str), Some("me@x.io"));
+        assert_eq!(found.get("server").map(String::as_str), Some("example.com"));
     }
 }

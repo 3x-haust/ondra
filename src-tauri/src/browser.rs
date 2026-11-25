@@ -96,11 +96,6 @@ fn stable_port(app: &AppHandle, space: &str) -> u16 {
     p
 }
 
-#[cfg(windows)]
-fn stable_port_on_file(app: &AppHandle, space: &str) -> Option<u16> {
-    std::fs::read_to_string(space_dir(app, space).join("port")).ok()?.trim().parse().ok()
-}
-
 fn read_port(app: &AppHandle, space: &str) -> Option<u16> {
     std::fs::read_to_string(port_file(app, space)).ok()?.lines().next()?.trim().parse().ok()
 }
@@ -251,10 +246,16 @@ fn kill_profile_chrome(app: &AppHandle, space: &str, inner: &mut Inner) {
         // `--` first: without it pkill reads the pattern as an option and kills nothing
         let _ = Command::new("pkill").args(["-f", "--", &flag]).status();
     }
-    // no command lines to search on Windows: the profile's Chrome listens on its port, so ask it to quit
+    // no command lines to search on Windows: the profile's Chrome wrote its port and its browser id to
+    // DevToolsActivePort; ask that browser to quit, and only when the one on the port is that browser
     #[cfg(windows)]
-    for port in read_port(app, space).into_iter().chain([stable_port_on_file(app, space)].into_iter().flatten()) {
-        close_over_cdp(port);
+    for dir in [profile_dir(app, space), crate::engine::data_dir(app).join("browser").join("profile")] {
+        let Ok(text) = std::fs::read_to_string(dir.join("DevToolsActivePort")) else { continue };
+        let mut lines = text.lines();
+        let (Some(Ok(port)), Some(path)) = (lines.next().map(|l| l.trim().parse::<u16>()), lines.next().map(str::trim)) else { continue };
+        if !path.is_empty() && ws_url(port).is_some_and(|url| url.ends_with(path)) {
+            close_over_cdp(port);
+        }
     }
     std::thread::sleep(Duration::from_millis(800));
     inner.port = None;

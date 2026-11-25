@@ -556,7 +556,7 @@ async fn fetch_part(http: &reqwest::Client, c: &Component, part: &Path, progress
 // ───────────── old versions ─────────────
 
 /// Commands of every running process (a process runs from a folder when its command names it);
-/// None where they can't be read (Windows), and then no installed version is removed.
+/// None where they can't be read, and then no installed version is removed.
 #[cfg(target_os = "macos")]
 fn running() -> Option<Vec<String>> {
     let out = Command::new("/bin/ps").args(["-axww", "-o", "command="]).stderr(Stdio::null()).output().ok()?;
@@ -569,7 +569,31 @@ fn running() -> Option<Vec<String>> {
     Some(procs.filter_map(|e| std::fs::read(e.path().join("cmdline")).ok()).map(|c| String::from_utf8_lossy(&c).replace('\0', " ")).collect())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+/// Windows: the program path of every process (a command line can't be read without more rights).
+#[cfg(windows)]
+fn running() -> Option<Vec<String>> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
+    let mut pids = Vec::new();
+    // SAFETY: a snapshot handle we own, walked with a correctly sized entry.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut e: PROCESSENTRY32W = std::mem::zeroed();
+        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut more = Process32FirstW(snap, &mut e) != 0;
+        while more {
+            pids.push(e.th32ProcessID);
+            more = Process32NextW(snap, &mut e) != 0;
+        }
+        CloseHandle(snap);
+    }
+    Some(pids.into_iter().filter_map(crate::keychain::exe_of).map(|p| p.display().to_string()).collect())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn running() -> Option<Vec<String>> {
     None
 }
@@ -589,7 +613,7 @@ fn clean(root: &Path, keep: &[Component]) {
         let home = root.join(&c.name);
         let list = installed(&home);
         for v in removable(&list, &c.version, |v| {
-            let dir = format!("{}/", home.join(v).display());
+            let dir = format!("{}{}", home.join(v).display(), std::path::MAIN_SEPARATOR);
             procs.iter().any(|p| p.contains(&dir))
         }) {
             let _ = std::fs::remove_dir_all(home.join(v));
