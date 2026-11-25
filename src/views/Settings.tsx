@@ -50,6 +50,7 @@ import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
 import { RoutinesSettings } from "./Routines";
 import { SecretsSettings } from "./SecretsSettings";
+import { ServicesSettings } from "./ServicesSettings";
 import { HooksTab } from "./Hooks";
 import { Logo, logoFor } from "../ui/Logos";
 import { appName } from "../lib/brand";
@@ -1138,6 +1139,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: strin
   { id: "agent", label: "에이전트", icon: "message", desc: "디스코드에서 내 말로 일을 받고, 다른 사람과는 대화해요", group: "" },
   { id: "pet", label: "펫", icon: "pet", desc: "화면을 돌아다니며 작업 소식을 알려 주는 펫을 고르고 만들어요", group: "" },
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
+  { id: "services", label: "서비스", icon: "link", desc: "Gmail·Slack·Notion 같은 서비스를 워크스페이스마다 연결해요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
   { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
   { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간에 알려 주거나, 시간이나 GitHub 일에 맞춰 작업을 시작해요", group: "에이전트|group" },
@@ -1304,6 +1306,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>
             <Match when={settingsTab() === "secrets"}><SecretsSettings /></Match>
+            <Match when={settingsTab() === "services"}><ServicesSettings /></Match>
             <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "pet"}><PetSettings /></Match>
             <Match when={settingsTab() === "agent"}><AgentSettings /></Match>

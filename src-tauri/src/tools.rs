@@ -678,7 +678,7 @@ fn dev_bundle(app: &AppHandle, id: &str) {
 /** CLIs that keep their login under $HOME and have no variable to move it */
 const HOME_CLIS: &[&str] = &["vercel", "supabase", "netlify", "railway", "fly", "flyctl", "firebase", "eas", "heroku", "doctl", "wrangler", "stripe"];
 
-fn space_base(app: &AppHandle, space: &str) -> PathBuf {
+pub(crate) fn space_base(app: &AppHandle, space: &str) -> PathBuf {
     let safe: String = space.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
     crate::engine::data_dir(app).join("spaces").join(if safe.is_empty() { "home".into() } else { safe })
 }
@@ -780,7 +780,9 @@ fn write_shims(dir: &Path, base: &Path) {
 
 #[tauri::command]
 pub fn space_env(app: AppHandle, space: String, home: Option<String>) -> Vec<(String, String)> {
-    let Some(base) = cli_home(&app, &space, home.clone()) else { return Vec::new() };
+    // its connected services (MCP servers) and their sign-ins, its own
+    let mcp = ("PI_MCP_DIR".to_string(), crate::mcp::dir(&app, &space).display().to_string());
+    let Some(base) = cli_home(&app, &space, home.clone()) else { return vec![mcp] };
     let own = home.as_deref().map_or(true, |h| h.trim().is_empty());
     if own {
         prepare_home(&base);
@@ -794,6 +796,7 @@ pub fn space_env(app: AppHandle, space: String, home: Option<String>) -> Vec<(St
         ("DOCKER_CONFIG".into(), b(".docker")),
         ("KUBECONFIG".into(), b(".kube/config")),
         ("ONDRA_CLI_HOME".into(), base.display().to_string()),
+        mcp,
     ];
     if base.join(".gitconfig").exists() {
         env.push(("GIT_CONFIG_GLOBAL".into(), b(".gitconfig")));

@@ -390,6 +390,8 @@ fn spawn_engine(
     }
     // a job's engine: the saved secrets, read here and never sent to the page
     crate::secrets::inject(&app, &mut cmd, &env);
+    // and the client secrets its space's connected services name
+    crate::mcp::inject(&mut cmd, &env);
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -222,6 +222,13 @@ export const fsGrep = (cwd: string, query: string) =>
   ]);
 /** Save edited text; rejects with "CHANGED" when the file moved on since `expect` (its modified time when read). Resolves to the new modified time. */
 export const fsWrite = (path: string, text: string, expect?: number) => call<number>("fs_write", { path, text, expect: expect ?? null }, Date.now());
+/** A space's connected services (MCP servers): its mcp.json, the engine's `mcp` command, the client secrets in the keychain. */
+export const mcpServers = (space: string) => call<Record<string, any>>("mcp_servers", { space }, {});
+export const mcpSave = (space: string, servers: Record<string, any>) => call<void>("mcp_save", { space, servers });
+export const mcpCli = (space: string, args: string[]) => call<{ code: number; out: string }>("mcp_cli", { space, args }, { code: 0, out: '{"servers":[],"errors":[]}' });
+export const mcpSecretSet = (space: string, server: string, value: string) => call<void>("mcp_secret_set", { space, server, value });
+export const mcpSecretFrom = (space: string, server: string, name: string) => call<void>("mcp_secret_from", { space, server, name });
+export const mcpSecretDelete = (space: string, server: string) => call<void>("mcp_secret_delete", { space, server });
 export const pickFiles = (prompt: string) => call<string[]>("pick_files", { prompt }, []);
 
 // ───────────────────────── accounts ─────────────────────────
