@@ -184,7 +184,11 @@ export interface PlanStep {
   why?: string;
 }
 
+export interface PickedFile { path: string; real: string }
+
 export interface Task {
+  /** Host-local attachment selections; not part of the mirrored task. */
+  pickedFiles?: PickedFile[];
   id: string;
   space: SpaceId;
   topic: string;
@@ -479,6 +483,8 @@ export type Route =
   | { kind: "alarm"; routineId: string; text: string; due: number; late?: boolean };
 
 export interface CaptainMessage {
+  /** Host-local selections for the jobs this reply routes the request to. */
+  pickedFiles?: PickedFile[];
   id: string;
   at: number;
   space: SpaceId;

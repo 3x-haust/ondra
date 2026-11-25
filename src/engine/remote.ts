@@ -121,7 +121,7 @@ function flush() {
       if (!wanted(c, t)) continue;
       seen.add(t.id);
       const raw = unwrap(t);
-      const { entries, ...rest } = raw;
+      const { entries, pickedFiles: _hostOnly, ...rest } = raw;
       const head = JSON.stringify(rest, paths);
       const ents = entries.map((e) => JSON.stringify(e, paths));
       const before = c.sent.get(t.id);

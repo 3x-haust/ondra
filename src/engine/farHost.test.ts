@@ -21,6 +21,7 @@ import { setState } from "../state/store";
 import type { Project, Task } from "../state/types";
 import { farCall, rootsFor, type FarPeer } from "./farHost";
 import { refreshEngine } from "./rpc";
+import { rememberPickedFiles } from "./pickedFiles";
 
 const task = (id: string, o: Partial<Task>): Task => ({ id, title: id, ask: "", status: "done", entries: [], shells: [], legs: [], space: "s1", accountId: "a", createdAt: 1, cwd: "~", ...o }) as unknown as Task;
 
@@ -86,6 +87,34 @@ describe("what another Mac may reach here", () => {
     expect(fsRead).toHaveBeenCalledTimes(2);
     await expect(call("far.files", "/tmp/shots")).rejects.toThrow(NO);
     await expect(call("far.read", "/tmp/shots/t2.png")).rejects.toThrow(NO);
+  });
+
+  it("serves only a file attached locally to the visible task, at its approved final location", async () => {
+    const path = "/Users/me/Desktop/mockup.png";
+    const text = `첨부한 파일:\n- [Image #1] ${path}`;
+    setState("tasks", [task("t1", { project: "p1", entries: [{ kind: "user", id: "u", at: 1, text }] })]);
+    // A user row (including the legacy attachment-list format) is not a file selection.
+    await expect(call("far.read", path)).rejects.toThrow(NO);
+    await rememberPickedFiles("task", "t1", [path]);
+    await call("far.read", path);
+    expect(fsRead).toHaveBeenCalledWith(path);
+    await expect(call("far.write", path, "new")).rejects.toThrow(NO);
+    vi.mocked(farReal).mockImplementationOnce(async (paths) => paths.map((p, i) => i ? p : "/Users/me/Desktop/revision.png"));
+    await expect(call("far.read", path)).rejects.toThrow(NO);
+    setState("tasks", 0, "project", "p2");
+    await expect(call("far.read", path)).rejects.toThrow(NO);
+  });
+
+  it("keeps a main-chat selection with the job its reply routed the attachment to", async () => {
+    const path = "/Users/me/Desktop/brief.pdf";
+    const text = `첨부한 파일:\n- ${path}`;
+    setState("tasks", [task("t1", { project: "p1", entries: [{ kind: "user", id: "u", at: 1, text }] })]);
+    setState("captain", [{ id: "reply", at: 1, space: "s1", from: "captain", routes: [{ kind: "new", taskId: "t2" }] }]);
+    await rememberPickedFiles("main", "reply", [path]);
+    await expect(call("far.read", path)).rejects.toThrow(NO);
+    setState("captain", 0, "routes", [{ kind: "new", taskId: "t1" }]);
+    await call("far.read", path);
+    expect(fsRead).toHaveBeenCalledWith(path);
   });
 
   it("checks a Windows project and its junctions by their native final paths", async () => {

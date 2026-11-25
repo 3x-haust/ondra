@@ -88,6 +88,24 @@ function named(p: FarPeer, abs: string): boolean {
   return false;
 }
 
+/** A file selected on this host for this job (directly, or via the main chat that routed it).
+ * The transcript is only used to narrow a routed selection, never to make a new one. */
+function pickedTargets(p: FarPeer, abs: string): Set<string> {
+  const targets = new Set<string>();
+  const routed = state.captain.filter((m) => m.pickedFiles?.some((f) => f.path === abs));
+  for (const t of state.tasks) {
+    if (!p.sees(t)) continue;
+    for (const f of t.pickedFiles ?? []) if (f.path === abs) targets.add(f.real);
+    for (const m of routed) {
+      if (!m.routes?.some((r) => (r.kind === "append" || r.kind === "new") && r.taskId === t.id)) continue;
+      const native = windowsHome(home()) ? abs.replace(/\//g, "\\") : abs;
+      if (!t.entries.some((e) => e.kind === "user" && (mentions(e.text, abs) || mentions(e.text, native)))) continue;
+      for (const f of m.pickedFiles!) if (f.path === abs) targets.add(f.real);
+    }
+  }
+  return targets;
+}
+
 /** The path, absolute, when that Mac may reach it; else an error. Links are followed: one
  *  pointing out of the folders counts as outside. `files`: a single file a job named is fine too
  *  (as it named it: that one file, wherever it is). */
@@ -96,14 +114,16 @@ async function reach(p: FarPeer, path: unknown, files = false): Promise<string> 
   const abs = normPath(path as string, home()) ?? fail(NOT_THERE);
   const roots = rootsFor(p);
   const inProject = allowedPath(abs, roots, home());
-  const oneFile = files && named(p, abs);
-  if (!inProject && !oneFile) return fail(NOT_THERE);
+  const picks = files && !inProject ? pickedTargets(p, abs) : undefined;
+  const oneFile = files && !inProject && named(p, abs);
+  if (!inProject && !oneFile && !picks?.size) return fail(NOT_THERE);
   const [real, ...rootsReal] = (await farReal([abs, ...roots])).map((r) => realPath(r, home()));
   if (!real) return fail(NOT_THERE);
   if (inProject && rootsReal.some((r) => r && !tooWide(r, home()) && under(real, r))) return real;
   // A named output grants that file, not a target it can be redirected to. macOS stores
   // /var and /tmp under /private, including its standard screenshot and temp directories.
-  if (oneFile && (real === abs || (!windowsHome(home()) && /^\/(tmp|var)\//.test(abs) && real === `/private${abs}`))) {
+  const sameName = real === abs || (!windowsHome(home()) && /^\/(tmp|var)\//.test(abs) && real === `/private${abs}`);
+  if (picks?.has(real) || (oneFile && sameName)) {
     const st = await farStat(real);
     if (st && !st.dir) return real;
   }
