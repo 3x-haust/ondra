@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 120
     env:
-      ENGINE_REV: 3311ed88dc6c5c403db2ce4edc762b734acbfb25
+      ENGINE_REV: 9e1cdd29cc4c765f8ac987657f2fdb59357d4d29
       TARGET: x86_64-pc-windows-msvc
       CARGO_INCREMENTAL: '0' # No artifacts from this runner are reused in a later build.
       RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-msvc
