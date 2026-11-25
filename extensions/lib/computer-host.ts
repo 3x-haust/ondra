@@ -315,7 +315,7 @@ export class ComputerHostHelper {
 
   start(): void {
     if (this.child) return;
-    const child = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     this.child = child;
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => this.onData(chunk));
@@ -384,7 +384,7 @@ export class ComputerHostSession {
     return isRecord(e) ? (e as unknown as HostEnv) : undefined;
   }
 
-  async start(app: string, signal?: AbortSignal): Promise<HostResult> {
+  async start(app: string, signal?: AbortSignal, confirmAttach?: (pid: number) => Promise<boolean>): Promise<HostResult> {
     if (this.started) throw new Error("Host session already started; use another session for another app");
     this.started = true;
     const launched = await this.helper.request("launch", { app }, signal);
@@ -393,6 +393,12 @@ export class ComputerHostSession {
     const pid = launched.pid;
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
     this.target = { kind: "app", pid };
+    // Windows binds the existing window first; no UI contents are requested until the
+    // user has selected this exact executable and PID in the trusted Ondra UI.
+    if (confirmAttach) {
+      if (await confirmAttach(pid) !== true) throw new Error("APPROVAL_DENIED: no window contents read or action sent");
+      if (signal?.aborted || this.stopped) throw new Error("Computer operation cancelled");
+    }
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
     const menus = Array.isArray(launched.menus) ? launched.menus.filter((m): m is string => typeof m === "string").slice(0, 14) : [];
     return { pid, ...(typeof launched.path === "string" ? { path: launched.path } : {}), ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}), ...(menus.length ? { menus } : {}),

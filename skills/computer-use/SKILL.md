@@ -1,7 +1,7 @@
 ---
 name: computer-use
 description: >
-  Native Mac app automation that runs in the background on the user's own Mac.
+  Local native app automation: background Mac app use, or observing and scrolling an already-running Windows app.
   Read before operating Mac apps, clicking buttons, typing into fields or
   capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 메신저 앱).
   Covers how it stays in the background, starting the right app, observation,
@@ -14,6 +14,14 @@ metadata:
 ---
 
 # Computer use
+
+## On a Windows worker
+
+`start {app: "Viewer.exe"}` selects an exact running executable with one visible main window in the signed-in user's active session. Confirm its executable name and PID in Ondra before reading anything. Refusal or no confirmation UI ends the session. It never launches or quits the app. `observe` (optional `full`, `query`) shows the visible list/document labels exposed by UI Automation. A scrollable area has a vertical percentage. `act {input: {kind: "scroll", ref: 2, direction: "down"}}` scrolls one increment; verify the result in the observation. Use `up` for the other direction. `stop` detaches. To switch, stop and start again. Leaving this window open does not lock Windows focus.
+
+Only simple list/document windows whose entire accessible structure and protection status can be checked are supported. Passwords, forms, dialogs, approval, elevated apps and complex/custom surfaces are unsupported. No pixels, keys, clicks, text input, saved flows or approval targets. A refusal is final for that surface: ask the user to perform the step, never use shell or remote input instead. The tool acts **inside Windows**, not on a Mac RDP window. The following Mac-only fallbacks do not apply.
+
+## On a Mac worker
 
 Native app automation runs **in the background on the user's own Mac**, through
 the `computer` tool and its signed `ondra-cuhost` helper. It operates one target
