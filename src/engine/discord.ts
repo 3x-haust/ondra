@@ -1318,6 +1318,19 @@ export async function closeThreads(now = Date.now()) {
   }
 }
 
+/** Where a question of main's was posted on Discord, for its answer from the app: the answer
+ * carries on there, as if typed under the question, not wherever the user last wrote. */
+export function askedWhere(d: Decision): { discord?: CaptainMessage["discord"]; note?: string } {
+  const channel = d.posted;
+  if (!channel) return {};
+  const message = settings()?.pins?.find((p) => p.decision === d.id)?.message ?? "";
+  const job = threadJob(channel);
+  return {
+    discord: { channel, message },
+    note: job ? `This answers a question posted in the thread of your job ${job.id} "${job.title}" (${job.status}): what comes of it belongs with that job, and your reply goes there.` : undefined,
+  };
+}
+
 /** a job whose thread this is */
 const threadJob = (channel: string) => state.tasks.find((t) => t.agent?.thread === channel && !t.parentId);
 

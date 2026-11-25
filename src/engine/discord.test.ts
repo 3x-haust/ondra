@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, openThreads, closeThreads, channelOf, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, openThreads, closeThreads, channelOf, askedWhere, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -952,3 +952,16 @@ describe("a reply as Discord messages", () => {
   });
 });
 
+
+describe("a question answered in the app", () => {
+  it("carries on where it was asked on Discord, not where the user last wrote", () => {
+    setState("tasks", [{ id: "t1", title: "핫코너 수정", status: "done", entries: [], agent: { channel: "general", room: "orbit", thread: "th1", threadIn: "orbit" } } as never]);
+    setState("settings", "agent", { pins: [{ decision: "d1", channel: "th1", message: "q1" }] } as never);
+    const d = { id: "d1", taskId: "main:home~@agent", at: 1, kind: "ask", question: "릴리즈할까?", context: [], options: [{ id: "a", label: "패치로 릴리즈" }], posted: "th1" } as Decision;
+    const where = askedWhere(d);
+    expect(where.discord).toEqual({ channel: "th1", message: "q1" });
+    expect(where.note).toContain('the thread of your job t1 "핫코너 수정"');
+    // never posted on Discord: nothing to carry
+    expect(askedWhere({ ...d, posted: undefined })).toEqual({});
+  });
+});

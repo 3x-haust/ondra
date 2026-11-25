@@ -3435,7 +3435,11 @@ export async function decide(decisionId: string, optionId: string, values?: Form
     const [space, project] = d.taskId.slice(5).split("~");
     const label = filled ?? d.options.find((o) => o.id === optionId)?.label ?? optionId;
     const { throwThought } = await import("./captain");
-    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note: await staleAnswerNote(d.at, space, project) });
+    // asked on Discord: the answer goes on where it was asked, wherever it was pressed
+    const { askedWhere } = await import("./discord");
+    const where = askedWhere(d);
+    const note = [where.note, await staleAnswerNote(d.at, space, project)].filter(Boolean).join("\n") || undefined;
+    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note, ...(where.discord ? { discord: where.discord } : {}) });
     return;
   }
   const t = taskById(d.taskId);
@@ -3534,7 +3538,10 @@ async function answerInRound(d: Decision, optionId: string): Promise<boolean> {
   if (main) {
     const [space, project] = d.taskId.slice(5).split("~");
     const { throwThought } = await import("./captain");
-    void throwThought(text, space as Task["space"], { project, note: await staleAnswerNote(d.at, space, project) });
+    const { askedWhere } = await import("./discord");
+    const where = askedWhere(d);
+    const note = [where.note, await staleAnswerNote(d.at, space, project)].filter(Boolean).join("\n") || undefined;
+    void throwThought(text, space as Task["space"], { project, note, ...(where.discord ? { discord: where.discord } : {}) });
     return true;
   }
   show(fresh.slice(0, -1));
