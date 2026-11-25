@@ -4,6 +4,7 @@ export default {
   // app-level toasts and notifications
   "{keys} 눌러 종료": "{keys} to quit",
   "메인에 보냈어요": "Sent to Main",
+  "작업에 보냈어요": "Sent to the task",
   "응답이 필요해요": "Needs your reply",
   "답변했어요": "Answered",
   "완료했어요": "Done",

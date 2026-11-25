@@ -990,6 +990,8 @@ export interface Project {
 export interface SideMessage {
   id: string;
   space: SpaceId;
+  /** the place it belongs to, as btw's: "main:<space>[~project]" or "task:<id>" (missing: the space's main chat) */
+  scope?: string;
   at: number;
   from: "me" | "side";
   text: string;

@@ -259,6 +259,7 @@ export default {
   "새 대화": "New chat",
   "생각하는 중": "Thinking",
   "메인에 보냈어요": "Sent to Main",
+  "작업에 보냈어요": "Sent to the task",
   "사이드챗에 말하기": "Message side chat",
   "보내기": "Send",
 
