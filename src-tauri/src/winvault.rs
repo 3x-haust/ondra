@@ -80,12 +80,15 @@ pub fn read_bound(path: &Path, purpose: &[u8]) -> io::Result<Vec<u8>> {
     dpapi(&fs::read(path)?, purpose, false)
 }
 pub fn read_optional(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    read_optional_bound(path, &[])
+}
+pub fn read_optional_bound(path: &Path, purpose: &[u8]) -> io::Result<Option<Vec<u8>>> {
     let encrypted = match fs::read(path) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         other => other?,
     };
     // A missing DPAPI master key is *not* a missing vault. Never overwrite it.
-    dpapi(&encrypted, &[], false).map(Some)
+    dpapi(&encrypted, purpose, false).map(Some)
 }
 pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_bound(path, bytes, &[])
