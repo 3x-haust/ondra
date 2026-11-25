@@ -2775,6 +2775,8 @@ export function createTask(f: {
   reach?: Task["reach"];
   /** a finished job this carries on: its branch is handed over */
   follows?: string;
+  /** the root of the work this is a part of (Task.group) */
+  group?: string;
   issue?: Task["issue"];
   /** another agent asked for it (see Entry's `by`) */
   by?: string;
@@ -2811,6 +2813,7 @@ export function createTask(f: {
     ...(f.after?.length ? { after: f.after } : {}),
     ...(f.reach?.length ? { reach: f.reach } : {}),
     ...(prev ? { follows: prev.id } : {}),
+    ...(f.group && taskById(f.group) ? { group: f.group } : {}),
     cwd: (takes ? prev!.cwd : f.cwd?.trim()) || (prev?.worktree ? `${prev.worktree.repo}${prev.worktree.sub ? `/${prev.worktree.sub}` : ""}` : prev?.cwd) || spaceById(f.space).folder || "~",
     project: f.project ?? prev?.project ?? projectFor(f.space, f.cwd),
     // the branch it carries on moves with it: merge and discard act on the new card

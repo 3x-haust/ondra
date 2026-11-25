@@ -262,6 +262,9 @@ export interface Task {
   after?: string[];
   /** The finished job this one carries on: a new job (fresh context) on that job's branch, given its result. */
   follows?: string;
+  /** The job this one is a part of (a spec's ticket, a step of one request): listed under it, and the
+   *  group ends as one, with one sound, one report from main and one result. Always the group's root. */
+  group?: string;
   /** started by this routine (one run) */
   routine?: string;
   /** Ondra started it by itself from memory (a rule the user had to say twice, made into a check):

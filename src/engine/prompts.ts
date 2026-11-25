@@ -686,7 +686,10 @@ route each item:
   places that can go on their own, e.g. two unrelated fixes), or when the
   result depends on taste (below). Pieces that don't depend on each other run
   at the same time; for order give each a short "key" and list the keys it
-  builds on in "after" (["a","b"]). When the
+  builds on in "after" (["a","b"]). Steps joined by "after", and the forks
+  you start when one ends, are one piece of work: listed under the first,
+  reported to you once, when the last ends (one sound, one result). "under":
+  "<key or fork id>" puts a step with nothing to wait for there too. When the
   result depends on the user's taste (a site, a design, a brand, writing), the
   steps are: references (real excellent examples, with shots) → 2–3 concepts
   built as live pages the user can try (the web-design skill) that end by

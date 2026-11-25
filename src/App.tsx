@@ -17,7 +17,7 @@ import { applyZoom, zoom } from "./state/zoom";
 import { keyText, ShortcutSheet, sheetOpen } from "./views/ShortcutSheet";
 import { binding, chordText, dispatchShortcut, NATIVE, noModifiers, shortcutContext, shortcutLabel, shortcutOverlay, viewKey } from "./lib/shortcuts";
 import { anyPop } from "./ui/ModelPicker";
-import { allDecisions, allTasks, spaceById, taskById } from "./state/store";
+import { allDecisions, allTasks, groupGoing, groupOf, groupRoot, spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
 import { engine, refreshEngine, startRpc } from "./engine/rpc";
@@ -54,6 +54,9 @@ import { startBridge } from "./engine/bridge";
 import "./engine/journal";
 import "./engine/memgit";
 import { lang, t as tr } from "./i18n";
+
+/** the sound a group's end makes: failed when any of its jobs failed */
+const groupEnd = (t: Task, tone: "done" | "waiting" | "failed") => (tone === "done" && groupOf(t).some((x) => x.status === "failed") ? "failed" : tone);
 
 export default function App() {
   const [appVersion, setAppVersion] = createSignal("");
@@ -229,12 +232,14 @@ export default function App() {
       // a job that ends or needs you makes a sound, in front or not; a routine's run with nothing
       // to report ends without a sound or a notice
       const tone = soundFor(t, was);
-      if (tone && !quietRun(t)) ring(tone);
+      // a job of a group ends with the group: one sound and one notice, when the last of them ends
+      const part = tone !== undefined && tone !== "waiting" && groupGoing(t);
+      if (tone && !part && !quietRun(t)) ring(groupEnd(t, tone));
       if (!t.host && !quietRun(t)) tellPet(t, was);
       if (!was || was === t.status || document.hasFocus()) continue;
-      if (quietRun(t)) continue;
-      // which space it is in, so a company job never reads as a personal one
-      const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;
+      if (quietRun(t) || part) continue;
+      // which space it is in, so a company job never reads as a personal one (a group, by its first job)
+      const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${groupRoot(t).title}`;
       if (t.status === "waiting") void notify(title, tr("응답이 필요해요"));
       else if (t.status === "done" && !t.parentId) void notify(title, t.answer ? tr("답변했어요") : [tr("완료했어요"), costShort(jobCost(t))].filter(Boolean).join(" · "));
       else if (t.status === "failed") void notify(title, tr("실패했어요"));

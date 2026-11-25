@@ -54,9 +54,11 @@ const jobEntryId = (t: Task) => `res-${t.id}-${t.finishedAt ?? 0}`;
 /**
  * Keep a finished job's result as the job itself reported it: its one line, its words
  * and its result blocks. Each time it finishes is its own entry (asked again, it
- * reports again). `msg`: the chat message that shows it.
+ * reports again). `msg`: the chat message that shows it. `batch`: the jobs of its group
+ * that ended with it (the job last): one entry for all of them, under the group's first job.
  */
-export function keepJobResult(t: Task, msg?: string) {
+export function keepJobResult(t: Task, msg?: string, batch: Task[] = [t]) {
+  if (batch.length > 1) return keepGroupResult(t, batch, msg);
   if (t.status !== "done" || t.parentId || t.answer || t.agent) return;
   const id = jobEntryId(t);
   if ((state.results ?? []).some((r) => r.id === id)) return;
@@ -66,10 +68,30 @@ export function keepJobResult(t: Task, msg?: string) {
   setState("results", (l) => [...(l ?? []), e].slice(-MAX));
 }
 
+/** A group's result: each job that came back with something, its title over its words. Its id is
+ *  the last job's, so main's words on it join it (keepResult). */
+function keepGroupResult(t: Task, batch: Task[], msg?: string) {
+  if (t.parentId || t.answer || t.agent) return;
+  const id = jobEntryId(t);
+  if ((state.results ?? []).some((r) => r.id === id)) return;
+  const done = batch.filter((x) => x.status === "done");
+  const answers = done.flatMap((x) => {
+    const { said, blocks } = jobReport(x);
+    const text = said || x.summary?.trim() || "";
+    return text || blocks.length ? [{ text: `### ${x.title}\n\n${text}`.trim(), blocks }] : [];
+  });
+  if (!answers.length) return;
+  const root = (t.group && state.tasks.find((x) => x.id === t.group)) || batch[0];
+  const reply = done.map((x) => x.summary?.trim()).filter(Boolean).join(" · ") || undefined;
+  const e: ResultEntry = { id, taskId: root.id, space: t.space, project: t.project, title: root.title, reply, answers, at: t.finishedAt ?? Date.now(), msg };
+  setState("results", (l) => [...(l ?? []), e].slice(-MAX));
+}
+
 /** The digest of a job's latest finish (digest.ts) leads its kept result: its line, then its points over the job's own words. */
 export function keepDigest(taskId: string, d: { line: string; text: string }) {
   const t = state.tasks.find((x) => x.id === taskId);
-  if (!t || !(state.results ?? []).some((r) => r.id === jobEntryId(t))) return;
+  // a group's entry (another job's id on it) keeps the jobs' own words
+  if (!t || !(state.results ?? []).some((r) => r.id === jobEntryId(t) && r.taskId === t.id)) return;
   setState("results", (r) => r.id === jobEntryId(t), (r) => ({ ...r, reply: d.line, answers: d.text ? [{ text: d.text, blocks: [] }, ...r.answers] : r.answers }));
 }
 

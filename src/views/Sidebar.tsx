@@ -70,10 +70,11 @@ const followers = createRoot(() =>
   createMemo(() => {
     const m = new Map<string, Task[]>();
     for (const x of allTasks()) {
-      if (!x.follows || !listed(x) || !carriedOn(x)) continue;
-      const l = m.get(x.follows);
+      const up = listed(x) ? carriedOn(x) : undefined;
+      if (!up) continue;
+      const l = m.get(up.id);
       if (l) l.push(x);
-      else m.set(x.follows, [x]);
+      else m.set(up.id, [x]);
     }
     return m;
   }),

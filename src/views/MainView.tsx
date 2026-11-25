@@ -1157,7 +1157,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const carried = (t: Task, seen = new Set<string>()): Task[] => {
       if (seen.has(t.id)) return [];
       seen.add(t.id);
-      return [t, ...allTasks().filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
+      return [t, ...allTasks().filter((x) => (x.follows === t.id || x.group === t.id) && !own.has(x.id)).flatMap((x) => carried(x, seen))];
     };
     for (const m of props.msgs) {
       if (m.from === "me") {
