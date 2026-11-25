@@ -560,6 +560,27 @@ export const devicesList = () =>
     { id: "Pixel_9", name: "Pixel 9", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: true, serial: "emulator-5554" },
     { id: "pixel_test", name: "pixel test", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: false },
   ]);
+/** The Android SDK in use (the user's, else Ondra's own) and what Ondra is bringing in for it.
+ *  accel: "windows" | "kvm" when the emulator can't run fast here; license and size: what
+ *  getting the emulator means (full only). */
+export interface AndroidSdk {
+  sdk: string;
+  adb: boolean;
+  emulator: boolean;
+  avd: boolean;
+  busy?: "adb" | "emulator" | null;
+  percent: number;
+  error?: string | null;
+  size: number;
+  license?: string | null;
+  accel?: "windows" | "kvm" | null;
+}
+export const androidSdkStatus = (full = false) =>
+  call<AndroidSdk>("android_sdk_status", { full }, { sdk: "", adb: true, emulator: true, avd: true, percent: 0, size: 0 });
+/** adb comes unasked; the emulator only once the user agreed to its license and size. */
+export const androidSdkGet = (what: "adb" | "emulator") => call<void>("android_sdk_get", { what });
+export const onAndroidSdk = (f: (s: AndroidSdk) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<AndroidSdk>("android-sdk", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Shut down the devices jobs made and left behind, except those of the jobs in `keep`. */
 export const jobDevicesRelease = (keep: string[]) => call<string[]>("job_devices_release", { keep }, []);
 export const deviceBoot = (d: Device) => call<void>("device_boot", { platform: d.platform, id: d.id });

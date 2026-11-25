@@ -48,9 +48,18 @@ export function androidSdk(env: NodeJS.ProcessEnv = process.env, os: NodeJS.Plat
   return join(home, os === "darwin" ? "Library/Android/sdk" : "Android/Sdk");
 }
 const EXE = process.platform === "win32" ? ".exe" : "";
-const SDK = androidSdk();
-const ADB = existsSync(join(SDK, `platform-tools/adb${EXE}`)) ? join(SDK, `platform-tools/adb${EXE}`) : "adb";
-const EMULATOR = join(SDK, `emulator/emulator${EXE}`);
+const adbIn = (sdk: string) => join(sdk, `platform-tools/adb${EXE}`);
+let SDK = androidSdk();
+let ADB = existsSync(adbIn(SDK)) ? adbIn(SDK) : "adb";
+let EMULATOR = join(SDK, `emulator/emulator${EXE}`);
+/** Use `dir` as the Android SDK from now on, here and in what this starts (agent-device finds adb through ANDROID_HOME). */
+function useSdk(dir: string) {
+  SDK = dir;
+  ADB = existsSync(adbIn(dir)) ? adbIn(dir) : "adb";
+  EMULATOR = join(dir, `emulator/emulator${EXE}`);
+  process.env.ANDROID_HOME = dir;
+  process.env.ANDROID_SDK_ROOT = dir;
+}
 const AVD_HOME = process.env.ANDROID_AVD_HOME || join(homedir(), ".android/avd");
 const MAX_OUT = 14_000;
 
@@ -563,6 +572,75 @@ async function snapshotBase(avd: string, signal?: AbortSignal): Promise<string |
 /** AVD names from `emulator -list-avds`; none when it didn't run (its error isn't a name). */
 export const avdNames = (r: { ok: boolean; out: string }) => (r.ok ? r.out.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("INFO")) : []);
 
+// ───────────── an Android SDK for a computer without one ─────────────
+// The app keeps its own (devices/sdk.rs): adb comes in unasked, the emulator and its image once
+// the user agrees. Reached through the app's local door; a download goes on in the app while
+// this asks how far it is.
+
+const BRIDGE = process.env.ONDRA_BRIDGE;
+const BRIDGE_TOKEN = process.env.ONDRA_BRIDGE_TOKEN;
+type SdkStatus = { sdk: string; adb: boolean; emulator: boolean; avd: boolean; busy?: string | null; percent: number; error?: string | null; size: number; license?: string | null; accel?: string | null };
+type Ask = { hasUI?: boolean; ui?: { confirm(title: string, body: string, o?: { signal?: AbortSignal; timeout?: number }): Promise<boolean> } };
+
+async function sdkCall(args: Record<string, unknown>, signal?: AbortSignal): Promise<SdkStatus | undefined> {
+  if (!BRIDGE || !BRIDGE_TOKEN) return undefined;
+  try {
+    const r = await fetch(BRIDGE, { method: "POST", headers: { "content-type": "application/json", "x-token": BRIDGE_TOKEN }, body: JSON.stringify({ op: "android_sdk", worker: WORKER, args }), signal });
+    const s = await r.json();
+    return s && typeof s.sdk === "string" ? s : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** How far a download in the app is, until it's over. */
+async function sdkSettled(signal?: AbortSignal): Promise<SdkStatus | undefined> {
+  for (;;) {
+    const s = await sdkCall({}, signal);
+    if (!s?.busy || signal?.aborted) return s;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
+/** What the user can do when the emulator can't run fast here (Ondra can't switch it on). */
+export const ACCEL_HOW: Record<string, string> = {
+  windows:
+    "The Android emulator needs the Windows Hypervisor Platform, which is off on this PC. Ondra can't switch it on. Tell the user: Start › 'Turn Windows features on or off' › check 'Windows Hypervisor Platform' › OK, then restart the PC (virtualization must also be on in the BIOS/UEFI).",
+  kvm: "The Android emulator needs KVM, which this Linux can't use. Ondra can't switch it on. Tell the user: turn on virtualization (VT-x / AMD-V) in the BIOS/UEFI, install KVM (e.g. `sudo apt install qemu-kvm`), run `sudo usermod -aG kvm $USER` and log in again.",
+};
+
+let declined = false;
+
+/** Make sure this computer can run an Android emulator: nothing to do with an SDK and an AVD in
+ *  place; else adb from the app unasked, and the emulator after the user said yes. A reason when not. */
+export async function androidReady(ctx: Ask | undefined, signal?: AbortSignal): Promise<string | undefined> {
+  if (existsSync(EMULATOR) && ADB !== "adb" && avdNames(await run(EMULATOR, ["-list-avds"], { signal })).length) return undefined;
+  let s = await sdkCall({}, signal);
+  if (!s) return existsSync(EMULATOR) ? undefined : "This computer has no Android emulator. The user can get one in Ondra's 디바이스 (Devices) screen.";
+  if (!s.adb) s = (await sdkCall({ get: "adb" }, signal)) && (await sdkSettled(signal));
+  if (!s?.adb) return `Couldn't get adb: ${s?.error ?? "no answer from the app"}.`;
+  useSdk(s.sdk);
+  if (s.emulator && s.avd) return undefined;
+  s = (await sdkCall({ full: true }, signal)) ?? s;
+  if (s.license == null) return s.emulator ? "The Android SDK here has an emulator but no AVD. Ask the user to make one in Android Studio's Device Manager." : `No Android emulator can be downloaded for this computer${s.error ? ` (${s.error})` : ""}.`;
+  if (s.accel) return ACCEL_HOW[s.accel] ?? ACCEL_HOW.kvm;
+  if (s.size > 0) {
+    if (declined) return "The user declined downloading the Android emulator in this job.";
+    if (!ctx?.hasUI || !ctx.ui) return "The Android emulator isn't downloaded yet. The user can get it in Ondra's 디바이스 (Devices) screen.";
+    const gb = (s.size / 1e9).toFixed(1);
+    const yes = await ctx.ui.confirm("안드로이드 에뮬레이터를 받을까요?", `약 ${gb}GB를 받아요. 받으면 아래 라이선스에 동의하는 거예요.\n\n${s.license}`, { signal, timeout: 600_000 });
+    if (!yes) {
+      declined = true;
+      return "The user declined downloading the Android emulator.";
+    }
+  }
+  await sdkCall({ get: "emulator" }, signal);
+  s = await sdkSettled(signal);
+  if (!s?.emulator || !s.avd) return signal?.aborted ? "cancelled" : `Couldn't get the Android emulator: ${s?.error ?? "no answer from the app"}.`;
+  useSdk(s.sdk);
+  return undefined;
+}
+
 /** A fresh emulator for this job, copied from an AVD of its space (or `model` when that one is). */
 async function androidMake(model: string | undefined, signal?: AbortSignal): Promise<Mine | string> {
   const avds = avdNames(await run(EMULATOR, ["-list-avds"], { signal })).filter((s) => !s.startsWith("ondra-"));
@@ -649,12 +727,16 @@ export default function (pi: any) {
       steps: Type.Optional(Type.Array(Type.String(), { description: "do: several agent-device command lines, run in order in one call" })),
       name: Type.Optional(Type.String({ description: "look: file name for the proof screenshot" })),
     }),
-    async execute(_id: string, p: any, signal?: AbortSignal) {
+    async execute(_id: string, p: any, signal?: AbortSignal, _onUpdate?: unknown, ctx?: Ask) {
       // the app shuts down devices of jobs that ended; a later turn starts a new one
       if (mine && !existsSync(OWNED)) mine = undefined;
       if (p.action === "start") {
         if (mine) return text(`Already have ${mine.name} (${mine.platform}). Use do / look, or stop first.`);
         const platform: Platform = p.platform === "android" ? "android" : "ios";
+        if (platform === "android") {
+          const why = await androidReady(ctx, signal);
+          if (why) return text(why);
+        }
         // a device of this space when named, otherwise a fresh one made for this job
         const got = p.device ? await allowed(platform, p.device, signal) : platform === "ios" ? await iosMake(p.model, signal) : await androidMake(p.model, signal);
         if (typeof got === "string") return text(got);
