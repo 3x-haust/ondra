@@ -412,13 +412,12 @@ function Body(props: { t: Task }) {
     "sep",
     { id: "copy", label: t("경로 복사"), icon: "copy", run: () => void copy(full(f.path)) },
     { id: "copyRel", label: t("상대 경로 복사"), icon: "copy", run: () => void copy(f.path) },
-    ...(f.status === "D"
+    ...(f.status === "D" || props.t.host
       ? []
       : [
           "sep" as const,
-          // a job of another Mac: they open on that Mac's screen
-          { id: "finder", label: props.t.host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기"), icon: "folder", run: () => void revealOn(props.t.host, full(f.path)) },
-          { id: "editor", label: props.t.host ? t("그 Mac의 편집기에서 열기") : t("편집기에서 열기"), icon: "external", run: () => void editorOn(props.t.host, full(f.path)) },
+          { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealOn(props.t.host, full(f.path)) },
+          { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void editorOn(props.t.host, full(f.path)) },
         ]),
   ];
   const moreItems = (): MenuEntry[] => {

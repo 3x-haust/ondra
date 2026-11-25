@@ -12,6 +12,7 @@ vi.mock("../lib/native", async (orig) => {
     fsFiles: vi.fn(async () => ["here"]),
     gitChanges: vi.fn(async () => ({ isRepo: true, branch: null, files: [], patch: "" })),
     revealPath: vi.fn(async () => {}),
+    openInEditor: vi.fn(async () => {}),
     farStat: vi.fn(async (p: string) => (p.endsWith("/dir") ? { size: 0, modified: 1, dir: true } : { size: 700_000, modified: 1, dir: false })),
     // 700 000 bytes: a 512 KB piece, then the rest
     farPiece: vi.fn(async (_p: string, off: number) => ({ data: btoa("\0".repeat(Math.min(512 << 10, 700_000 - off))), size: 700_000, modified: 1 })),
@@ -19,8 +20,8 @@ vi.mock("../lib/native", async (orig) => {
 });
 
 import { askHost, tellHost } from "./hosts";
-import { farPiece, fsFiles, gitChanges, revealPath } from "../lib/native";
-import { changesIn, farError, farTerm, listFiles, onMac, revealOn, sendFiles, srcOf } from "./far";
+import { farPiece, fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
+import { changesIn, editorOn, farError, farTerm, listFiles, onMac, revealOn, sendFiles, srcOf } from "./far";
 import { engine, refreshEngine } from "./rpc";
 
 beforeAll(async () => {
@@ -37,6 +38,8 @@ describe("where a thing is done", () => {
     expect(gitChanges).toHaveBeenCalledWith("/Users/me/work/app", "main");
     await revealOn(undefined, "/Users/me/x");
     expect(revealPath).toHaveBeenCalledWith("/Users/me/x");
+    await editorOn(undefined, "/Users/me/x");
+    expect(openInEditor).toHaveBeenCalledWith("/Users/me/x");
     expect(askHost).not.toHaveBeenCalled();
   });
 
@@ -46,7 +49,9 @@ describe("where a thing is done", () => {
     await changesIn("H", "/Users/other/app", undefined, true);
     expect(askHost).toHaveBeenCalledWith("H", "far.changes", ["/Users/other/app", null, true]);
     await revealOn("H", "~/x");
-    expect(askHost).toHaveBeenCalledWith("H", "far.reveal", ["~/x"]);
+    await editorOn("H", "~/x");
+    expect(askHost).toHaveBeenCalledTimes(2);
+    expect(openInEditor).not.toHaveBeenCalled();
     expect(fsFiles).not.toHaveBeenCalled();
     expect(revealPath).not.toHaveBeenCalled();
   });

@@ -80,7 +80,7 @@ export function Lightbox() {
                 <button class="icon-btn sm" title={`${t("이전")} ←`} aria-label={t("이전")} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                 <button class="icon-btn sm" title={`${t("다음")} →`} aria-label={t("다음")} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
               </Show>
-              <button class="icon-btn sm" title={s().host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealOn(s().host, path())}><Icon name="open" size={14} /></button>
+              <Show when={!s().host}><button class="icon-btn sm" title={t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealOn(s().host, path())}><Icon name="open" size={14} /></button></Show>
               <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setShown(null)}><Icon name="x" size={14} /></button>
             </div>
           </div>

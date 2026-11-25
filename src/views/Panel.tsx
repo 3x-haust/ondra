@@ -243,7 +243,7 @@ function Overview(props: { t: Task }) {
         <dl class="kv">
           <dt>{tr("폴더")}</dt>
           <dd>
-            <button class="kv-folder" onClick={() => void revealOn(t().host, expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(t())}</button>
+            <button class="kv-folder" disabled={!!t().host} onClick={() => void revealOn(t().host, expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(t())}</button>
           </dd>
           <Show when={t().status !== "done"}>
           <dt>{tr("우선순위")}</dt>
@@ -468,9 +468,9 @@ function ArtifactsPane(props: { t: Task }) {
             <>
               <div class="abar">
                 <span class="acount">{tr("{n}개", { n: list().length })}</span>
-                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, list()[0].path.replace(/\/[^/]*$/, ""))}>
+                <Show when={!props.t.host}><button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, list()[0].path.replace(/\/[^/]*$/, ""))}>
                   <Icon name="open" size={14} />
-                </button>
+                </button></Show>
               </div>
               <div class="agrid">
                 <For each={list()}>
@@ -506,7 +506,7 @@ function ArtifactsPane(props: { t: Task }) {
                   <button class="icon-btn sm" title={`${tr("이전")} (←)`} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                   <button class="icon-btn sm" title={`${tr("다음")} (→)`} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
                 </Show>
-                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, a.path)}><Icon name="open" size={14} /></button>
+                <Show when={!props.t.host}><button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, a.path)}><Icon name="open" size={14} /></button></Show>
               </div>
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
