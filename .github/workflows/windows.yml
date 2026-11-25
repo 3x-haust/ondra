@@ -81,7 +81,12 @@ jobs:
 
       - name: Use the kept remote helper build
         if: steps.remote.outputs.cache-hit == 'true'
-        run: git ls-files remote/host | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
+        run: |
+          git ls-files remote/host | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
+          Get-ChildItem remote/host/target/$env:TARGET/release -Recurse -Filter '*ondra*remote*' | Select-Object FullName, LastWriteTime | Format-Table -AutoSize | Out-String -Width 300
+          Get-ChildItem remote/host/src, remote/host/Cargo.* | Select-Object FullName, LastWriteTime | Format-Table -AutoSize | Out-String -Width 300
+          cargo build --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked -v 2>&1 | Select-String -Pattern 'Dirty|Fresh ondra|Compiling ondra'
 
       - name: Build the pinned coding agent
         run: |
