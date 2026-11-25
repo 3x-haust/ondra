@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
 import { browserSearch, Cache, onTopic, Pace, passages, type Run } from "./web";
@@ -98,5 +98,41 @@ describe("browserSearch (the engine turned us away: the job's own tab)", () => {
   it("a result is on the topic when it shares enough of the query's words", () => {
     expect(onTopic("macOS hot corner sleep", { title: "Hot corners on macOS", url: "https://x", snippet: "" })).toBe(true);
     expect(onTopic("macOS hot corner sleep", { title: "Minesweeper Online", url: "https://y", snippet: "" })).toBe(false);
+  });
+});
+
+describe("web_search on a computer without ondra-browser", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.doUnmock("node:child_process");
+    vi.resetModules();
+  });
+  it("doesn't try a browser tab when the engine refuses, nor point to one", async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    // its own pace and cache folder, and a PATH without the browser
+    vi.stubEnv("TMPDIR", dir());
+    vi.stubEnv("PATH", dir());
+    const ran: string[] = [];
+    vi.doMock("node:child_process", () => ({
+      execFile: (file: string, _args: string[], _o: unknown, done: (err: Error | null, out: string, errOut: string) => void) => {
+        ran.push(file);
+        // the engine turns every search away; no program but curl is there
+        if (file.endsWith("curl")) done(null, "\n@@ondra@@429 text/html", "");
+        else done(Object.assign(new Error(`spawn ${file} ENOENT`), { code: "ENOENT" }), "", "");
+        return { stdin: { end() {} }, kill() {} };
+      },
+    }));
+    const { default: web } = await import("./web");
+    const tools: Record<string, { execute: (id: string, p: { query: string }) => Promise<{ content: { text: string }[] }> }> = {};
+    web({ registerTool: (t: { name: string }) => void (tools[t.name] = t as never) });
+
+    const got = tools.web_search.execute("1", { query: "tauri clipboard image windows" });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const said = (await got).content[0].text;
+
+    expect(ran.filter((f) => !f.endsWith("curl"))).toEqual([]);
+    expect(said).not.toMatch(/ondra-browser|browser tab/);
   });
 });

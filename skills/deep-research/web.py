@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Search and read the public web when web_search / web_fetch can't.
+"""Search and read the public web when the web search / web_fetch can't.
 
     web.py search "<query>" [--engine bing,naver,google,yahoo] [--n 8] [--json]
     web.py fetch <url> [--dir "$R"] [--find "<phrase>"] [--max 12000] [--json]
@@ -615,7 +615,8 @@ def bench(engine, minutes=30):
 
 def search(q, engines, n):
     if not shutil.which("ondra-browser"):
-        sys.exit("ondra-browser is not on PATH (it ships with the app; this only works inside an Ondra job)")
+        sys.exit("no ondra-browser on this computer (the app ships it on macOS for now): search with web_search, "
+                 "and when it is refused, work on with what you have and search again later")
     hangul = bool(re.search(r"[가-힣]", q))
     order = engines or (["naver", "google", "bing", "yahoo"] if hangul else ["google", "bing", "naver", "yahoo"])
     tried, benched = [], load_bench()

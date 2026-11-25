@@ -12,6 +12,7 @@ import {
 import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "../state/devices";
 import { noModifiers, viewKey } from "../lib/shortcuts";
 import { spaceById, state } from "../state/store";
+import { inSpace, kept, scrollKept } from "../state/viewState";
 import type { SpaceId } from "../state/types";
 import { openTask, setView, toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
@@ -603,7 +604,8 @@ const byRuntime = (a: string, b: string) => {
 };
 
 export function Devices() {
-  const [filter, setFilter] = createSignal<Filter>("all");
+  // each workspace's list stays filtered and scrolled as it was left
+  const [filter, setFilter] = kept<Filter>(() => inSpace(state.space, "devices.filter"), "all");
   // the open device lives in the view, so the sidebar can open one and light only that row
   const here = useView();
   const focus = () => { const v = here(); return v.name === "devices" ? v.device : undefined; };
@@ -642,7 +644,7 @@ export function Devices() {
       <Show when={focused()} keyed>
         {(d) => <Control d={d} onClose={() => setFocus(undefined)} />}
       </Show>
-      <div class="devices-body" classList={{ hidden: !!focused() }}>
+      <div class="devices-body" classList={{ hidden: !!focused() }} ref={scrollKept(() => inSpace(state.space, "devices"))}>
         <div class="dev-section">{t("켜짐")} <span class="dev-n">{on().length}</span></div>
         <div class="dev-grid">
           <For each={on()} fallback={<p class="dev-empty">{t("켜진 기기 없음")}</p>}>

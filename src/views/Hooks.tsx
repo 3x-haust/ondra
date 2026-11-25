@@ -1,6 +1,7 @@
 // Settings › 훅: shell commands that run on agent events (hooks).
 // Saved as JSON in the app's data folder; extensions/hooks.ts reads it in every job.
 import { createSignal, For, onMount, Show } from "solid-js";
+import { kept } from "../state/viewState";
 import { hooksLoad, hooksSave } from "../lib/native";
 import { state, uid } from "../state/store";
 import { toast } from "../state/ui";
@@ -33,7 +34,8 @@ const forTools = (e: HookEvent) => e === "before_tool" || e === "after_tool";
 export function HooksTab() {
   const [list, setList] = createSignal<Hook[]>([]);
   const [loaded, setLoaded] = createSignal(false);
-  const [more, setMore] = createSignal(false);
+  // "훅에 넘기는 값" stays open once opened
+  const [more, setMore] = kept("settings.hooks.more", false);
   onMount(async () => {
     try {
       const v = JSON.parse(await hooksLoad());

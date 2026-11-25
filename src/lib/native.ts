@@ -36,6 +36,9 @@ export interface EngineInfo {
   dataDir: string;
   /** The user's home folder, for expanding `~`. */
   home: string;
+  /** The tools this app ships on this computer (false: not here): ondra-browser, and the helper that drives other apps. */
+  browser?: boolean;
+  computer?: boolean;
 }
 export const engineInfo = () =>
   call<EngineInfo>("engine_info", undefined, { enginePath: "/dev/engine", engineVersion: "dev", dataDir: "/tmp/ondra", home: "/Users/me" });
@@ -390,6 +393,15 @@ export const gitCommit = (cwd: string, message: string, env: Env = []) => call<s
 export const gitPush = (cwd: string, env: Env = []) => call<string>("git_push", { cwd, env }, "task/demo");
 /** a pull request's state, checks, comments and reviews as the space sees it (raw JSON, see prWatch.ts) */
 export const ghPrState = (url: string, env: Env = []) => call<string>("gh_pr_state", { url, env }, "");
+/** one Actions run's JSON fields (see ciRun.ts); `repo` is owner/name, else the folder's repo */
+export const ghRunView = (cwd: string, run: string, repo: string | undefined, fields: string, env: Env = []) =>
+  call<string>("gh_run_view", { cwd, run, repo: repo ?? null, fields, env }, "");
+/** a workflow's latest successful runs, as `[{databaseId}]` */
+export const ghRunList = (cwd: string, workflow: string, repo: string | undefined, env: Env = []) =>
+  call<string>("gh_run_list", { cwd, workflow, repo: repo ?? null, env }, "[]");
+/** a PR's checks (`{statusCheckRollup}`); pr "" is the folder's branch */
+export const ghPrChecks = (cwd: string, pr: string, repo: string | undefined, env: Env = []) =>
+  call<string>("gh_pr_checks", { cwd, pr, repo: repo ?? null, env }, "");
 /** everything the PR view shows, diff included (raw JSON, see prView.ts) */
 /** Issues of the folder's repo for a GitHub search (JSON array as text). */
 export const ghIssues = (cwd: string, search: string, env: Env = []) =>

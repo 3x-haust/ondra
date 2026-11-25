@@ -36,12 +36,15 @@ import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
+import { hostedToolEvents } from "./hostedSearch";
 import { handoffPrompt, playbookOf, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
 import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request as rpcRequest, stderrOf } from "./rpc";
 
 const KIND_IDS: unknown[] = KINDS.map((k) => k.id);
 
 interface Run {
+  /** searches the provider ran itself, still open (hostedSearch.ts) */
+  hosted?: Set<string>;
   text: string;
   cursor: number;
   streaming: boolean;
@@ -460,6 +463,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     case "skill":
       return { name, kind: "read", target: String(args?.query ?? ""), detail: String(args?.query ?? ""), now: "스킬 읽는 중" };
     case "web_search":
+    case "web_lookup":
       return { name, kind: "search", target: String(args?.query ?? ""), detail: JSON.stringify(args ?? {}), now: "웹 검색 중" };
     case "web_fetch": {
       const url = String(args?.url ?? "");
@@ -1556,13 +1560,15 @@ function fail(id: string, message: string) {
 function handlers(id: string, run: Run) {
   const agent = agentOf(id);
   const ui = extensionUi(id, agent, () => runs.get(id) === run);
-  return {
+  const self = {
     event(ev: any) {
       if (runs.get(id) !== run) return;
       run.heardAt = Date.now();
       ui.event(ev);
       // `use` only carries a call: the tool it called shows (its own events, parentToolCallId set)
       if (isUseCall(ev)) return;
+      // a search its provider ran itself: a step like any tool's
+      for (const x of hostedToolEvents(ev, (run.hosted ??= new Set()))) self.event(x);
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
@@ -1780,6 +1786,7 @@ function handlers(id: string, run: Run) {
       }
     },
   };
+  return self;
 }
 
 /**

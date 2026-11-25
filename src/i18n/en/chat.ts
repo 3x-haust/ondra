@@ -183,6 +183,11 @@ export default {
   "작업 없음": "No tasks",
   "지금 시작": "Start now",
 
+  // a step waiting on CI: each job of the run ("18분째 / 보통 25분", "완료 · 22분")
+  "보통 {d}": "usually {d}",
+  "취소됨|ci": "Cancelled",
+  "건너뜀": "Skipped",
+
   // fork card
   "응답 대기 중": "Waiting for reply",
   "대기 중": "Queued",

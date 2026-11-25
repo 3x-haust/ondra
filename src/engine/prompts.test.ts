@@ -4,7 +4,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { appCheckRules, CAPTAIN_SYSTEM, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
+import { appCheckRules, CAPTAIN_SYSTEM, forHost, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
 import { REVIEW_FIX } from "./crosscheck";
@@ -328,6 +328,23 @@ describe("worker prompt delivery", () => {
       expect(prompts[0]).toContain("mimikyu skill");
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
     });
+
+    it(`gives a ${role} only the tools this computer has`, async () => {
+      // Windows and Linux today: no ondra-browser, no background app helper
+      vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: "/e", engineVersion: "1", dataDir: "/d", home: "/h", browser: false, computer: false });
+      await startRpc();
+      const t = task(role === "subagent" ? "parent-task" : undefined);
+      if (t.parentId) setState("tasks", [{ ...task(), id: t.parentId }]);
+      setState("tasks", (list) => [...list, t]);
+
+      await startTask(t.id, false);
+
+      const [, , args] = vi.mocked(native.agentSpawn).mock.calls[0];
+      const role0 = args[args.indexOf("--append-system-prompt") + 1];
+      for (const gone of ["computer-use", "computer tool", "ondra-browser", "browser-use", "`browse`", "shared browser"]) expect(role0).not.toContain(gone);
+      expect(role0).toContain("web_fetch");
+      for (const gone of ["computer-use;", "browser-use;"]) expect(forHost(CAPTAIN_SYSTEM)).not.toContain(gone);
+    });
   }
 });
 
@@ -373,6 +390,20 @@ describe("교차 검토 in the task prompt and the review skill", () => {
       '"type":"memory-check"', "`confirmed`", "`contradicted`", "`unchecked`", "a contradiction without a quote is dropped",
     ]) expect(skill).toContain(rule);
     expect(skill).not.toMatch(/left brain|right brain|dual-brain review/i);
+  });
+
+  it("adds broad checks under the same four-part evidence rule, never printing a secret", () => {
+    const skill = bundledSkills["../../skills/code-review/SKILL.md"].replace(/\s+/g, " ");
+    for (const rule of [
+      "What changed and who feels it", "## 바뀐 것과 영향 (Impact)", "Trust boundaries",
+      "read `checks.md` in this skill's folder", "## 보안·의존성 (Security & dependencies)", "## 자잘한 것 (Nits)",
+      "The broad checks get no exception", "A tool result is evidence, not a finding", "P1/P2 only when the affected part is reachable",
+      "A `nit:` is never P1 or P2", "Never write a secret's value anywhere", "`[보안]`", "`[성능]`",
+    ]) expect(skill).toContain(rule);
+    const checks = import.meta.glob<string>("../../skills/code-review/checks.md", { query: "?raw", import: "default", eager: true })["../../skills/code-review/checks.md"];
+    for (const rule of ["never install one", "only results on lines this change added or changed", "osv-scanner scan -L", "gitleaks git", "only with a config the repo keeps"])
+      expect(checks.replace(/\s+/g, " ")).toContain(rule);
+    expect(`${skill}\n${checks}`).not.toMatch(/coderabbit/i);
   });
 });
 

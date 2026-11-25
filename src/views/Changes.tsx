@@ -5,6 +5,7 @@
 import { revealLabel } from "../lib/native";
 import { createEffect, createMemo, createResource, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
 import { taskById } from "../state/store";
+import { kept, ofJob, scrollKept } from "../state/viewState";
 import type { Task } from "../state/types";
 import { openTask, setPaneView, shownIn, toast } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
@@ -177,7 +178,10 @@ function Body(props: { t: Task }) {
 
   // ── the Source Control view's rows
   const tree = createMemo(() => buildTree(files()));
-  const [closed, setClosed] = createSignal<ReadonlySet<string>>(new Set());
+  // the folders folded in each job's changes stay folded when it is opened again
+  const [shut, setShut] = kept<string[]>(() => ofJob(props.t.id, "changes.closed"), []);
+  const closed = createMemo<ReadonlySet<string>>(() => new Set(shut()));
+  const setClosed = (s: ReadonlySet<string>) => setShut([...s]);
   const rows = createMemo<Row[]>(() => {
     const group: Row = { key: GROUP, kind: "dir", depth: 0, name: t("변경 사항"), open: !closed().has(GROUP) };
     if (!group.open) return [group];
@@ -525,7 +529,7 @@ function Body(props: { t: Task }) {
                 </div>
                 <div
                   class="scm-tree"
-                  ref={takeKeys}
+                  ref={(el) => (takeKeys(el), scrollKept(() => ofJob(props.t.id, "changes/tree"))(el))}
                   tabIndex={0}
                   role="tree"
                   aria-label={t("변경 사항")}
