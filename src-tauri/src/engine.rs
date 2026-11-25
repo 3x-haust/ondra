@@ -479,6 +479,8 @@ fn spawn_engine(
     cmd.env("PATH", scoped_path(&env, &with_sidecars(user_path())));
     // a job's engine: the saved secrets, read here and never sent to the page
     crate::secrets::inject(&app, &mut cmd, &env);
+    // and the client secrets its space's connected services name
+    crate::mcp::inject(&mut cmd, &env);
     #[cfg(windows)]
     windows_bash::check(&cmd, &args, std::path::Path::new(&cwd), &home())?;
     let mut child = cmd

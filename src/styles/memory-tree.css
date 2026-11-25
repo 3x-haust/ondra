@@ -425,6 +425,7 @@
   color: var(--ink);
 }
 .mem-search {
+  min-width: 0;
   width: 180px;
   height: var(--h-sm);
   padding: 0 9px;
@@ -1656,6 +1657,10 @@ button.mc-row:hover {
 }
 @container (max-width: 720px) {
   .mem-count { display: none; }
+}
+/* the header's buttons go to their icons before anything in it is cut */
+@container (max-width: 520px) {
+  .mem-view > .head .mem-act { display: none; }
 }
 @container (max-width: 560px) {
   .mem-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 45%) minmax(0, 1fr); }

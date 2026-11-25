@@ -211,14 +211,14 @@ export function MemoryView() {
             {absorbing() ? t("가져오는 중…") : t("폴더 노트 {n}개", { n: myNotes().length })}
           </button>
         </Show>
-        <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true, state.space)} title={tidyTitle()}>
+        <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true, state.space)} title={tidyTitle()} aria-label={tidying() ? t("정리하는 중…") : t("정리")}>
           <Icon name="refresh" size={14} />
-          {tidying() ? t("정리하는 중…") : t("정리")}
+          <span class="mem-act">{tidying() ? t("정리하는 중…") : t("정리")}</span>
         </button>
-        <button class="btn sm ghost" classList={{ on: sel() === VERSIONS }} onClick={() => setSel(sel() === VERSIONS ? "" : VERSIONS)} aria-pressed={sel() === VERSIONS}>
-          <Icon name="history" size={14} />{t("버전")}
+        <button class="btn sm ghost" classList={{ on: sel() === VERSIONS }} onClick={() => setSel(sel() === VERSIONS ? "" : VERSIONS)} aria-pressed={sel() === VERSIONS} aria-label={t("버전")}>
+          <Icon name="history" size={14} /><span class="mem-act">{t("버전")}</span>
         </button>
-        <button class="btn sm ghost" onClick={() => void openFolder()} title={t("Finder에서 보기")}><Icon name="folder" size={14} />{t("폴더 열기")}</button>
+        <button class="btn sm ghost" onClick={() => void openFolder()} title={t("Finder에서 보기")} aria-label={t("폴더 열기")}><Icon name="folder" size={14} /><span class="mem-act">{t("폴더 열기")}</span></button>
         <div class="mem-search">
           <Icon name="search" size={14} />
           <input placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => {

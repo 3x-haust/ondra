@@ -4258,7 +4258,11 @@ input[type="checkbox"] {
   gap: var(--s-12);
 }
 .dev-count {
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .devices-body {
   flex: 1;
@@ -5895,7 +5899,10 @@ div.queued {
     background-color 0.22s var(--ease),
     border-color 0.22s var(--ease);
 }
+/* a to-do takes the row's room and wraps a long path inside it */
 .todo-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
   transition: color 0.22s var(--ease);
 }
 .mt-row,
@@ -7686,6 +7693,10 @@ textarea { resize: none !important; field-sizing: content; }
 .ctray .st-ctx { margin-left: auto; font-size: var(--fs-sm); }
 .ctray .picker { display: inline-flex; }
 .ctray button.st-acc { max-width: none; overflow: visible; color: var(--ink); }
+/* a long account name ends in … instead of pushing the line past the composer */
+.ctray .picker { min-width: 0; max-width: 50%; }
+.ctray button.st-acc { max-width: 100%; }
+.ctray .st-acc .st-acc-name { min-width: 0; }
 .ctray .st-acc .st-acc-name { font-size: var(--fs-md); }
 
 /* ═════════════ work blocks: readable sizes, tags instead of legends ═════════════ */
@@ -8036,8 +8047,13 @@ textarea { resize: none !important; field-sizing: content; }
 }
 .decision-text {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   min-width: 0;
+}
+/* a choice the model wrote can hold a path or a link: it wraps inside its row */
+.decision-text > * {
+  overflow-wrap: anywhere;
 }
 .decision-label {
   font-weight: var(--fw-medium);
@@ -8395,7 +8411,7 @@ textarea { resize: none !important; field-sizing: content; }
 .decision { grid-template-columns: minmax(0, 1fr); }
 .decision > * { min-width: 0; }
 .decision .blk-table { overflow-x: auto; }
-.decision .blk-table td, .decision .blk-table th { white-space: normal; overflow-wrap: anywhere; word-break: keep-all; }
+.decision .blk-table td, .decision .blk-table th { white-space: normal; overflow-wrap: break-word; word-break: keep-all; }
 .usage-cache { font-variant-numeric: tabular-nums; }
 
 /* a job's question sits at the end of its conversation and scrolls with it */
@@ -8440,10 +8456,12 @@ textarea { resize: none !important; field-sizing: content; }
   white-space: nowrap;
 }
 .job-cost {
+  flex-shrink: 0;
   margin: var(--s-8) 0 var(--s-16);
   font-size: var(--fs-xs);
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ───────── results: finished jobs' reports, list + reader */

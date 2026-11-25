@@ -50,6 +50,8 @@ import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
 import { RoutinesSettings } from "./Routines";
 import { SecretsSettings } from "./SecretsSettings";
+import { ServicesSettings } from "./ServicesSettings";
+import { installCommand, removeCommand } from "../engine/spaceCli";
 import { HooksTab } from "./Hooks";
 import { Logo, logoFor } from "../ui/Logos";
 import { appName } from "../lib/brand";
@@ -436,6 +438,8 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
   const [label, setLabel] = createSignal(shown);
   const [folder, setFolder] = createSignal(cur?.folder ?? "~");
   const [rules, setRules] = createSignal(cur?.rules ?? "");
+  // its terminal command ("work"): Ondra makes it; the user may rename it
+  const [command, setCommand] = createSignal(cur?.command ?? "");
   // this space's own GitHub login and git name/email (jobs here push and commit with them)
   const [tools, setTools] = createSignal<Awaited<ReturnType<typeof spaceTools>>>(null);
   const [gitName, setGitName] = createSignal<string>();
@@ -454,10 +458,19 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
     const l = label().trim();
     if (!l) return name.focus();
     saved = true;
+    const id = cur?.id ?? uid("sp");
     if (cur) setState("spaces", (x) => x.id === cur.id, { label: l === shown ? cur.label : l, folder: folder(), rules: rules() });
     if (cur && (gitName() !== undefined || gitEmail() !== undefined))
       void spaceGitIdentity(cur, gitName() ?? tools()?.git_name ?? "", gitEmail() ?? tools()?.git_email ?? "");
-    else if (!cur) setState("spaces", (list) => [...list, { id: uid("sp"), label: l, folder: folder(), rules: rules() }]);
+    else if (!cur) setState("spaces", (list) => [...list, { id, label: l, folder: folder(), rules: rules() }]);
+    // its terminal command, made with it (or renamed, or brought in step with its folder)
+    const now = state.spaces.find((x) => x.id === id);
+    const typed = command().trim();
+    if (now && now.id !== "home" && (typed || !now.cliHome?.trim()))
+      void installCommand(now, typed && typed !== now.command ? typed : undefined).then((r) => {
+        if (r.error) toast(r.error, "bad");
+        else if (r.command && r.command !== cur?.command) toast(r.offPath ? t("~/.local/bin을 PATH에 넣으면 터미널에서 {cmd}로 들어가요", { cmd: r.command }) : t("터미널에서 {cmd}를 치면 이 워크스페이스로 들어가요", { cmd: r.command }));
+      });
     props.onClose();
   };
   return (
@@ -505,14 +518,31 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
             <span class="muted">{t("변경|action")}</span>
           </button>
         </div>
+        <Show when={cur?.id !== "home"}>
+          <div class="sp-field">
+            <span>{t("터미널 명령")}</span>
+            <div class="sp-cmd">
+              <input
+                class="input"
+                placeholder={t("만들 때 정해져요")}
+                aria-label={t("터미널 명령")}
+                autocomplete="off"
+                spellcheck={false}
+                value={command()}
+                onInput={(e) => setCommand(e.currentTarget.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+              />
+              <span class="set-note">{t("터미널에서 치면 이 워크스페이스의 로그인(gh, git, claude, codex …)으로 바뀌어요. exit로 돌아와요.")}</span>
+            </div>
+          </div>
+        </Show>
         <Show when={cur}>
           <div class="sp-field">
-            <span>{t("CLI 로그인")}</span>
+            <span>{t("CLI 홈")}</span>
             <button
               class="sp-pick"
               title={tools()?.home ? tilde(tools()!.home!) : undefined}
               onClick={async () => {
-                const p = await pickFolder(t("CLI 로그인 폴더"));
+                const p = await pickFolder(t("CLI 홈 폴더"));
                 if (!p) return;
                 setState("spaces", (x) => x.id === cur!.id, { cliHome: tilde(p) });
                 loadTools();
@@ -567,6 +597,8 @@ function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
     setState("memory", (m) => m.space === props.id, "space", to);
     setState("captain", (m) => m.space === props.id, "space", to);
     if (state.space === props.id) setState("space", to);
+    const gone = state.spaces.find((s) => s.id === props.id);
+    if (gone) void removeCommand(gone);
     setState("spaces", (l) => l.filter((s) => s.id !== props.id));
     toast(t("워크스페이스를 삭제했어요"));
     props.onDone?.();
@@ -1138,6 +1170,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: strin
   { id: "agent", label: "에이전트", icon: "message", desc: "디스코드에서 내 말로 일을 받고, 다른 사람과는 대화해요", group: "" },
   { id: "pet", label: "펫", icon: "pet", desc: "화면을 돌아다니며 작업 소식을 알려 주는 펫을 고르고 만들어요", group: "" },
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
+  { id: "services", label: "서비스", icon: "link", desc: "Gmail·Slack·Notion 같은 서비스를 워크스페이스마다 연결해요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
   { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
   { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간에 알려 주거나, 시간이나 GitHub 일에 맞춰 작업을 시작해요", group: "에이전트|group" },
@@ -1304,6 +1337,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>
             <Match when={settingsTab() === "secrets"}><SecretsSettings /></Match>
+            <Match when={settingsTab() === "services"}><ServicesSettings /></Match>
             <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "pet"}><PetSettings /></Match>
             <Match when={settingsTab() === "agent"}><AgentSettings /></Match>

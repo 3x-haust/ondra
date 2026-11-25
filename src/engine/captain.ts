@@ -21,6 +21,7 @@ import { prepareQuery } from "./vectors";
 import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
+import { mcpArgs, mcpSig } from "./services";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
@@ -506,6 +507,12 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
       return await route(space, text, cwd, event);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // the engine went silent and was restarted: the same message once more on the new one,
+      // never dropped on the user to send again
+      if (attempt === 0 && msg === SILENT_ERROR) {
+        logInfo("main", `${space} sending again after the silent engine`);
+        continue;
+      }
       // the connection dropped: wait for it to come back and send again
       if (attempt < 8 && isNetError(msg)) {
         await waitOnline(attempt + 1);
@@ -625,7 +632,7 @@ const wantedAccount = (space: string): string | undefined => {
 // picking another account or model under the chat restarts main on it (auto routing alone doesn't: a warm cache stays)
 const startSig = async (dir: string, skills: string, space: string) => {
   const id = wantedAccount(space);
-  return `${id}\n${mainModel(id)}\n${mainEffort(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}`;
+  return `${id}\n${mainModel(id)}\n${mainEffort(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}\n${await mcpSig(sp(space))}`;
 };
 export async function restartIfStale(space: string): Promise<boolean> {
   if (busy.has(space)) return false;
@@ -681,6 +688,7 @@ function guardTurn(space: string, ev: any) {
 }
 /** an engine that has sent nothing for this long, with no command of its own running, is stuck: it is restarted */
 const MAIN_SILENT_MS = 4 * 60_000;
+export const SILENT_ERROR = "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.";
 const heardAt = new Map<string, number>();
 function watchCommands(space: string) {
   const t = turnOf.get(space);
@@ -691,7 +699,7 @@ function watchCommands(space: string) {
     const agent = agentOf(space);
     agentKill(agent);
     markDead(agent);
-    errors.set(space, "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.");
+    errors.set(space, SILENT_ERROR);
     logWarn("main", `${space} engine silent for 4 minutes: restarted`);
     settled.get(space)?.();
     return;
@@ -859,6 +867,8 @@ async function ensureCaptain(space: string) {
     ...(resume ? ["--continue"] : []),
     // only use is declared; the rest are called through it
     ...(await mainToolArgs(acc.id)),
+    // the space's connected services (Settings › 연결), reached through use as well
+    ...(!isSim(space) && canUseTools(acc.id, model) ? await mcpArgs(sp(space)) : []),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote
     "--shared-prompt-cache",
@@ -1019,6 +1029,15 @@ export const FORK_ENDED = [
 ].join("\n");
 
 /**
+ * The Discord agent's own chat: what it says goes to Discord, where no row shows the fork. The user
+ * asked for this work there and hears how it went only from this line, so it is never left unsaid.
+ */
+export const AGENT_ENDED = [
+  "The user asked for this work on Discord, where nothing shows this fork: your line is all they hear of it. Always say how it went, never nothing: what came out, or what failed and what is left, in a line or two as a chat message (the voice note above says how), the way you'd tell a friend you finished.",
+  FORK_ENDED.split("\n").slice(2).join("\n"),
+].join("\n");
+
+/**
  * A project's own chat is about that project's work alone: under the fork's row it shows the fork's own
  * closing answer as the fork wrote it (words, blocks, screenshots), so it's there even if main never gets
  * to speak; main adds only what that answer doesn't say.
@@ -1127,7 +1146,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (notes && notes !== sent.notes) out.push("", `# Project notes${sent.notes ? " (updated)" : ""} (left by this project's jobs: where it stands, what is left)`, notes.slice(0, 8000));
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
-  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : FORK_ENDED);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : isAgentChat(space) ? AGENT_ENDED : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
   else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, routines: (state.routines ?? []).filter((r) => r.space === sp(space) && !r.draft).map((r) => `- ${r.id} | ${r.title} | ${r.alarm ? "alarm, " : ""}${describeWhen(r.when)} | ${r.enabled ? "on" : "off"}`).join("\n"), spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });

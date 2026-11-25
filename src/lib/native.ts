@@ -222,6 +222,13 @@ export const fsGrep = (cwd: string, query: string, scoped = false) =>
   ]);
 /** Save edited text; rejects with "CHANGED" when the file moved on since `expect` (its modified time when read). Resolves to the new modified time. */
 export const fsWrite = (path: string, text: string, expect?: number) => call<number>("fs_write", { path, text, expect: expect ?? null }, Date.now());
+/** A space's connected services (MCP servers): its mcp.json, the engine's `mcp` command, the client secrets in the keychain. */
+export const mcpServers = (space: string) => call<Record<string, any>>("mcp_servers", { space }, {});
+export const mcpSave = (space: string, servers: Record<string, any>) => call<void>("mcp_save", { space, servers });
+export const mcpCli = (space: string, args: string[]) => call<{ code: number; out: string }>("mcp_cli", { space, args }, { code: 0, out: '{"servers":[],"errors":[]}' });
+export const mcpSecretSet = (space: string, server: string, value: string) => call<void>("mcp_secret_set", { space, server, value });
+export const mcpSecretFrom = (space: string, server: string, name: string) => call<void>("mcp_secret_from", { space, server, name });
+export const mcpSecretDelete = (space: string, server: string) => call<void>("mcp_secret_delete", { space, server });
 export const pickFiles = (prompt: string) => call<string[]>("pick_files", { prompt }, []);
 
 // ───────────────────────── accounts ─────────────────────────
@@ -353,6 +360,9 @@ type SpaceRef = { id: string; cliHome?: string };
 export const spaceEnv = (s: SpaceRef) => call<[string, string][]>("space_env", { space: s.id, home: s.cliHome }, []);
 export const spaceTools = (s: SpaceRef) =>
   call<{ home: string | null; gh_user: string | null; git_name: string | null; git_email: string | null } | null>("space_tools", { space: s.id, home: s.cliHome }, null);
+export const spaceCliInstall = (s: SpaceRef & { label: string; folder: string }, command: string, previous?: string) =>
+  call<{ path: string; off_path: boolean }>("space_cli_install", { space: s.id, home: s.cliHome, command, label: s.label, folder: s.folder, previous: previous ?? null }, { path: "", off_path: false });
+export const spaceCliRemove = (command: string) => call<void>("space_cli_remove", { command }, undefined);
 export const spaceGhLogin = (s: SpaceRef) => call<void>("space_gh_login", { space: s.id, home: s.cliHome }, undefined);
 export const spaceGitIdentity = (s: SpaceRef, name: string, email: string) => call<void>("space_git_identity", { space: s.id, home: s.cliHome, name, email }, undefined);
 export const globalSkills = () => call<{ name: string; path: string; description: string }[]>("global_skills", undefined, []);

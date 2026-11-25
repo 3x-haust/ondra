@@ -2,6 +2,7 @@
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
 import { liveKey } from "./live";
+import { mcpArgs } from "./services";
 import { formAnswer, readFields, type FormValues } from "./form";
 import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
 import { answerExtensionUi, clearExtensionUi, extensionUi } from "./extensionUi";
@@ -1424,7 +1425,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--thinking",
       t.thinking || effortFor(account.id, model) || "high",
       ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
-      ...(talkOnly ? ["--no-tools"] : [...workerTools(), ...offTools()]),
+      ...(talkOnly ? ["--no-tools"] : [...workerTools(), ...offTools(), ...(await mcpArgs(t0.space))]),
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);

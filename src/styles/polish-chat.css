@@ -1352,6 +1352,12 @@
   align-items: center;
   gap: var(--s-8);
   min-width: 0;
+  max-width: 100%;
+}
+.main-view .head-title .head-proj {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .main-view .head-title .head-proj-name .pbadge {
   width: 18px;
@@ -1980,6 +1986,14 @@
 }
 .main-view .head .req-board.open .req-head.req-head {
   background: var(--hover);
+}
+/* narrow: a state that doesn't fit drops whole onto a hidden second line, never over the buttons */
+.main-view .head .req-board .req-sum {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 20px;
+  row-gap: var(--s-20);
+  overflow: hidden;
 }
 .main-view .head .req-board .req-list {
   position: absolute;

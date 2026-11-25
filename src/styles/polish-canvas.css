@@ -1944,6 +1944,12 @@
   min-width: 0;
   overflow: hidden;
 }
+/* still too narrow bare: a state drops whole onto a hidden second line, never cut in half */
+.canvas-view .cv-legend.bare {
+  flex-wrap: wrap;
+  height: 18px;
+  row-gap: var(--s-20);
+}
 .canvas-view .cv-legend > span {
   flex: none;
   white-space: nowrap;

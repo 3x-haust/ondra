@@ -7,6 +7,24 @@ import { state } from "../state/store";
 import { botUserId } from "./discord";
 import { back, become } from "./agentForm";
 import { allowed, pingsIn, tagged } from "./discordPeople";
+import { localLinks, openRow } from "./discordFiles";
+
+/**
+ * Links to this Mac's files and folders in its words (a picture "![](/tmp/board.png)" too): files
+ * go up with the message, folders become 📂 buttons under it, as in what main says.
+ */
+async function withLocal(a: Args): Promise<Args> {
+  if (typeof a.text !== "string" || !/\]\(\s*<?(file:|\/|~\/)|file:\/\//i.test(a.text)) return a;
+  const local = await localLinks(a.text);
+  if (!local.files.length && !local.open.length) return { ...a, text: local.text };
+  const rows = Array.isArray(a.components) ? a.components : [];
+  return {
+    ...a,
+    text: local.text,
+    ...(local.files.length ? { files: [...list(a.files), ...local.files] } : {}),
+    ...(local.open.length && rows.length < 5 ? { components: [...rows, ...openRow(local.open)] } : {}),
+  };
+}
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -70,14 +88,15 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
     case "send": {
       const channel = str(a.channel);
       // "@name" of someone known is made their mention
-      const { text, pings } = tagged(str(a.text), botUserId());
-      if (typeof a.text === "string") a = { ...a, text };
+      const { text: named, pings } = tagged(str(a.text), botUserId());
+      if (typeof a.text === "string") a = await withLocal({ ...a, text: named });
+      const text = str(a.text);
       if (!channel || (!text && !rich(a))) return { error: "channel and text (or components, embeds, poll, files) are needed" };
       // plain words: split at 2000 characters; with more, one message as Discord takes it
       if (!rich(a)) return { sent: await (pings.length ? discordSend(channel, text, undefined, pings) : discordSend(channel, text)) };
       const files = list(a.files);
       const m = await discordApi("POST", `/channels/${channel}/messages`, bodyOf(a), files.length ? files : undefined);
-      return { sent: [m?.id].filter(Boolean) };
+      return { sent: [m?.id].filter(Boolean), ...(files.length ? { attached: files.map((f) => f.split("/").pop()) } : {}) };
     }
     case "edit": {
       const channel = str(a.channel);

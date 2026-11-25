@@ -46,6 +46,7 @@
 .pane {
   padding: var(--s-16);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-20);
   align-content: start;
 }
@@ -65,12 +66,15 @@
 }
 .now-box {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-4);
+  min-width: 0;
 }
 .now-box .now-text {
   font-size: var(--fs-lg);
   font-weight: var(--fw-medium);
   user-select: text;
+  overflow-wrap: anywhere;
 }
 .plan {
   display: grid;
@@ -145,7 +149,7 @@
 }
 .leg {
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: var(--s-8);
   align-items: start;
   font-size: var(--fs-md);
@@ -168,6 +172,7 @@
 .leg-text {
   color: var(--ink-2);
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .leg-time {
   font-size: var(--fs-xs);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORK_ENDED, FORK_REPORT, PROJECT_ENDED } from "./captain";
+import { AGENT_ENDED, FORK_ENDED, FORK_REPORT, PROJECT_ENDED } from "./captain";
 import { CAPTAIN_SYSTEM } from "./prompts";
 
 // The chat shows each job main started or relayed to as a row that keeps up with it,
@@ -18,6 +18,12 @@ describe("main when a job ends", () => {
     expect(FORK_ENDED).toContain("route it now instead of offering it");
     expect(FORK_ENDED).toContain('one "ask", your recommendation first');
     expect(FORK_ENDED).toMatch(/one short line/);
+  });
+
+  it("on Discord (the agent's own chat) no row shows the fork: it always says how it went", () => {
+    expect(AGENT_ENDED).toContain("never nothing");
+    expect(AGENT_ENDED).not.toContain('add nothing');
+    expect(AGENT_ENDED).toContain("it failed");
   });
 
   it("keeps the rules about unverified items", () => {

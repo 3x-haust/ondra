@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -282,6 +282,14 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalledWith(expect.anything(), "메인 답", expect.anything());
   });
 
+  it("a job's end main said nothing about still reaches Discord: its own summary", async () => {
+    await ready();
+    setState("tasks", [{ id: "t10", title: "openwrt 대역 바꾸기", entries: [], status: "done", summary: "공유기 LAN을 10.77.0.0/24로 바꿨어요", agent: { channel: "c1" } } as never]);
+    setState("captain", (l) => [...l, { id: "end10", at: 6, space: "home", project: "@agent", from: "captain", after: "t10", reply: "", routes: [] }]);
+    said.hook?.("end10");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "공유기 LAN을 10.77.0.0/24로 바꿨어요", undefined));
+  });
+
   it("work done in another channel: its end line is said there only; nothing stock is copied to where it was asked", async () => {
     await ready();
     setState("tasks", [{ id: "t8", title: "orbit 탭", entries: [], agent: { channel: "c1", room: "55555" } } as never]);
@@ -308,6 +316,29 @@ describe("the whole way round", () => {
     // the rule is in what it is told for a server channel
     const { endNote } = await import("./discord");
     expect(endNote({ id: "tk" })).toContain("(dm)");
+  });
+
+  it("a job's security approval goes to the owner's DM word for word, with its buttons; gone from the app, they close", async () => {
+    await ready();
+    const api = vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path === "/users/@me/channels" ? { id: "dm1" } : { id: "a1" }));
+    setState("tasks", [{ id: "t9", title: "홈 앱으로 윈도우 켜기", entries: [], agent: { channel: "c1" } } as never]);
+    const d: Decision = { id: "d9", taskId: "t9", at: 1, kind: "ask", question: "보안 동작을 허용할까요? — com.apple.Home · 내 PC, 꺼짐 · press-action", options: [{ id: "yes", label: "허용", primary: true }, { id: "no", label: "거부" }], context: [], ui: { requestId: "r1", method: "confirm" } };
+    // the user's own job (not the agent's) stays in the app
+    setState("decisions", [d, { ...d, id: "d0", taskId: "mine" }]);
+    await postApprovals();
+    const sent = api.mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/dm1/messages");
+    expect(sent).toHaveLength(1);
+    const body = sent[0][2] as { content: string; components: { components: { label: string; custom_id: string }[] }[] };
+    expect(body.content).toContain("홈 앱으로 윈도우 켜기\n보안 동작을 허용할까요? — com.apple.Home · 내 PC, 꺼짐 · press-action");
+    expect(body.components[0].components.map((b) => b.label)).toEqual(["허용", "거부"]);
+    expect(said.prompts.join("\n")).not.toContain("보안 동작");
+    // once only
+    await postApprovals();
+    expect(api.mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/dm1/messages")).toHaveLength(1);
+    // answered in the app (or timed out): its buttons can't be pressed
+    setState("decisions", []);
+    await postApprovals();
+    expect(api).toHaveBeenLastCalledWith("PATCH", "/channels/dm1/messages/a1", { components: [expect.objectContaining({ components: [expect.objectContaining({ disabled: true }), expect.objectContaining({ disabled: true })] })] });
   });
 
   it("someone written as @name is tagged, and whoever a line tags is notified", async () => {
