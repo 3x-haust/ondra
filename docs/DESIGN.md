@@ -397,7 +397,7 @@ Main, a job and the Discord agent work for the user, often when the user is away
 - A setting the user switches is a key in `src/engine/appSettings.ts` (`ondra_settings`). A button that does something (make a link, add, remove, pin, archive, start, update, show a screen) is an action in `src/engine/appActions.ts` (`ondra_app`): `where` names the button as the user sees it, `about` says what it does, `takes` its arguments. A connected service is `services`.
 - A new feature with a button adds its setting or action in the same change, with a test that main can do it.
 - The caller acts in its own workspace only: its jobs and projects, never another workspace's.
-- Kept for the user alone: letting another Mac or person in (a pairing ask), security approvals of a job, and secret values (an agent passes a saved secret's name, the value moves inside the app).
+- Kept for the user alone: letting another device or person in (a pairing ask), security approvals of a job, and secret values (an agent passes a saved secret's name, the value moves inside the app).
 
 ---
 

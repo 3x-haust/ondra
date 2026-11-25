@@ -43,7 +43,7 @@ describe("where a thing is done", () => {
     expect(askHost).not.toHaveBeenCalled();
   });
 
-  it("on that Mac when it is another Mac's, with this Mac's home said as ~", async () => {
+  it("on that device when it is another device's, with this Mac's home said as ~", async () => {
     await listFiles("H", "/Users/me/work/app");
     expect(askHost).toHaveBeenCalledWith("H", "far.files", ["~/work/app"]);
     await changesIn("H", "/Users/other/app", undefined, true);
@@ -69,8 +69,8 @@ describe("where a thing is done", () => {
   });
 });
 
-describe("attachments for another Mac", () => {
-  it("go there in pieces, and the message carries that Mac's paths", async () => {
+describe("attachments for another device", () => {
+  it("go there in pieces, and the message carries that device's paths", async () => {
     const out = await sendFiles("H", ["/Users/me/Desktop/shot.png"]);
     const ups = vi.mocked(askHost).mock.calls.filter((c) => c[1] === "far.upload");
     expect(ups.map((c) => (c[2] as unknown[])[1])).toEqual([0, 512 << 10]);
@@ -95,7 +95,7 @@ describe("attachments for another Mac", () => {
   });
 });
 
-describe("a terminal on another Mac", () => {
+describe("a terminal on another device", () => {
   it("sends keys in small batches without waiting for an answer", async () => {
     vi.useFakeTimers();
     const io = farTerm("H", "t1", "term1");
@@ -112,9 +112,9 @@ describe("a terminal on another Mac", () => {
   });
 });
 
-describe("errors from another Mac", () => {
+describe("errors from another device", () => {
   it("say to update an older Ondra there", () => {
-    expect(farError(new Error("unknown: far.files"))).toBe("그 Mac의 Ondra를 업데이트해야 볼 수 있어요");
-    expect(farError(new Error("그 Mac에서 열 수 없는 위치예요"))).toBe("그 Mac에서 열 수 없는 위치예요");
+    expect(farError(new Error("unknown: far.files"))).toBe("그 기기의 Ondra를 업데이트해야 볼 수 있어요");
+    expect(farError(new Error("그 기기에서 열 수 없는 위치예요"))).toBe("그 기기에서 열 수 없는 위치예요");
   });
 });

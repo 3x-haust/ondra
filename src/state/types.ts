@@ -33,7 +33,7 @@ export interface Space {
   command?: string;
   /** The user's own simulators, emulators and phones that belong to this space (device ids). */
   devices?: string[];
-  /** made for another Mac's workspace of this name (Settings › 연결): its work runs there, none here */
+  /** made for another device's workspace of this name (Settings › 연결): its work runs there, none here */
   only?: boolean;
 }
 
@@ -252,9 +252,9 @@ export interface Task {
   issue?: { n: number; url: string; title: string };
   /** Answered on the spot by the router; no agent ran yet. */
   answer?: boolean;
-  /** runs on another Mac (Settings › 연결): that Mac's id. Shown here, worked there. */
+  /** runs on another device (Settings › 연결): that device's id. Shown here, worked there. */
   host?: string;
-  /** asked for by another Mac (Settings › 연결): which one, and the space it was asked from there */
+  /** asked for by another device (Settings › 연결): which one, and the space it was asked from there */
   from?: { device: string; space: string };
   /** Work in its own git worktree (undefined = the app setting). */
   isolate?: boolean;
@@ -769,12 +769,12 @@ export interface Settings {
   leaving?: { id: string; name: string; at: number }[];
   /** the workspaces (ids) each Mac allowed in may use here; missing = all of them */
   deviceSpaces?: Record<string, string[]>;
-  /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 Mac", its letters, a tint from the name) */
+  /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 기기", its letters, a tint from the name) */
   thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** the sidebar's project order, by id (dragged there); a project not in it goes after, as added */
   projectOrder?: string[];
-  /** where new work goes from each workspace here (the run location): another Mac, its workspace
+  /** where new work goes from each workspace here (the run location): another device, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */
   computers?: Record<string, { host: string; account?: string; model?: string; thinking?: string }>;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
@@ -944,7 +944,7 @@ export interface Routine {
   snoozeAt?: number;
   /** a run with nothing to report is put away without a notice */
   quiet: boolean;
-  /** run it on another Mac (Settings › 연결) */
+  /** run it on another device (Settings › 연결) */
   host?: string;
   hostSpace?: string;
   model?: string;
@@ -1004,7 +1004,7 @@ export interface Project {
   space: SpaceId;
   name: string;
   folder: string;
-  /** on another Mac (Settings › 연결): its id there and the name it goes by */
+  /** on another device (Settings › 연결): its id there and the name it goes by */
   host?: string;
   hostName?: string;
 }

@@ -1,4 +1,4 @@
-// Other Macs' work, as this app shows it: the projects the user added from another Mac
+// Other Macs' work, as this app shows it: the projects the user added from another device
 // (Settings › 연결) and their jobs, kept up to date over Ondra's own network (engine/hosts.ts).
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
@@ -14,18 +14,18 @@ export interface HostMirror {
   reason?: string;
   /** connected once and then not: since when */
   since?: number;
-  /** every project on that Mac (to pick from) */
+  /** every project on that device (to pick from) */
   projects: { id: string; name: string; folder: string; space?: string }[];
-  /** the jobs of the projects added here, as that Mac has them (ids as there) */
+  /** the jobs of the projects added here, as that device has them (ids as there) */
   tasks: Task[];
-  /** its workspaces, accounts and their plan use (sent by that Mac, refreshed as they change) */
+  /** its workspaces, accounts and their plan use (sent by that device, refreshed as they change) */
   info?: HostInfo;
-  /** the questions those jobs wait on, as that Mac has them (a Mac too old to send them: none) */
+  /** the questions those jobs wait on, as that device has them (a Mac too old to send them: none) */
   decisions?: Decision[];
 }
 
 export interface HostInfo {
-  /** that Mac's Ondra version */
+  /** that device's Ondra version */
   version?: string;
   spaces: { id: string; label: string }[];
   accounts: {
@@ -47,8 +47,8 @@ export interface HostInfo {
   pick: Record<string, string>;
 }
 
-/** a new job asked of another Mac (its "create" call). Past the first fields, what a Mac too old to
- *  know them leaves out: ids it follows or waits on are that Mac's (the ids shown here), `reach` names
+/** a new job asked of another device (its "create" call). Past the first fields, what a Mac too old to
+ *  know them leaves out: ids it follows or waits on are that device's (the ids shown here), `reach` names
  *  workspaces by label. */
 export interface FarAsk {
   id: string;
@@ -77,7 +77,7 @@ export interface FarAsk {
 
 export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirror> }>({ hosts: {} });
 
-/** a project of another Mac, as this app names it: r:<host>:<its id> */
+/** a project of another device, as this app names it: r:<host>:<its id> */
 export const remoteProjectId = (host: string, id: string) => `r:${host}:${id}`;
 export function splitProjectId(id?: string): { host: string; id: string } | undefined {
   const m = id?.match(/^r:([0-9a-f]{64}):(.+)$/);
@@ -91,7 +91,7 @@ export function mirroredTasks(): Task[] {
   return out;
 }
 
-/** every question another Mac's jobs wait on */
+/** every question another device's jobs wait on */
 export function mirroredDecisions(): Decision[] {
   const out: Decision[] = [];
   for (const h of Object.values(mirror.hosts)) out.push(...(h.decisions ?? []));
@@ -100,13 +100,13 @@ export function mirroredDecisions(): Decision[] {
 export const mirroredDecision = (id: string) => mirroredDecisions().find((d) => d.id === id);
 
 /**
- * Read here: a mirrored job's unread is that Mac's, sent on every change. Opening it here notes how
+ * Read here: a mirrored job's unread is that device's, sent on every change. Opening it here notes how
  * many entries it had then, and it reads as unread again only once it has more.
  */
 export const readAt = new Map<string, number>();
 export const seenHere = (t: Task) => (readAt.get(t.id) ?? -1) >= t.entries.length;
 
-/** the Mac a job runs on, when it is another Mac's */
+/** the Mac a job runs on, when it is another device's */
 export function hostOfTask(id: string): string | undefined {
   for (const [host, h] of Object.entries(mirror.hosts)) if (h.tasks.some((t) => t.id === id)) return host;
   return undefined;
@@ -124,12 +124,12 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
  *  "10분 전부터 연결 안 됨" … */
 export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: string, v?: Record<string, string | number>) => string = (k) => k, ago: (at?: number) => string = () => ""): string {
   const s = h?.status ?? "connecting";
-  if (s === "denied" && h?.reason === "off") return t("그 Mac에서 연결을 꺼 뒀어요");
-  if (s === "denied" && (h?.reason === "unknown" || h?.reason === "revoked")) return t("그 Mac에서 이 Mac을 제거했어요");
+  if (s === "denied" && h?.reason === "off") return t("그 기기에서 연결을 꺼 뒀어요");
+  if (s === "denied" && (h?.reason === "unknown" || h?.reason === "revoked")) return t("그 기기에서 이 기기를 제거했어요");
   if (s === "denied") return t("거절됨");
   if (s === "off") return t("연결 끊음");
-  if (s === "lost" && h?.reason === "dropped") return t("그 Mac에서 연결을 끊었어요");
-  if (s === "waiting") return t("그 Mac에서 허용을 기다려요");
+  if (s === "lost" && h?.reason === "dropped") return t("그 기기에서 연결을 끊었어요");
+  if (s === "waiting") return t("그 기기에서 허용을 기다려요");
   if (s === "ok") return t("연결됨");
   const at = h?.since ?? seen;
   if (s === "connecting" && !at) return t("연결 중");

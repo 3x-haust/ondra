@@ -1,6 +1,6 @@
 // Settings › 루틴, and the card main shows in the chat when it proposes one. A routine is a prompt,
 // a project and a "when"; its runs are ordinary jobs (engine/routines.ts). The project picker holds
-// this Mac's projects and the other Macs' ones: a routine on another Mac's project runs there.
+// this Mac's projects and the other Macs' ones: a routine on another device's project runs there.
 // An alarm is a routine with no job: its words, a time and a repeat (no project, no way of running);
 // when it rings the chat gets a line (AlarmLine) and the Mac a notice with a sound.
 import { createMemo, createSignal, For, Show } from "solid-js";
@@ -124,7 +124,7 @@ function Editor(props: { r: Routine; onDone: () => void }) {
       <div class="rt-line">
         <select class="select" value={project()} onChange={(e) => setProject(e.currentTarget.value)} aria-label={t("프로젝트")}>
           <option value="">{t("프로젝트 없이")}</option>
-          <For each={projects()}>{(p) => <option value={p.id}>{p.host ? `${p.name} · ${p.hostName ?? "Mac"}` : p.name}</option>}</For>
+          <For each={projects()}>{(p) => <option value={p.id}>{p.host ? `${p.name} · ${p.hostName ?? t("기기")}` : p.name}</option>}</For>
         </select>
         <select class="select" value={mode()} onChange={(e) => setMode(e.currentTarget.value as Routine["mode"])} aria-label={t("실행 방식")}>
           <option value="continue">{t("지난 실행에 이어서")}</option>
@@ -246,7 +246,7 @@ export function AlarmLine(props: { route: Extract<Route, { kind: "alarm" }> }) {
       <div class="alarm-body">
         <span class="alarm-when">
           {t("{time} 알람", { time: dayTime(a().due) })}
-          <Show when={a().late}> · {t("늦게 울렸어요 (Ondra가 꺼져 있었거나 Mac이 잠들어 있었어요)")}</Show>
+          <Show when={a().late}> · {t("늦게 울렸어요 (Ondra가 꺼져 있었거나 기기가 잠들어 있었어요)")}</Show>
         </span>
         <b class="alarm-text">{a().text}</b>
       </div>

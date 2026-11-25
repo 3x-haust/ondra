@@ -3,7 +3,7 @@ import { allowedPath, asHostPath, cacheName, capText, cleanRoots, mentions, norm
 
 const HOME = "/Users/me";
 
-describe("paths another Mac asks for", () => {
+describe("paths another device asks for", () => {
   it("are made absolute and plain", () => {
     expect(normPath("~/work/app", HOME)).toBe("/Users/me/work/app");
     expect(normPath("~", HOME)).toBe("/Users/me");
@@ -42,7 +42,7 @@ describe("paths on the machine serving the files", () => {
   });
 });
 
-describe("folders another Mac may reach", () => {
+describe("folders another device may reach", () => {
   it("never include the disk, /Users or the home folder and above", () => {
     for (const r of ["/", "/Users", "/Volumes", "/tmp", HOME]) expect(tooWide(r, HOME)).toBe(true);
     expect(tooWide("/Users/me/work/app", HOME)).toBe(false);
@@ -78,8 +78,8 @@ describe("folders another Mac may reach", () => {
   });
 });
 
-describe("paths sent to another Mac", () => {
-  it("say ~ for this Mac's home, so that Mac reads its own", () => {
+describe("paths sent to another device", () => {
+  it("say ~ for this Mac's home, so that device reads its own", () => {
     expect(asHostPath("/Users/me/work/app", HOME)).toBe("~/work/app");
     expect(asHostPath("/Users/me", HOME)).toBe("~");
     expect(asHostPath("/Users/meg/x", HOME)).toBe("/Users/meg/x");

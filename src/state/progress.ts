@@ -36,7 +36,7 @@ function ask(t: Task, key: string) {
   const id = `${t.id}:${key}`;
   if (asking.has(id)) return;
   asking.add(id);
-  // a job of another Mac: asked there (its folder is there)
+  // a job of another device: asked there (its folder is there)
   void changesIn(t.host, expand(t.cwd), t.worktree!.base, true)
     .then((c) => c?.isRepo && setGit(t.id, reconcile({ key, files: c.files.map((f) => ({ path: f.path, add: f.add, del: f.del })) })))
     .catch(() => {})

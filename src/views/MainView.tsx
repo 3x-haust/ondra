@@ -44,7 +44,7 @@ import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
 import { ComputerPicker, HostModel, HostStatus, chosenComputer, hostAccount, type Place } from "../ui/ComputerPicker";
 
-/** the model picked for work on another Mac, when that account there has it */
+/** the model picked for work on another device, when that account there has it */
 const hostPick = (p: Place) => {
   const a = hostAccount(p, state.space);
   return p.model && a?.models.includes(p.model) ? { model: p.model, thinking: p.thinking } : p.thinking ? { thinking: p.thinking } : {};
@@ -665,7 +665,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           autofocus
           placeholder={t("작업 내용")}
           files={() => (computer() ? (p() ? listFiles(computer()!.host, p()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~")))}
-          // a job of another Mac reads attachments there: they are sent over first
+          // a job of another device reads attachments there: they are sent over first
           upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
           onSend={send}
           // skills: the new job starts with "/skill:name …" (the engine hands it that skill); /pet makes a pet
@@ -745,10 +745,10 @@ export function MainView() {
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   // where it runs (the run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
-  // another Mac's project has its own chat here, as this Mac's do: main (here) routes, follows up and
-  // asks, and the jobs it starts go to that Mac. What's typed goes there as a job as it was typed only
-  // for work picked for another Mac outside a project, or when main has no account here to run on
-  // (a workspace only that Mac has).
+  // another device's project has its own chat here, as this Mac's do: main (here) routes, follows up and
+  // asks, and the jobs it starts go to that device. What's typed goes there as a job as it was typed only
+  // for work picked for another device outside a project, or when main has no account here to run on
+  // (a workspace only that device has).
   const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
   const raw = () => (project() && mainHere() ? undefined : computer());
   /** the question the input answers: the first card in the dock (the one its number keys answer), as in a job's thread */
@@ -762,7 +762,7 @@ export function MainView() {
     }
     const p = project();
     const at = raw();
-    // on another Mac: what's typed is a job there (its own Ondra takes it from there)
+    // on another device: what's typed is a job there (its own Ondra takes it from there)
     if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
     const reply = throwThought(text, state.space, { project: p?.id });
     void rememberPickedFiles("main", reply, picked);
@@ -837,7 +837,7 @@ export function MainView() {
       draftKey={`main:${key()}`}
       big={big}
       autofocus
-      // on another Mac: its project's files, and attachments sent over first
+      // on another device: its project's files, and attachments sent over first
       files={() => (computer() ? (project() ? listFiles(computer()!.host, project()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(spaceById(state.space).folder || "~")))}
       upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
       commands={[
@@ -847,7 +847,7 @@ export function MainView() {
         // the chat only: jobs, results and memory stay
         { name: "clear", desc: t("이 대화 비우기 · 작업과 결과는 그대로"), icon: "refresh", run: () => void resetMain(state.space, project()?.id).then(() => toast(t("대화를 비웠어요"))) },
         ...(computer()
-          ? // on another Mac: that Mac's skills, and a skill asked for is a job there that uses it
+          ? // on another device: that device's skills, and a skill asked for is a job there that uses it
             skillCommands(() => ({ space: state.space }), { host: computer()!.host, project: splitProjectId(project()?.id)?.id }).map((c) => ({ ...c, run: (a: string) => sendMain(`/${c.name} ${a}`.trim()) }))
           : skillCommands(() => ({ space: state.space, project: project()?.id }))),
       ]}
@@ -858,7 +858,7 @@ export function MainView() {
       status={
         <Show
           when={raw()}
-          // main's own account (here); a project of another Mac names that Mac
+          // main's own account (here); a project of another device names that device
           fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} value={computer()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
         >
           <HostStatus place={raw()!} fixed={!!project()} />

@@ -26,7 +26,7 @@ function rootOf(t: Task, byId: ById): Task {
 export const spaceAllowed = (spaces: ReadonlySet<string> | undefined, space: string) => !spaces || spaces.has(space);
 
 /**
- * A job that Mac may see and act on: one of this Mac's own (never one shown here from a third
+ * A job that device may see and act on: one of this Mac's own (never one shown here from a third
  * Mac), in a workspace it may use, and in a project it keeps or asked for by it (subagents go
  * with their top job).
  */
@@ -37,7 +37,7 @@ export function mayReach(r: Reach, t: Task | undefined, byId: ById): boolean {
   return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device);
 }
 
-/** the calls another Mac may make on one job: the job's id comes first */
+/** the calls another device may make on one job: the job's id comes first */
 export const JOB_CALLS = [
   "tell",
   "stopTask",
@@ -69,8 +69,8 @@ export type JobCall = (typeof JOB_CALLS)[number];
 const jobCalls = new Set<string>(JOB_CALLS);
 
 /**
- * The arguments a job call goes ahead with, or why not (thrown). Only a job that Mac may reach;
- * a message is the user's (or that Mac's main chat's), never one passed off as a job's own agent.
+ * The arguments a job call goes ahead with, or why not (thrown). Only a job that device may reach;
+ * a message is the user's (or that device's main chat's), never one passed off as a job's own agent.
  */
 export function checkCall(r: Reach, fn: string, args: unknown[], byId: ById): unknown[] {
   if (!jobCalls.has(fn)) throw new Error(`unknown: ${fn}`);
@@ -90,7 +90,7 @@ export const jobsFrom = (tasks: readonly Task[], device: string) => tasks.filter
 
 type Hosts = Pick<Settings, "hosts" | "hostProjects" | "computers">;
 
-/** the settings with that Mac gone: its entry, its projects here, and any run location on it */
+/** the settings with that device gone: its entry, its projects here, and any run location on it */
 export function withoutHost(s: Hosts, id: string): Required<Hosts> {
   return {
     hosts: (s.hosts ?? []).filter((h) => h.id !== id),
@@ -100,7 +100,7 @@ export function withoutHost(s: Hosts, id: string): Required<Hosts> {
 }
 
 /**
- * Which of that Mac's projects to take off the list here (gone there, or hidden here) and which
+ * Which of that device's projects to take off the list here (gone there, or hidden here) and which
  * to add (new there, not hidden, and with a workspace tab here to go in).
  */
 export function linkPlan<P extends { id: string; space?: string }>(

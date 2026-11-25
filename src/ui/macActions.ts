@@ -20,7 +20,7 @@ export function askRemoveHost(id: string) {
   const name = hostName(id);
   confirmAsk({
     title: t("{name}을(를) 제거할까요?", { name }),
-    body: t("그 Mac의 프로젝트와 작업이 여기서 사라지고, 그 Mac에서도 이 Mac이 빠져요"),
+    body: t("그 기기의 프로젝트와 작업이 여기서 사라지고, 그 기기에서도 이 기기가 빠져요"),
     action: t("제거"),
     danger: true,
     run: () => {
@@ -32,11 +32,11 @@ export function askRemoveHost(id: string) {
 
 /** 제거 a Mac allowed in: it can't come in anymore; the jobs it asked for here keep running */
 export function askForgetDevice(id: string) {
-  const name = remote().devices.find((d) => d.id === id)?.name ?? "Mac";
+  const name = remote().devices.find((d) => d.id === id)?.name ?? t("기기");
   const n = jobsFrom(state.tasks, id).length;
   confirmAsk({
     title: t("{name}을(를) 제거할까요?", { name }),
-    body: n ? t("그 Mac에서 이 Mac을 더 쓸 수 없어요 · 그 Mac에서 시킨 작업 {n}개는 계속 돌아요", { n }) : t("그 Mac에서 이 Mac을 더 쓸 수 없어요"),
+    body: n ? t("그 기기에서 이 기기를 더 쓸 수 없어요 · 그 기기에서 시킨 작업 {n}개는 계속 돌아요", { n }) : t("그 기기에서 이 기기를 더 쓸 수 없어요"),
     action: t("제거"),
     danger: true,
     run: () => void forgetDevice(id),

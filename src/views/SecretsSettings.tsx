@@ -5,9 +5,9 @@
 // comes back to this page; jobs get it in their shell and the model sees [secret:NAME] wherever
 // it would show (extensions/secrets.ts).
 //
-// A project added from another Mac keeps its secrets there (its jobs run there): picking it asks
-// that Mac (engine/remote.ts secret*), which takes in its .env files and says the names it keeps. A
-// value typed here goes there once, to be saved in that Mac's keychain; none ever comes back.
+// A project added from another device keeps its secrets there (its jobs run there): picking it asks
+// that device (engine/remote.ts secret*), which takes in its .env files and says the names it keeps. A
+// value typed here goes there once, to be saved in that device's keychain; none ever comes back.
 import { createMemo, createResource, createSignal, For, on, onMount, Show, createEffect } from "solid-js";
 import { secretDelete, secretList, secretOverview, secretSet, secretSync, type SavedSecrets, type SecretGroup } from "../lib/native";
 import { projectsShown, state } from "../state/store";
@@ -33,12 +33,12 @@ export function SecretsSettings() {
   const [groups, { refetch: regroup }] = createResource(secretOverview, { initialValue: [] as SecretGroup[] });
   // each secret also gets a memory piece (where it is, what it is for), so jobs find its use there
   const mutate = (s: SavedSecrets) => (setSaved(s), regroup(), noteSecrets(s, state.projects ?? []));
-  // the current workspace's projects: this Mac's, and those added from another Mac (kept there)
+  // the current workspace's projects: this Mac's, and those added from another device (kept there)
   const projects = createMemo(() => projectsShown(state.space));
   const mine = createMemo(() => projects().filter((p) => !p.host));
   const [scope, setScope] = createSignal(GLOBAL);
   const project = () => projects().find((p) => p.id === scope());
-  // another Mac's project: its names as that Mac last said them
+  // another device's project: its names as that device last said them
   const [far, setFar] = createSignal<Record<string, string[]>>({});
   const farOf = () => splitProjectId(project()?.id);
   const items = () => (farOf() ? (far()[scope()] ?? []) : (saved().projects[scope()] ?? []));
@@ -49,7 +49,7 @@ export function SecretsSettings() {
     setFar((m) => ({ ...m, [id]: r.items ?? [] }));
     return r;
   };
-  // picked: that Mac takes in its .env files first, as this page does here when it opens
+  // picked: that device takes in its .env files first, as this page does here when it opens
   createEffect(
     on(farOf, (at) => {
       if (!at) return;
@@ -143,8 +143,8 @@ export function SecretsSettings() {
       <PageHead tab="secrets">
         <select class="select" aria-label={t("적용 범위")} value={scope()} onChange={(e) => (setScope(e.currentTarget.value), setAskIgnore(false), setConfirm(null))}>
           <option value={GLOBAL}>{t("전체")}</option>
-          {/* another Mac's project names that Mac: its secrets are kept there */}
-          <For each={projects()}>{(p) => { const name = () => (p.host ? `${p.name} (${p.hostName ?? "Mac"})` : p.name); return <option value={p.id}>{count(p.id) ? `${name()} · ${count(p.id)}` : name()}</option>; }}</For>
+          {/* another device's project names that device: its secrets are kept there */}
+          <For each={projects()}>{(p) => { const name = () => (p.host ? `${p.name} (${p.hostName ?? t("기기")})` : p.name); return <option value={p.id}>{count(p.id) ? `${name()} · ${count(p.id)}` : name()}</option>; }}</For>
         </select>
       </PageHead>
 

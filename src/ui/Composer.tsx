@@ -143,7 +143,7 @@ export function Composer(props: {
   commands?: Command[];
   /** "@" menu: files you can point at (relative paths) */
   files?: () => Promise<string[]>;
-  /** the message goes to another Mac: the attached files are sent there first (their paths there go in the message) */
+  /** the message goes to another device: the attached files are sent there first (their paths there go in the message) */
   upload?: (files: string[]) => Promise<string[]>;
   /** quiet info inside the bar: account, plan windows, context */
   status?: JSX.Element;
@@ -540,14 +540,14 @@ export function Composer(props: {
     el.value = "";
     const key = props.draftKey;
     if (key !== undefined) drafts.delete(key);
-    // the copies on another Mac keep the numbers of the files they were made from
+    // the copies on another device keep the numbers of the files they were made from
     const hand = (paths: string[]) => (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, paths, (p) => n0.get(f[paths.indexOf(p)])), props.upload ? undefined : f);
     queueMicrotask(grow);
     if (!f.length || !props.upload) return hand(f);
-    // to another Mac: its copies of the files go in the message; when they can't be sent, nothing is, and it all comes back
+    // to another device: its copies of the files go in the message; when they can't be sent, nothing is, and it all comes back
     const typed = text0;
     setSending(true);
-    const slow = setTimeout(() => toast(t("첨부한 파일을 그 Mac에 보내는 중…")), 800);
+    const slow = setTimeout(() => toast(t("첨부한 파일을 그 기기에 보내는 중…")), 800);
     props
       .upload(f)
       .then(hand, (e) => {

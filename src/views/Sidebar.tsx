@@ -13,7 +13,7 @@ import { foldLabel, stale } from "../state/fold";
 import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
-import { pickFolder, revealPath } from "../lib/native";
+import { pickFolder, revealPath, revealLabel } from "../lib/native";
 import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
@@ -270,7 +270,7 @@ function projectMenu(id: string): MenuEntry[] {
   if (!p) return [];
   const n = tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.answer).length;
   const far = splitProjectId(p.id);
-  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there);
+  // another device's project: it is that device's, shown here as it is there (it goes when it goes there);
   // it can be kept off the list here (Settings › 연결 brings it back)
   if (far)
     return [
@@ -286,15 +286,15 @@ function projectMenu(id: string): MenuEntry[] {
           toast(tr("{name} 프로젝트를 숨겼어요", { name: p.name }), "info", { label: tr("다시 보이기"), run: () => showHostProject(far.host, far.id) });
         },
       },
-      // its folder is there: Finder opens on that Mac's screen
-      { id: "finder", label: tr("그 Mac의 Finder에서 보기"), icon: "folder", run: () => void revealOn(far.host, p.folder) },
+      // its folder is there: Finder opens on that device's screen
+      { id: "finder", label: tr("그 기기에서 위치 보기"), icon: "folder", run: () => void revealOn(far.host, p.folder) },
     ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
     { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
     "sep",
     { id: "rename", label: tr("이름 바꾸기"), icon: "pencil", run: () => setRenamingProject(p.id) },
-    { id: "finder", label: tr("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(p.folder)) },
+    { id: "finder", label: revealLabel(), icon: "folder", run: () => void revealPath(expand(p.folder)) },
     "sep",
     {
       id: "remove",

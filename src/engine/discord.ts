@@ -19,7 +19,7 @@ import {
   discordGuilds,
   discordHistory,
   discordInteractionReply,
-  revealPath,
+  fileManager, revealPath,
   discordModalSet,
   discordOwner,
   discordReact,
@@ -746,10 +746,10 @@ async function picked(i: DiscordInteraction, a: AgentSettings) {
 /** a click on a file or folder button: shown in Finder on this Mac, for the user only (a note only they see) */
 async function opened(i: DiscordInteraction, a: AgentSettings, path?: string) {
   const say = (content: string) => discordInteractionReply(i.id, { content, flags: 64 }, true).catch(() => {});
-  if (i.user.id !== a.ownerId) return say("주인의 Mac에서만 열 수 있어요");
+  if (i.user.id !== a.ownerId) return say("주인의 컴퓨터에서만 열 수 있어요");
   if (!path) return say("이 버튼은 지난 실행 때 거라 열 수 없어요");
   await revealPath(path).catch(() => {});
-  await say("Mac에서 Finder로 열었어요");
+  await say(`컴퓨터의 ${fileManager()}에서 열었어요`);
 }
 
 /** Its words where they go: a slash command's own answer when it came from one, else the channel. */

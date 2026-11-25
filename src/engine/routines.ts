@@ -236,7 +236,7 @@ export function snoozeAlarm(id: string, now = Date.now()) {
 
 /** A run missed by a lot: say so in the run, so it can look back over the gap. */
 const lateNote = (r: Routine, now: number) =>
-  r.nextAt && now - r.nextAt > LATE_OK ? t("({time}에 하려던 실행이에요. Mac이 잠들어 있었어요.)", { time: stamp(r.nextAt) }) : undefined;
+  r.nextAt && now - r.nextAt > LATE_OK ? t("({time}에 하려던 실행이에요. 기기가 잠들어 있었어요.)", { time: stamp(r.nextAt) }) : undefined;
 
 /** Looks at one event routine's repo; starts a run for what is new. */
 export async function pollRoutine(r: Routine, now = Date.now()): Promise<void> {
@@ -248,7 +248,7 @@ export async function pollRoutine(r: Routine, now = Date.now()): Promise<void> {
   let raw = "";
   try {
     const far = splitProjectId(p.id);
-    // another Mac's project: its repo is looked at there, as that Mac's GitHub login
+    // another device's project: its repo is looked at there, as that device's GitHub login
     raw = far ? String(await viaHost(far.host, "ghWatch", [far.id, when.event, search])) : await ghWatch(p.folder, when.event, search, await spaceEnv(spaceById(r.space)));
   } catch (e) {
     patchRoutine(r.id, { lastError: e instanceof Error ? e.message : String(e) });
@@ -283,7 +283,7 @@ export async function tickRoutines(now = Date.now(), o: { alarmsOnly?: boolean }
   }
 }
 
-/** The routine a job is a run of (a run on another Mac is known by the routine's last job). */
+/** The routine a job is a run of (a run on another device is known by the routine's last job). */
 export const routineOf = (x: Pick<Task, "id" | "routine">) => (x.routine ? routineById(x.routine) : undefined) ?? (state.routines ?? []).find((r) => r.lastTask === x.id);
 
 /** A run that ended: the routine's status follows, and a quiet routine puts away a run with nothing. */
@@ -318,7 +318,7 @@ export function startRoutines() {
       if (Number.isFinite(next)) timer = setTimeout(() => void tickRoutines(Date.now(), { alarmsOnly: true }), Math.min(Math.max(0, next - Date.now()) + 50, 2 ** 31 - 1));
     });
   });
-  // each routine's last run, here or on another Mac: when it ends, the routine hears
+  // each routine's last run, here or on another device: when it ends, the routine hears
   createRoot(() => {
     const ended = new Map<string, string>();
     createEffect(

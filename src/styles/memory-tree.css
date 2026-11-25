@@ -1827,7 +1827,7 @@ button.mc-row:hover {
   padding: 4px 0;
 }
 
-/* another Mac's project (RemoteMemory.tsx): each piece edited where it is, then forgotten from there */
+/* another device's project (RemoteMemory.tsx): each piece edited where it is, then forgotten from there */
 .ms-piece.far {
   align-items: flex-start;
 }

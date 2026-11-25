@@ -1,5 +1,5 @@
-// The memory of another Mac's project (Settings › 연결). Its jobs run on that Mac and are told
-// that Mac's memory, so this lists, adds, edits and forgets pieces there (engine/far.ts); this
+// The memory of another device's project (Settings › 연결). Its jobs run on that device and are told
+// that device's memory, so this lists, adds, edits and forgets pieces there (engine/far.ts); this
 // Mac's own memory is left as it is. Shown in the Memory page's tree under its own heading.
 import { createResource, createSignal, For, Show } from "solid-js";
 import { farError, farMemAdd, farMemEdit, farMemForget, farMemList, type FarMemory } from "../engine/far";
@@ -24,7 +24,7 @@ export function RemoteMemoryRows(props: { sel: string; onSel: (id: string) => vo
       <div class="mt-row t-home folder mt-far-head" style={{ "--d": 0 }} role="treeitem">
         <span class="mt-chev" />
         <Icon name="monitor" size={13} class="mt-ic dir" />
-        <span class="mt-name">{t("다른 Mac")}</span>
+        <span class="mt-name">{t("다른 기기")}</span>
       </div>
       <For each={remoteProjects()}>
         {(p) => (
@@ -91,7 +91,7 @@ export function RemoteMemory(props: { id: string }) {
               <span class="spacer" />
               <button class="icon-btn sm" title={t("새로고침")} aria-label={t("새로고침")} onClick={() => refetch()}><Icon name="refresh" size={14} /></button>
             </div>
-            <div class="md-sub">{t("{name}의 메모리 · 그 Mac에서 하는 작업이 읽어요", { name: hostName(far()!.host) })}</div>
+            <div class="md-sub">{t("{name}의 메모리 · 그 기기에서 하는 작업이 읽어요", { name: hostName(far()!.host) })}</div>
             <form class="mt-add" onSubmit={(e) => (e.preventDefault(), add())}>
               <input placeholder={t("{where}에 메모리 추가", { where: pr().name })} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
             </form>

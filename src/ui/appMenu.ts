@@ -3,7 +3,7 @@
 // none where there is nothing to do. The web view's own menu (새로 고침, 뒤로) never shows:
 // it acts on the app's page, not on what was clicked. Text fields keep the system's
 // editing menu, and a part of the app with its own menu (a task, a file) handles it first.
-import { revealPath, saveDownload } from "../lib/native";
+import { revealPath, saveDownload, revealLabel } from "../lib/native";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
 import { linkMenuItems } from "./links";
@@ -84,7 +84,7 @@ async function saveImage(src: string, name: string) {
     const ext = EXT[b.type] ?? "png";
     const file = /\.[a-z0-9]{2,5}$/i.test(name) ? name : `${name}.${ext}`;
     const path = await saveDownload([...new Uint8Array(await b.arrayBuffer())], file);
-    toast(t("다운로드 폴더에 저장했어요"), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
+    toast(t("다운로드 폴더에 저장했어요"), "info", { label: revealLabel(), run: () => void revealPath(path) });
   } catch (e) {
     toast(t("저장하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");
   }

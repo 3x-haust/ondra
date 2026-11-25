@@ -87,6 +87,10 @@ export const stateSaveParts = (names: string[], fields: Record<string, string>, 
 export const stateFlushed = () => call<void>("state_flushed");
 export const pickFolder = (prompt: string) => call<string | null>("pick_folder", { prompt }, null);
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
+/** the system's file manager, by name */
+export const fileManager = () => (/Windows/.test(navigator.userAgent) ? t("탐색기") : /Macintosh/.test(navigator.userAgent) ? "Finder" : t("파일 관리자"));
+/** "Finder에서 보기", or what it is called on this system */
+export const revealLabel = () => t("{app}에서 보기", { app: fileManager() });
 /** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
 export const openExternal = (url: string) => call<void>("open_url", { url });
 /** the licenses of the open-source software in the app, in the default text app */
@@ -772,7 +776,7 @@ export const farPiece = (path: string, offset: number, len: number) =>
   call<{ data: string; size: number; modified: number }>("far_piece", { path, offset, len }, { data: "", size: 0, modified: 0 });
 /** where each path really is, links followed (null: not there) */
 export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", { paths }, paths);
-/** a piece put into this app's own folder: "cache" (another Mac's files shown here) or "upload" (attachments sent here) */
+/** a piece put into this app's own folder: "cache" (another device's files shown here) or "upload" (attachments sent here) */
 export const farPut = (kind: "cache" | "upload" | "site", name: string, offset: number, data: string) =>
   call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
 export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);

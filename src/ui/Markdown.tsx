@@ -101,7 +101,7 @@ const plain = (href: string) => { try { return decodeURI(href); } catch { return
 
 /** `github`: the text comes from GitHub (a PR's comments), so pictures it hosts show inline */
 export function Markdown(props: { text: string; class?: string; github?: boolean }) {
-  // a reply of another Mac's job: its pictures are there, fetched and shown from a copy here
+  // a reply of another device's job: its pictures are there, fetched and shown from a copy here
   const host = useHost();
   const onClick = (e: MouseEvent) => {
     const copy = (e.target as HTMLElement).closest("button.md-copy") as HTMLButtonElement | null;
@@ -207,7 +207,7 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
       readyAt = nextRender(now, now - began);
     });
   });
-  // runs after the HTML is in; again when a picture from that Mac has come
+  // runs after the HTML is in; again when a picture from that device has come
   createEffect(() => {
     void text();
     const h = host();

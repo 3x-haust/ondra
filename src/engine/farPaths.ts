@@ -1,4 +1,4 @@
-// Which files another Mac may reach on this one (Settings › 연결): only what lies inside the
+// Which files another device may reach on this one (Settings › 연결): only what lies inside the
 // folders of the projects it added and of the jobs it sees (their folders, worktrees and
 // result folders), or a file one of those jobs named itself (a screenshot in its reply).
 // Never the disk at large: a folder as wide as the home folder doesn't count.
@@ -57,14 +57,14 @@ export function normPath(p: string, home: string): string | undefined {
 /** the path is the folder or inside it */
 export const under = (p: string, root: string) => p === root || p.startsWith(root.endsWith("/") ? root : `${root}/`);
 
-/** a folder too wide to open to another Mac: the disk, /Users, /Volumes, the home folder or anything above it */
+/** a folder too wide to open to another device: the disk, /Users, /Volumes, the home folder or anything above it */
 export function tooWide(root: string, home: string): boolean {
   const h = normPath(home, home) ?? home;
   if (windowsHome(home)) return root.endsWith("/") || under(h.toLowerCase(), root.toLowerCase());
   return root === "/" || root === "/Users" || root === "/Volumes" || root === "/private" || root === "/tmp" || under(h, root);
 }
 
-/** the folders another Mac may reach, cleaned up: the wide ones dropped, the same one once */
+/** the folders another device may reach, cleaned up: the wide ones dropped, the same one once */
 export function cleanRoots(roots: (string | undefined)[], home: string): string[] {
   const out = new Set<string>();
   for (const r of roots) {
@@ -134,7 +134,7 @@ export function realPath(path: string | null, home: string): string | undefined 
   return normPath(path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\(?=[A-Za-z]:\\)/, ""), home);
 }
 
-/** a file from another Mac, as this Mac caches it: one name per Mac, path and version */
+/** a file from another device, as this Mac caches it: one name per Mac, path and version */
 export function cacheName(host: string, path: string, modified: number): string {
   let h = 2166136261;
   const s = `${host}\n${path}`;
@@ -146,7 +146,7 @@ export function cacheName(host: string, path: string, modified: number): string 
 /** A picked file's name in the sender's filesystem (backslashes can be part of a Mac filename). */
 export const uploadBase = (path: string, home: string) => path.split(windowsHome(home) ? /[/\\]/ : "/").pop() || "file";
 
-/** A name for a file sent to another Mac: unique, and still readable ("shot.png" stays in it). */
+/** A name for a file sent to another device: unique, and still readable ("shot.png" stays in it). */
 export function uploadName(path: string, stamp: number, rand: string): string {
   const base = (path.split("/").pop() ?? "file").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+|\.+$/g, "").slice(-80) || "file";
   return `${stamp.toString(36)}-${rand}-${base}`;
@@ -163,7 +163,7 @@ export function capText(text: string, max: number): { text: string; cut: boolean
   return { text: nl > 0 ? s.slice(0, nl + 1) : s, cut: true };
 }
 
-// ───────── a page of another Mac, with what it uses
+// ───────── a page of another device, with what it uses
 
 /** the files a page may use that are read for more of them (a page, its styles, its scripts, a drawing) */
 export const scanKind = (path: string): "html" | "css" | "js" | undefined => {
@@ -201,7 +201,7 @@ export function pageRefs(text: string, kind: "html" | "css" | "js"): string[] {
   return [...new Set(out.map((r) => r.trim()).filter(keep))];
 }
 
-/** `ref` (relative, as written in a file in `dir`) as a path on that Mac; undefined when it isn't one */
+/** `ref` (relative, as written in a file in `dir`) as a path on that device; undefined when it isn't one */
 export function resolveRef(dir: string, ref: string): string | undefined {
   let r = ref.replace(/[?#].*$/, "");
   try {
@@ -222,7 +222,7 @@ export function resolveRef(dir: string, ref: string): string | undefined {
   return p.startsWith("/") || p.startsWith("~") ? p : undefined;
 }
 
-/** where a file of that Mac goes in the page copies here: the same layout, under that Mac's own folder */
+/** where a file of that device goes in the page copies here: the same layout, under that device's own folder */
 export function siteName(host: string, path: string): string {
   let h = 2166136261;
   for (let i = 0; i < host.length; i++) h = Math.imul(h ^ host.charCodeAt(i), 16777619);

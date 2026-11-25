@@ -2765,7 +2765,7 @@ export function createTask(f: {
   /** a new app or repo started from nothing */
   fresh?: boolean;
   accountId?: string;
-  /** the account was picked by hand (another Mac's picker): 자동 doesn't move it */
+  /** the account was picked by hand (another device's picker): 자동 doesn't move it */
   accountPinned?: boolean;
   origin?: Task["origin"];
   /** Shown as the first message instead of the full ask (for long imported context). */
@@ -2781,16 +2781,16 @@ export function createTask(f: {
   issue?: Task["issue"];
   /** another agent asked for it (see Entry's `by`) */
   by?: string;
-  /** its id, when another Mac chose it (a job started from there) */
+  /** its id, when another device chose it (a job started from there) */
   id?: string;
-  /** run it on another Mac (Settings › 연결), in this workspace and on this account there */
+  /** run it on another device (Settings › 연결), in this workspace and on this account there */
   host?: string;
   hostSpace?: string;
   hostAccount?: string;
   /** its own model and level (else its account's) */
   model?: string;
   thinking?: string;
-  /** another Mac asked for it */
+  /** another device asked for it */
   from?: Task["from"];
   /** a run of this routine */
   routine?: string;
@@ -2849,17 +2849,17 @@ export function createTask(f: {
     ...(f.self ? { self: f.self } : {}),
     ...((f.agent ?? prev?.agent) ? { agent: f.agent ?? prev!.agent } : {}),
   };
-  // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
+  // a project of another device: the job is made and run there; here it shows until that device's copy comes
   const far_ = splitProjectId(f.project);
   const farHost = far_?.host ?? f.host;
   if (farHost) {
-    // the rest of what it was asked with goes too: the ids it follows or waits for are that Mac's own
+    // the rest of what it was asked with goes too: the ids it follows or waits for are that device's own
     // (a job of it shows here under its id there); a Mac too old to know a field leaves it out
     startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, {
       id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, spaceLabel: state.spaces.find((x) => x.id === f.space)?.label,
       account: f.hostAccount, model: f.model, thinking: f.thinking, display: f.display,
       branch: f.branch, priority: task.priority, weight: task.weight, origin: f.origin, isolate: f.isolate, after: task.after,
-      // the other workspaces it may reach, by name (that Mac's workspaces of the same names)
+      // the other workspaces it may reach, by name (that device's workspaces of the same names)
       reach: task.reach?.map((x) => state.spaces.find((s) => s.id === x)?.label).filter((x): x is string => !!x), follows: task.follows, issue: f.issue, by: f.by,
       permission: task.permission,
     });
@@ -3217,7 +3217,7 @@ export function sendNow(id: string) {
 /** A word from Ondra itself to a job at work: taken after its current step, not shown in its
  *  chat as the user's. False when it isn't mid-turn (nothing to say it to). */
 export function whisper(id: string, message: string): boolean {
-  // a job on another Mac isn't reached this way
+  // a job on another device isn't reached this way
   if (taskById(id)?.host || !runs.get(id)?.streaming) return false;
   void request(agentOf(id), { type: "steer", message }).catch(() => {});
   return true;
@@ -3413,7 +3413,7 @@ async function releasesSince(at: number, space: string, project: string | undefi
 export async function decide(decisionId: string, optionId: string, values?: FormValues) {
   const d = state.decisions.find((x) => x.id === decisionId);
   if (!d) {
-    // a question of another Mac's job: answered there, as if the user had answered it on that Mac
+    // a question of another device's job: answered there, as if the user had answered it on that device
     const m = mirroredDecision(decisionId);
     if (m) await farDecide(m, optionId, values);
     return;
@@ -3767,7 +3767,7 @@ export const setWeight = (id: string, w: Weight) => void (far(id, "setWeight", [
 /** The account a job runs on (작업 정보): it runs on that account's own model from then on. */
 export function setTaskAccount(id: string, accountId: string) {
   { const r = far(id, "setTaskAccount", [id, accountId]); if (r) return r as never; }
-  // one of its own workspace's accounts only (another Mac names one this Mac showed it)
+  // one of its own workspace's accounts only (another device names one this Mac showed it)
   const t = taskById(id);
   if (!t || accountById(accountId)?.space !== t.space) return;
   if (t.accountId === accountId) return void (t.accountPinned || updateTask(id, (x) => (x.accountPinned = true)));
@@ -3947,7 +3947,7 @@ export async function editTurn(id: string, entryId: string, text: string) {
 // ─────────────────────────────── list housekeeping
 
 export const togglePin = (id: string) => void (far(id, "togglePin", [id]) ?? updateTask(id, (t) => (t.pinned = !t.pinned)));
-/** Seen: its unread dot goes. Another Mac's job keeps its dot there (that Mac's user may not have
+/** Seen: its unread dot goes. Another Mac's job keeps its dot there (that device's user may not have
  *  seen it); here it stays gone until the job says more. */
 export function markRead(id: string) {
   if (hostOfTask(id)) return markFarRead(id);
@@ -3967,12 +3967,12 @@ export function renameTask(id: string, title: string) {
   if (v) updateTask(id, (t) => (t.title = v));
 }
 /** Same request again as a new job (same folder, model and permission). Another Mac's job runs
- *  again there: the new one's id comes back once that Mac made it. */
+ *  again there: the new one's id comes back once that device made it. */
 export function duplicateTask(id: string): string | undefined | Promise<string | undefined> {
   { const r = far(id, "duplicateTask", [id]); if (r) return r.then((n) => (typeof n === "string" ? n : undefined)); }
   const t = taskById(id);
   if (!t) return;
-  // one another Mac asked for stays its: that Mac keeps a copy of it as of the first one
+  // one another device asked for stays its: that device keeps a copy of it as of the first one
   const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId, ...(t.from ? { from: t.from } : {}), ...(t.agent ? { agent: t.agent } : {}) });
   updateTask(n, (x) => {
     x.model = t.model;

@@ -179,7 +179,7 @@ export function Onboarding() {
 
                 <Match when={at() === "import"}>
                   <h1>{t("쓰던 설정을 가져올까요?")}</h1>
-                  <p class="onb-sub">{t("이 Mac의 다른 도구에서 찾았어요.")}</p>
+                  <p class="onb-sub">{t("이 기기의 다른 도구에서 찾았어요.")}</p>
                   <div class="onb-counts" classList={{ ok: imported() }}>
                     <For each={[["지침", counts().rules], ["스킬", counts().skills], ["메모리", counts().memories]] as const}>
                       {([label, n]) => (

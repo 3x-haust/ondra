@@ -26,7 +26,7 @@ export const forPeople = (name: string) =>
   /\.(html?|pdf|svg|png|jpe?g|gif|webp|heic|mp4|mov|webm|m4a|mp3|wav|md|csv|docx?|xlsx?|pptx?|key|pages|numbers|zip|dmg|apk|aab|ipa)$/i.test(name);
 
 export async function loadArtifacts(taskId: string) {
-  // a job of another Mac: what it left there
+  // a job of another device: what it left there
   const own = (await artifactsOf(taskById(taskId)?.host, taskId).catch(() => [])).filter((f) => forPeople(f.name));
   const list = [...own, ...written(taskId).filter((w) => !own.some((o) => o.path === w.path))].sort((a, b) => b.modified - a.modified);
   const now = artifacts[taskId] ?? [];

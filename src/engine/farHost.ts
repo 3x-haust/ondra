@@ -1,4 +1,4 @@
-// What another Mac may read and run here for the jobs it sees (Settings › 연결): the files of
+// What another device may read and run here for the jobs it sees (Settings › 연결): the files of
 // their folders, their git diff, their results and screenshots, a terminal in their folder,
 // this Mac's skills and the memory of its projects. The other side is engine/far.ts.
 //
@@ -39,18 +39,18 @@ const safeId = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, "");
 const fail = (why: string): never => {
   throw new Error(why);
 };
-const NOT_THERE = "그 Mac에서 열 수 없는 위치예요";
+const NOT_THERE = "그 기기에서 열 수 없는 위치예요";
 
 const myTask = (p: FarPeer, id: unknown): Task => {
   const t = state.tasks.find((x) => x.id === id);
-  return t && p.sees(t) ? t : fail("그 작업이 이 Mac에 없어요");
+  return t && p.sees(t) ? t : fail("그 작업이 이 기기에 없어요");
 };
 const myProject = (p: FarPeer, id: unknown): Project => {
   const pr = (state.projects ?? []).find((x) => x.id === id);
-  return pr && p.watch.has(pr.id) ? pr : fail("그 프로젝트가 이 Mac에 없어요");
+  return pr && p.watch.has(pr.id) ? pr : fail("그 프로젝트가 이 기기에 없어요");
 };
 
-/** the folders that Mac may reach here */
+/** the folders that device may reach here */
 export function rootsFor(p: FarPeer): string[] {
   const dirs: (string | undefined)[] = [];
   for (const pr of state.projects ?? []) if (p.watch.has(pr.id)) dirs.push(pr.folder);
@@ -106,7 +106,7 @@ function pickedTargets(p: FarPeer, abs: string): Set<string> {
   return targets;
 }
 
-/** The path, absolute, when that Mac may reach it; else an error. Links are followed: one
+/** The path, absolute, when that device may reach it; else an error. Links are followed: one
  *  pointing out of the folders counts as outside. `files`: a single file a job named is fine too
  *  (as it named it: that one file, wherever it is). */
 async function reach(p: FarPeer, path: unknown, files = false): Promise<string> {
@@ -184,7 +184,7 @@ function listen() {
   });
 }
 
-/** that Mac went: its terminals here close */
+/** that device went: its terminals here close */
 export function farClosed(conn: number) {
   for (const [key, x] of ptys) {
     if (x.conn !== conn) continue;
@@ -319,7 +319,7 @@ const FAR: Record<string, Fn> = {
   },
 };
 
-/** the call of that name for that Mac, when it is one of these */
+/** the call of that name for that device, when it is one of these */
 export function farCall(p: FarPeer, fn: string): ((...a: unknown[]) => unknown) | undefined {
   const f = Object.prototype.hasOwnProperty.call(FAR, fn) ? FAR[fn] : undefined;
   // always a promise: a refusal is an answer like any other
