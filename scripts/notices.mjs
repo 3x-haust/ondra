@@ -146,6 +146,7 @@ export function writeAppNotices(outDir = join(root, "src-tauri", "resources", "n
     { heading: "Ondra app: web view (npm)", pkgs: appNpm() },
     { heading: "Ondra app: native (Rust crates)", pkgs: cargoCrates(join(root, "src-tauri", "Cargo.toml")) },
     { heading: "ondra-remote (Rust crates)", pkgs: cargoCrates(join(root, "remote", "host", "Cargo.toml")) },
+    ...(process.platform === "win32" ? [{ heading: "Windows computer host (Rust crates)", pkgs: cargoCrates(join(root, "src-tauri", "helpers", "windows", "Cargo.toml")) }] : []),
   ]);
   mkdirSync(outDir, { recursive: true });
   const file = join(outDir, "THIRD_PARTY_NOTICES.txt");
