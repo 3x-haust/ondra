@@ -92,11 +92,14 @@
   margin-top: var(--s-6);
 }
 /* Settings › 계정: a card per window under the account's row, as T3 Code's usage page */
+/* the cards stack the bar under the numbers when they are narrow (the query below) */
 .lim-cards {
   display: grid;
   gap: var(--s-8);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  container-type: inline-size;
 }
 .lim-card {
   display: grid;

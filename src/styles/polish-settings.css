@@ -96,6 +96,23 @@
   flex-shrink: 0;
   gap: var(--s-8);
 }
+/* a narrow pane: the control drops under its name, still at the right, instead of being cut off;
+   a segmented control wider than the row scrolls inside it */
+.settings-inner .set-row:has(> .set-label + .set-value:last-child) {
+  flex-wrap: wrap;
+  row-gap: var(--s-6);
+}
+.settings-inner .set-row > .set-label:has(+ .set-value:last-child) {
+  flex: 1 1 10em;
+}
+.settings-inner .set-row > .set-label + .set-value:last-child {
+  max-width: 100%;
+  margin-left: auto;
+}
+.settings-inner .set-value > .seg {
+  min-width: 0;
+  overflow-x: auto;
+}
 .settings-inner .set-note {
   font-size: var(--fs-sm);
   color: var(--ink-3);
@@ -249,8 +266,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* 변경 keeps its line; a long path gives way with … */
 .sp-sheet .sp-pick .muted {
+  flex-shrink: 0;
   font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 .sp-sheet .sp-gh {
   min-height: 32px;
@@ -1099,9 +1119,12 @@
   height: 24px;
 }
 .settings-inner .prov-title {
+  overflow: hidden;
   color: var(--ink);
   font-size: var(--fs-md);
   font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .settings-inner .prov-sub {
   overflow: hidden;
@@ -1492,6 +1515,18 @@
 }
 .settings-inner .ag-where .select + .select {
   width: 140px;
+}
+/* narrow: the selects give way before the place's name does */
+.settings-inner .ag-where {
+  min-width: 0;
+}
+.settings-inner .ag-where .select {
+  flex: 0 1 auto;
+  min-width: 64px;
+}
+.settings-inner .prov-row:has(> .ag-where) > .prov-text {
+  flex-shrink: 0;
+  max-width: 50%;
 }
 /* the default row has no remove button: keep its selects lined up with the ones below */
 .settings-inner .ag-gap {

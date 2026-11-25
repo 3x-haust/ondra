@@ -7,7 +7,8 @@
   min-width: 0;
   min-height: 0;
 }
-.pane {
+/* only the layout's panes: the panel's 작업 정보 list is a .pane too (Panel.tsx Overview) */
+.panes > .pane {
   --ring: var(--warn);
   position: absolute;
   display: flex;
@@ -213,7 +214,7 @@ button.pane-state:hover {
 }
 
 /* a narrow pane: the input's chips give up their words before they run into each other */
-.pane {
+.panes > .pane {
   container: pane / inline-size;
 }
 @container pane (max-width: 480px) {
