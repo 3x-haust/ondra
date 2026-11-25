@@ -99,12 +99,21 @@ pub fn request_accessibility() -> bool {
 
 #[tauri::command]
 pub fn open_privacy_settings(pane: String) -> Result<(), String> {
+    #[cfg(windows)]
+    if pane == "microphone" {
+        crate::store::open_windows_settings("privacy-microphone");
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    return Err(format!("no privacy settings page for {pane} here"));
+    #[cfg(target_os = "macos")]
     let anchor = match pane.as_str() {
         "screen" => "Privacy_ScreenCapture",
         "microphone" => "Privacy_Microphone",
         "speech" => "Privacy_SpeechRecognition",
         _ => "Privacy_Accessibility",
     };
+    #[cfg(target_os = "macos")]
     Command::new("/usr/bin/open")
         .arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}"))
         .spawn()

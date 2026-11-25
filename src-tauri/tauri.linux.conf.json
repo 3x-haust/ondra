@@ -3,7 +3,7 @@
   "bundle": {
     "targets": ["deb", "rpm"],
     "createUpdaterArtifacts": false,
-    "externalBin": ["binaries/ondra-remote"],
+    "externalBin": ["binaries/ondra-remote", "binaries/ondra-dictate"],
     "resources": {
       "binaries/ondra-bgguard.dylib": null,
       "dmg/background.tiff": null,
@@ -11,8 +11,8 @@
       "resources/linux/engine/": "engine/"
     },
     "linux": {
-      "deb": { "depends": ["libsecret-tools", "curl", "git"] },
-      "rpm": { "depends": ["libsecret", "curl", "git"] }
+      "deb": { "depends": ["libsecret-tools", "curl", "git", "libasound2"] },
+      "rpm": { "depends": ["libsecret", "curl", "git", "alsa-lib"] }
     }
   }
 }
