@@ -1569,3 +1569,8 @@
 .settings-inner .rv-list > :last-child {
   border-bottom: 0;
 }
+
+/* the space's terminal command: its name, and what it does under it */
+.sp-sheet .sp-cmd { display: flex; flex-direction: column; gap: var(--s-4); min-width: 0; }
+.sp-sheet .sp-cmd .input { max-width: 200px; font-family: var(--font-mono, ui-monospace, monospace); }
+.sp-sheet .sp-cmd .set-note { overflow-wrap: anywhere; }

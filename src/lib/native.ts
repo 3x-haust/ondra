@@ -360,6 +360,9 @@ type SpaceRef = { id: string; cliHome?: string };
 export const spaceEnv = (s: SpaceRef) => call<[string, string][]>("space_env", { space: s.id, home: s.cliHome }, []);
 export const spaceTools = (s: SpaceRef) =>
   call<{ home: string | null; gh_user: string | null; git_name: string | null; git_email: string | null } | null>("space_tools", { space: s.id, home: s.cliHome }, null);
+export const spaceCliInstall = (s: SpaceRef & { label: string; folder: string }, command: string, previous?: string) =>
+  call<{ path: string; off_path: boolean }>("space_cli_install", { space: s.id, home: s.cliHome, command, label: s.label, folder: s.folder, previous: previous ?? null }, { path: "", off_path: false });
+export const spaceCliRemove = (command: string) => call<void>("space_cli_remove", { command }, undefined);
 export const spaceGhLogin = (s: SpaceRef) => call<void>("space_gh_login", { space: s.id, home: s.cliHome }, undefined);
 export const spaceGitIdentity = (s: SpaceRef, name: string, email: string) => call<void>("space_git_identity", { space: s.id, home: s.cliHome, name, email }, undefined);
 export const globalSkills = () => call<{ name: string; path: string; description: string }[]>("global_skills", undefined, []);

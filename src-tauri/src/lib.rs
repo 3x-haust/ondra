@@ -549,6 +549,8 @@ pub fn run() {
             tools::space_env,
             tools::space_tools,
             tools::space_gh_login,
+            tools::space_cli_install,
+            tools::space_cli_remove,
             tools::space_git_identity,
             tools::skill_list,
             tools::skill_save,
