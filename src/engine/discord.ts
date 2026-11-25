@@ -212,7 +212,7 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(() => (postQuestions(), void postApprovals(), void scout(), void workTick()), 3000);
+  sweep ??= setInterval(() => (postQuestions(), void postApprovals(), void unpinAnswered(), void scout(), void workTick()), 3000);
   // a turn into someone that outlived the app pops back now, else when its time is up
   keepTime();
   setStatus({ state: "connecting" });
@@ -456,6 +456,8 @@ async function onInteraction(i: DiscordInteraction) {
   if (i.custom_id?.startsWith(PICK)) return picked(i, a);
   if (i.custom_id?.startsWith(FIELD)) return fieldPicked(i, a);
   if (i.custom_id?.startsWith(FORM)) return popupSent(i, a);
+  if (i.custom_id?.startsWith(OWN_SENT)) return ownSent(i, a);
+  if (i.custom_id?.startsWith(OWN)) return ownUnarmed(i, a);
   const open = openClick(i.custom_id);
   if (open) return opened(i, a, open.path);
   const opts = (o: DiscordInteraction["options"] = []): string => o.map((x) => (x.options ? `${x.name} ${opts(x.options as never)}` : `${x.name}:${String(x.value)}`)).join(" ");
@@ -495,13 +497,16 @@ export function pickButtons(d: Decision, chosen?: string): unknown[] {
 }
 
 function buttonRows(d: Decision, chosen?: string): unknown[] {
-  const buttons = d.options.slice(0, 25).map((o) => ({
+  const own = ownAnswer(d) && !chosen;
+  const buttons = d.options.slice(0, own ? 24 : 25).map((o) => ({
     type: 2,
     style: chosen ? (o.id === chosen ? 3 : 2) : o.primary ? 1 : 2,
     label: o.label.slice(0, 80),
     custom_id: `${PICK}${d.id}:${o.id}`.slice(0, 100),
     ...(chosen ? { disabled: true } : {}),
   }));
+  // an answer of their own, as under a question in the app: the button opens a popup to write it
+  if (own) buttons.push({ type: 2, style: 2, label: "직접 답하기", custom_id: `${OWN}${d.id}`.slice(0, 100) });
   const rows: unknown[] = [];
   for (let k = 0; k < buttons.length; k += 5) rows.push({ type: 1, components: buttons.slice(k, k + 5) });
   return rows;
@@ -519,7 +524,7 @@ export function discordForm(d: Decision): { menus: FormField[]; typed: FormField
   const form = d.form ?? [];
   const menus = form.filter((f) => f.kind === "choice" || f.kind === "check");
   const typed = form.filter((f) => f.kind !== "choice" && f.kind !== "check");
-  const buttonRowsN = Math.ceil(Math.min(d.options.length, 25) / 5);
+  const buttonRowsN = Math.ceil(Math.min(d.options.length + (ownAnswer(d) ? 1 : 0), 25) / 5);
   if (!form.length || menus.length + buttonRowsN > 5 || typed.length > 5) return undefined;
   return { menus, typed };
 }
@@ -579,7 +584,78 @@ async function armForm(d: Decision) {
 /** the buttons and menus for a question, armed */
 async function controlsFor(d: Decision): Promise<unknown[]> {
   await armForm(d);
+  await armOwn(d);
   return pickButtons(d);
+}
+
+// ---- an answer of their own (직접 답하기): what the app's own-answer line under a question is
+const OWN = "ondra:own:";
+const OWN_SENT = "ondra:ownsent:";
+/** a question that takes words of the user's own: every one but a tool's yes/no (a security approval) */
+const ownAnswer = (d: Decision) => !d.ui;
+/** the popup 직접 답하기 opens */
+export function ownModal(d: Decision): unknown {
+  return {
+    custom_id: `${OWN_SENT}${d.id}`.slice(0, 100),
+    title: cut(d.question.split("\n")[0], 45),
+    components: [{ type: 1, components: [{ type: 4, custom_id: "a", label: "답", style: 2, required: true, max_length: 1000, placeholder: "버튼에 없는 답을 적어 주세요" }] }],
+  };
+}
+/** popups are kept by the app while it runs: armed when asked, and again after a restart */
+const armed = new Set<string>();
+async function armOwn(d: Decision) {
+  if (!ownAnswer(d)) return;
+  armed.add(d.id);
+  await discordModalSet(`${OWN}${d.id}`.slice(0, 100), ownModal(d)).catch(() => armed.delete(d.id));
+}
+/** their own words sent from the popup: the answer, as if typed under the question in the app */
+async function ownSent(i: DiscordInteraction, a: AgentSettings) {
+  if (i.user.id !== a.ownerId) return;
+  const d = state.decisions.find((x) => x.id === i.custom_id!.slice(OWN_SENT.length));
+  const raw = i.fields?.a;
+  const text = (Array.isArray(raw) ? raw.join(" ") : (raw ?? "")).trim();
+  if (!d) return void discordInteractionReply(i.id, { content: "이미 답한 질문이에요", flags: 64 }, true).catch(() => {});
+  if (!text) return;
+  drafts.delete(d.id);
+  const { decide } = await import("./tasks");
+  await decide(d.id, text);
+  posted.delete(d.id);
+  void discordModalSet(`${OWN}${d.id}`.slice(0, 100), null).catch(() => {});
+  armed.delete(d.id);
+  if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: pickButtons(d, "-") }).catch(() => {});
+  await discordInteractionReply(i.id, { content: `→ ${cut(text, 1900)}`, flags: 64 }, true).catch(() => {});
+}
+/** 직접 답하기 pressed with no popup behind it (from before a restart): armed now, pressed again it opens */
+async function ownUnarmed(i: DiscordInteraction, a: AgentSettings) {
+  if (i.user.id !== a.ownerId) return;
+  const d = state.decisions.find((x) => x.id === i.custom_id!.slice(OWN.length));
+  if (d) await armOwn(d);
+  await discordInteractionReply(i.id, { content: d ? "한 번 더 누르면 답을 적는 창이 열려요 (여기에 그냥 써도 돼요)" : "이미 답한 질문이에요", flags: 64 }, true).catch(() => {});
+}
+
+// ---- its questions pinned where they were asked: among any number of messages, what is waiting
+// on the user is in the channel's pins, and goes from there once it is answered (here or in the app)
+async function pinAsk(d: Decision, channel: string, message: string | undefined) {
+  if (!message || !me || !state.decisions.some((x) => x.id === d.id)) return;
+  const pin = (path: string) => discordApi("PUT", path).then(() => true, () => false);
+  if (!(await pin(`/channels/${channel}/messages/pins/${message}`)) && !(await pin(`/channels/${channel}/pins/${message}`))) return;
+  setAgent({ pins: [...(settings()?.pins ?? []).filter((p) => p.decision !== d.id), { decision: d.id, channel, message }] });
+  // Discord's own "pinned a message" line goes: the pin says it
+  const got: unknown = await discordApi("GET", `/channels/${channel}/messages?limit=5`).catch(() => []);
+  const recent = (Array.isArray(got) ? got : []) as { id: string; type?: number; author?: { id: string }; message_reference?: { message_id?: string } }[];
+  for (const x of recent) if (x.type === 6 && x.author?.id === me.id && x.message_reference?.message_id === message) await discordApi("DELETE", `/channels/${channel}/messages/${x.id}`).catch(() => {});
+}
+/** answered or gone: its pin goes; still waiting after a restart: its popup is armed again */
+export async function unpinAnswered() {
+  for (const d of state.decisions) if (d.posted && !armed.has(d.id) && ownAnswer(d)) void armOwn(d);
+  const pins = settings()?.pins ?? [];
+  const gone = pins.filter((p) => !state.decisions.some((d) => d.id === p.decision));
+  if (!gone.length) return;
+  setAgent({ pins: pins.filter((p) => !gone.includes(p)) });
+  for (const p of gone) {
+    const ok = await discordApi("DELETE", `/channels/${p.channel}/messages/pins/${p.message}`).then(() => true, () => false);
+    if (!ok) await discordApi("DELETE", `/channels/${p.channel}/pins/${p.message}`).catch(() => {});
+  }
 }
 
 /** a pick in a question's menu: kept until the question is sent; the menus show it */
@@ -1051,6 +1127,14 @@ export async function askedLine(d: Decision, a: AgentSettings | undefined = sett
   return plainAsk(d, about);
 }
 
+/** A job's question as it goes up on Discord: which job, the question, and its choices under it as
+ *  buttons (named in the line only when there are none: a form too big, answered in words). */
+export function questionCard(d: Decision, about?: string): string {
+  const words = !!d.form?.length && !discordForm(d);
+  const head = about ? `❓ ${about}\n` : "❓ ";
+  return `${head}${words ? plainAsk(d) : d.question}`.slice(0, 2000);
+}
+
 /** the question with its choices in one line, for when it can't be said in the agent's voice */
 const plainAsk = (d: Decision, about?: string) => `${about ? `${about}: ` : ""}${d.question} (${(d.form?.length ? d.form.map((f) => f.label) : d.options.map((o) => o.label)).join(" / ")})`;
 
@@ -1140,6 +1224,7 @@ async function mainSaid(replyId: string) {
   seen();
   keepSaid(channel, sent.ids);
   if (sent.ids.length) hearMine(channel, sent.text);
+  if (choices.length === 1) await pinAsk(choices[0], channel, sent.ids[0]);
   for (const p of pics.slice(0, 6)) keepSaid(channel, await discordSendFile(channel, p).catch(() => [] as string[]));
 }
 
@@ -1204,16 +1289,15 @@ function postQuestions() {
     const channel = channelOf(d.taskId);
     if (!channel) continue;
     posted.set(d.id, channel);
-    const server = servers.has(channel);
-    void askedLine(d, settings(), t?.title, undefined, server)
-      .then(async (line) => {
-        // the user's own business, or talk that moved on: asked in their DM (answered there too)
-        const { text, dm } = dmOf(line);
-        const to = (dm && server && (await dmChannel())) || channel;
-        posted.set(d.id, to);
-        const ids = await sayTo(to, text, undefined, undefined, await controlsFor(d));
-        keepSaid(to, ids);
-        hearMine(to, text);
+    // waiting on the user: it goes up at once and always the same way (whatever its voice or ways),
+    // so what is to be pressed reads as such among any talk
+    const text = questionCard(d, t?.title);
+    void controlsFor(d)
+      .then(async (controls) => {
+        const ids = await sayTo(channel, text, undefined, undefined, controls);
+        keepSaid(channel, ids);
+        hearMine(channel, text);
+        await pinAsk(d, channel, ids[0]);
       })
       .catch(() => posted.delete(d.id));
   }
@@ -1254,6 +1338,7 @@ export async function postApprovals(a: AgentSettings | undefined = settings()) {
     approvals.set(d.id, { channel: to, message: m?.id, d });
     // a reply in words there ("허용", "2") answers it too
     if (m?.id) posted.set(d.id, to);
+    await pinAsk(d, to, m?.id);
   }
 }
 

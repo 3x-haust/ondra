@@ -830,6 +830,8 @@ export interface AgentSettings {
   offer?: { channel: string; at: number; say: string; title: string; task: string; when: unknown };
   /** who it turned into and until when (agentForm.ts): what it says till then goes out under their name and picture */
   form?: { who: string; until: number; picture?: string };
+  /** its questions pinned where they were asked (unpinned once answered, here or in the app) */
+  pins?: { decision: string; channel: string; message: string }[];
 }
 
 export interface AppState {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-ignore node types are not in this project: the test runs under node
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import type { DiscordEvent, DiscordMessage } from "../lib/native";
+import type { DiscordEvent, DiscordInteraction, DiscordMessage } from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision } from "../state/types";
 
@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, postApprovals, unpinAnswered, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -330,8 +330,12 @@ describe("the whole way round", () => {
     expect(sent).toHaveLength(1);
     const body = sent[0][2] as { content: string; components: { components: { label: string; custom_id: string }[] }[] };
     expect(body.content).toContain("홈 앱으로 윈도우 켜기\n보안 동작을 허용할까요? — com.apple.Home · 내 PC, 꺼짐 · press-action");
+    // a tool's yes or no: no answer of their own
     expect(body.components[0].components.map((b) => b.label)).toEqual(["허용", "거부"]);
     expect(said.prompts.join("\n")).not.toContain("보안 동작");
+    // pinned, so it is found among any number of messages
+    expect(api).toHaveBeenCalledWith("PUT", "/channels/dm1/messages/pins/a1");
+    expect(state.settings.agent?.pins).toEqual([{ decision: "d9", channel: "dm1", message: "a1" }]);
     // once only
     await postApprovals();
     expect(api.mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/dm1/messages")).toHaveLength(1);
@@ -339,6 +343,10 @@ describe("the whole way round", () => {
     setState("decisions", []);
     await postApprovals();
     expect(api).toHaveBeenLastCalledWith("PATCH", "/channels/dm1/messages/a1", { components: [expect.objectContaining({ components: [expect.objectContaining({ disabled: true }), expect.objectContaining({ disabled: true })] })] });
+    // and its pin goes
+    await unpinAnswered();
+    expect(api).toHaveBeenCalledWith("DELETE", "/channels/dm1/messages/pins/a1");
+    expect(state.settings.agent?.pins).toEqual([]);
   });
 
   it("someone written as @name is tagged, and whoever a line tags is notified", async () => {
@@ -708,6 +716,28 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d8", "보내기", { env: "prod", memo: "오늘 저녁", n: 4 }));
   });
 
+  it("직접 답하기 opens a popup; what they write there is the answer, as under a question in the app", async () => {
+    await ready();
+    const modals = vi.spyOn(native, "discordModalSet").mockResolvedValue();
+    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
+    setState("decisions", [{ id: "d7", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }] }]);
+    await vi.waitFor(() => expect(modals).toHaveBeenCalledWith("ondra:own:d7", expect.objectContaining({ custom_id: "ondra:ownsent:d7" })), { timeout: 5000 });
+    const tasks = await import("./tasks");
+    const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
+    const on = (x: Partial<DiscordInteraction>, who = OWNER) => emit({ kind: "interaction", interaction: { id: "i7", kind: "modal", channel: "c1", guild: "g1", user: { id: who, name: "x", bot: false }, message: "q7", ...x } as DiscordInteraction });
+    // only the owner's answer counts
+    on({ custom_id: "ondra:ownsent:d7", fields: { a: "아무 데도" } }, "999");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(decide).not.toHaveBeenCalled();
+    on({ custom_id: "ondra:ownsent:d7", fields: { a: "  스테이징 말고 개발 서버에  " } });
+    await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d7", "스테이징 말고 개발 서버에"));
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/q7", expect.anything()));
+    // a popup from before a restart is armed again when pressed
+    setState("decisions", [{ id: "d8", taskId: "t1", at: 1, kind: "ask", question: "또?", context: [], options: [{ id: "a", label: "응" }], posted: "c1" }]);
+    on({ kind: "component", custom_id: "ondra:own:d8" });
+    await vi.waitFor(() => expect(modals).toHaveBeenCalledWith("ondra:own:d8", expect.anything()));
+  }, 10_000);
+
   it("a click on a button it made comes to it as the user's words; a slash command is answered in its own place", async () => {
     await ready();
     emit({ kind: "interaction", interaction: { id: "i2", kind: "component", channel: "c1", guild: "g1", user: { id: OWNER, name: "성윤", bot: false }, message: "m8", custom_id: "deploy-now" } });
@@ -730,9 +760,10 @@ describe("the whole way round", () => {
     setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages", expect.objectContaining({ content: "배포 준비: 어디에 먼저 올릴까요? (스테이징 / 운영)" })), { timeout: 5000 });
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages", expect.objectContaining({ content: "❓ 배포 준비\n어디에 먼저 올릴까요?" })), { timeout: 5000 });
     const body = vi.mocked(native.discordApi).mock.calls[0][2] as any;
-    expect(body.components[0].components.map((b: any) => [b.label, b.custom_id])).toEqual([["스테이징", "ondra:pick:d5:a"], ["운영", "ondra:pick:d5:b"]]);
+    expect(body.components[0].components.map((b: any) => [b.label, b.custom_id])).toEqual([["스테이징", "ondra:pick:d5:a"], ["운영", "ondra:pick:d5:b"], ["직접 답하기", "ondra:own:d5"]]);
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PUT", "/channels/c1/messages/pins/b1"));
     const tasks = await import("./tasks");
     const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
     emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
@@ -740,7 +771,7 @@ describe("the whole way round", () => {
     expect(said.thrown).toHaveLength(1);
     // in words, too
     setState("decisions", [{ id: "d6", taskId: "t1", at: 2, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    await vi.waitFor(() => expect(vi.mocked(native.discordApi).mock.calls.filter((c) => c[0] === "POST" && c[1] === "/channels/c1/messages")).toHaveLength(2), { timeout: 5000 });
     said.answer = "b";
     emit({ kind: "message", message: msg({ id: "m3", author: { id: OWNER, name: "성윤", bot: false }, content: "그냥 운영으로 바로 가자" }) });
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d6", "b"));
