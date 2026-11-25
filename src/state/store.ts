@@ -253,8 +253,9 @@ export const agentWork = (t: Task | undefined): boolean => !!t && (!!t.agent || 
 /** the questions of the agent's work, for the 에이전트 tab */
 const agentDecision = (d: Decision) => d.taskId.startsWith("main:") ? isAgentChat(d.taskId.slice(5)) : agentWork(taskById(d.taskId));
 export const agentDecisions = (space?: SpaceId): Decision[] => state.decisions.filter((d) => agentDecision(d) && (!space || (d.taskId.startsWith("main:") ? d.taskId.slice(5).split("~")[0] : taskById(d.taskId)?.space) === space));
-/** compare folders in "~/…" form (macOS home) */
-const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
+/** Normalize separators only for drive paths: a backslash is a valid Mac filename character. */
+const projectPath = (d: string) => /^[A-Za-z]:[\\/]/.test(d) ? d.replace(/\\/g, "/") : d;
+const norm = (d: string) => projectPath(d).replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */
 export function projectFor(space: SpaceId, cwd?: string): string | undefined {
   if (!cwd) return undefined;
@@ -276,7 +277,7 @@ export function taskProject(t: Task): string | undefined {
 }
 /** A project is the repo, never one of its worktree folders (…/worktrees/<repo>/<job> → …/projects/<repo>). */
 export function repoHome(folder: string): string {
-  const wt = folder.replace(/\/$/, "").match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
+  const wt = projectPath(folder).replace(/\/$/, "").match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
   return wt ? `${wt[1]}/projects/${wt[2]}` : folder;
 }
 const gone = (folder: string) => (state.goneProjects ?? []).some((f) => norm(f) === norm(folder));
@@ -295,10 +296,11 @@ export function addProject(space: SpaceId, folder: string, name?: string): strin
   if (gone(folder)) setState("goneProjects", (l) => (l ?? []).filter((f) => norm(f) !== norm(folder)));
   const have = projectsIn(space).find((p) => norm(p.folder) === norm(folder));
   if (have) return have.id;
-  const id = (name || folder.split("/").filter(Boolean).pop() || "project").toLowerCase().replace(/[^a-z0-9가-힣._-]+/g, "-").slice(0, 32) || uid("p");
+  const label = name || projectPath(folder).split("/").filter(Boolean).pop();
+  const id = (label || "project").toLowerCase().replace(/[^a-z0-9가-힣._-]+/g, "-").slice(0, 32) || uid("p");
   // unique across every space: the same folder name in both spaces gets two ids
   const unique = (state.projects ?? []).some((p) => p.id === id) ? `${id}-${uid("").slice(-4)}` : id;
-  setState("projects", (l) => [...(l ?? []), { id: unique, space, name: name || folder.split("/").filter(Boolean).pop() || unique, folder }]);
+  setState("projects", (l) => [...(l ?? []), { id: unique, space, name: label || unique, folder }]);
   // jobs already in that folder join it
   fileTasks();
   return unique;
