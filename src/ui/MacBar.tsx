@@ -17,7 +17,7 @@ import { mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
 import { askRemoveHost, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
-import { chosenComputer, hostState, localHere, setComputer } from "./ComputerPicker";
+import { chosenComputer, hostState, localHere, setComputer, thisComputer } from "./ComputerPicker";
 import { projectHue } from "./ProjectBadge";
 import { ctxFor, openMenuAt, type MenuEntry } from "./taskMenu";
 import { Icon } from "./Icon";
@@ -50,7 +50,7 @@ type Look = Partial<Pick<Mac, "name" | "icon" | "emoji" | "hue" | "colors" | "gr
 export function macs(): Mac[] {
   const me = state.settings.thisMac;
   return [
-    { id: LOCAL, name: me?.name || t("이 Mac"), icon: me?.icon, emoji: me?.emoji, hue: me?.hue, colors: me?.colors, grain: me?.grain, theme: me?.theme, local: true },
+    { id: LOCAL, name: me?.name || thisComputer(), icon: me?.icon, emoji: me?.emoji, hue: me?.hue, colors: me?.colors, grain: me?.grain, theme: me?.theme, local: true },
     ...(state.settings.hosts ?? []).map((h) => ({ id: h.id, name: h.name, icon: h.icon, emoji: h.emoji, hue: h.hue, colors: h.colors, grain: h.grain, theme: h.theme, local: false })),
   ];
 }

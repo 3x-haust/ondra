@@ -40,6 +40,7 @@ import { ReviewSettings } from "./ReviewSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
+import { thisComputer } from "../ui/ComputerPicker";
 import { t } from "../i18n";
 import { canTrack, track } from "../lib/telemetry";
 import { LoginSheet } from "./Login";
@@ -1238,7 +1239,10 @@ export function SettingsNav(props: { onBack: () => void }) {
   };
   onMount(() => window.addEventListener("keydown", key));
   onCleanup(() => window.removeEventListener("keydown", key));
-  const groups = () => [...new Set(SETTINGS_TABS.map((x) => x.group))];
+  // macOS permissions mean nothing elsewhere; the group is named for this computer
+  const mac = /Macintosh/.test(navigator.userAgent);
+  const shown = SETTINGS_TABS.filter((x) => mac || x.id !== "tools");
+  const groups = () => [...new Set(shown.map((x) => x.group))];
   return (
     <aside class="sidebar settings-side">
       <div class="sb-top" data-tauri-drag-region />
@@ -1273,8 +1277,8 @@ export function SettingsNav(props: { onBack: () => void }) {
               <For each={groups()}>
                 {(g) => (
                   <>
-                    <Show when={g}><div class="set-nav-group">{t(g)}</div></Show>
-                    <For each={SETTINGS_TABS.filter((x) => x.group === g)}>
+                    <Show when={g}><div class="set-nav-group">{g === "이 Mac" ? thisComputer() : t(g)}</div></Show>
+                    <For each={shown.filter((x) => x.group === g)}>
                       {(tab) => (
                         <button class="sb-row sb-main set-nav" classList={{ on: settingsTab() === tab.id }} onClick={() => setView({ name: "settings", tab: tab.id })}>
                           <span class="set-nav-icon"><Icon name={tab.icon} size={14} /></span>
