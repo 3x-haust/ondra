@@ -2592,3 +2592,14 @@
     opacity: 0;
   }
 }
+
+/* a project row being dragged to another place: it dims, a line shows where it lands */
+.app .sidebar .sb-proj.dragging {
+  opacity: 0.5;
+}
+.app .sidebar .sb-proj.drop-above {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.app .sidebar .sb-proj.drop-below {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
