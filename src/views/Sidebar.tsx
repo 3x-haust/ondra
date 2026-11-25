@@ -166,7 +166,9 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
   const ups = () => (props.kid || props.follow ? [] : followUps(t()));
   // what folds under the row: its follow-ups and its subagents, opened and closed together
   const nested = () => kids().length + ups().length;
-  const [open, setOpen] = createSignal<boolean | undefined>(undefined);
+  // opened or closed by hand: kept (per machine, as the sections are) until the job goes
+  const open = () => fold(`t:${t().id}`);
+  const setOpen = (v: boolean) => setFold(`t:${t().id}`, v);
   // open by itself while something under it is going on, needs you, or is open
   const showKids = () =>
     open() ??
@@ -461,6 +463,11 @@ const [folds, setFolds] = createSignal<Record<string, boolean>>((() => {
 const fold = (k: string): boolean | undefined => folds()[`${state.space}:${k}`] ?? folds()[k];
 const setFold = (k: string, v: boolean) => {
   const next = { ...folds(), [`${state.space}:${k}`]: v };
+  // a job's fold goes with the job
+  for (const key of Object.keys(next)) {
+    const job = key.match(/:t:(.+)$/)?.[1];
+    if (job && !taskById(job)) delete next[key];
+  }
   setFolds(next);
   try {
     localStorage.setItem(FOLD_KEY, JSON.stringify(next));
@@ -485,14 +492,13 @@ function Head(props: { id: string; label: string; count?: number; on?: boolean; 
 
 /** finished tasks folded away under their group; the count covers every row in the fold
  *  ("완료 2 · 버림 1" when some were thrown away); the open one shows in place, so its fold opens */
-const [doneOpen, setDoneOpen] = createSignal<Record<string, boolean>>({});
 function DoneFold(props: { id: string; tasks: Task[] }) {
   const has = () => props.tasks.some((t) => t.id === openRoot());
-  const open = () => doneOpen()[props.id] ?? has();
+  const open = () => fold(`d:${props.id}`) ?? has();
   const label = () => foldLabel(props.tasks);
   return (
     <Show when={props.tasks.length}>
-      <button class="sb-older" classList={{ open: open() }} aria-expanded={open()} onClick={() => setDoneOpen((m) => ({ ...m, [props.id]: !open() }))}>
+      <button class="sb-older" classList={{ open: open() }} aria-expanded={open()} onClick={() => setFold(`d:${props.id}`, !open())}>
         <Icon name="chevron" size={12} class="sb-older-chev" />
         {label()}
       </button>
@@ -540,7 +546,6 @@ function jobList(all: () => readonly Task[], inList: (t: Task) => boolean) {
  */
 export function AgentJobs(props: { space: Task["space"] }) {
   const [showArchived, setShowArchived] = createSignal(false);
-  const [opened, setOpened] = createSignal<Record<string, boolean>>({});
   const { roots, archived, isOld, shown } = jobList(() => state.tasks.filter((t) => t.space === props.space), agentListed);
   const filed = (t: Task) => !!t.project && projectsShown(props.space).some((p) => p.id === t.project);
   const projects = createMemo(() => projectsShown(props.space).filter((p) => roots().some((t) => t.project === p.id)));
@@ -557,10 +562,10 @@ export function AgentJobs(props: { space: Task["space"] }) {
                 const done = createMemo(() => roots().filter((t) => isOld(t) && t.project === p.id));
                 const live = () => jobs().filter((t) => t.status === "running").length;
                 const all = () => jobs().length + done().length;
-                const open = () => opened()[p.id] ?? (jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));
+                const open = () => fold(`ap:${p.id}`) ?? (jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));
                 return (
                   <>
-                    <button class="sb-row sb-proj" classList={{ has: all() > 0, open: open() }} title={p.folder} onClick={() => setOpened((m) => ({ ...m, [p.id]: !open() }))}>
+                    <button class="sb-row sb-proj" classList={{ has: all() > 0, open: open() }} title={p.folder} onClick={() => setFold(`ap:${p.id}`, !open())}>
                       <span class="sb-proj-ic">
                         <ProjectBadge name={p.name} class="ic-folder" />
                         <Icon name="chevron" size={12} class="ic-chev" />
