@@ -824,6 +824,22 @@ describe("where it is right now, across workspaces", () => {
     expect(tagged("#orbit에서 커밋 보고 있을게").text).toBe("<#1565>에서 커밋 보고 있을게");
     expect(tagged("PR #96 봤어 #프로젝트").text).toBe("PR #96 봤어 #프로젝트");
   });
+
+  it("knows where a message is by name: the server, the channel and its category, or a DM", async () => {
+    const { placeOf, seeChannels, seeServers, forgetPeople } = await import("./discordPeople");
+    forgetPeople();
+    const at = { guild: "g1", channel: "c1", author: { name: "민수" } };
+    // not looked up yet: the ids alone
+    expect(placeOf(at)).toBe("the server (id g1), channel (id c1)");
+    seeServers([{ id: "g1", name: "아루" }]);
+    seeChannels([{ id: "cat", name: "프로젝트", kind: "category" }, { id: "c1", name: "orbit", kind: "text", category: "cat" }], "g1");
+    expect(placeOf(at, { work: true })).toBe('the server "아루" (id g1), channel #orbit (id c1) under "프로젝트", a room where work is shown');
+    expect(placeOf(at, { ko: true })).toBe('"아루" 서버(id g1)의 #orbit 채널(id c1), "프로젝트" 카테고리');
+    expect(placeOf({ ...at, guild: null }, { ko: true })).toBe("민수와의 DM");
+    // a way for a place: written by its name and id, kept there only
+    const { waysNote } = await import("./discord");
+    expect(waysNote({ path: "/x/AGENT.md", text: "" })).toContain("A line for a place holds there only");
+  });
 });
 
 
