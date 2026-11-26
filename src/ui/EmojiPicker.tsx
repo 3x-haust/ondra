@@ -41,6 +41,15 @@ export function EmojiPicker(props: { value?: string; onPick: (e: string) => void
   const [q, setQ] = createSignal("");
   let list!: HTMLDivElement;
   let search!: HTMLInputElement;
+  // a Korean (or any IME) word still being composed takes the next click to finish it, and the
+  // emoji under it isn't picked: finish it as the pointer comes over the list
+  let composing = false;
+  const finishWord = () => {
+    if (!composing) return;
+    composing = false;
+    search.blur();
+    search.focus({ preventScroll: true });
+  };
   onMount(() => requestAnimationFrame(() => search.focus()));
   const found = createMemo(() => {
     const words = q().trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -56,14 +65,14 @@ export function EmojiPicker(props: { value?: string; onPick: (e: string) => void
     <div class="ep">
       <label class="ep-search">
         <Icon name="search" size={14} />
-        <input ref={search} value={q()} placeholder={t("이모지 검색")} aria-label={t("이모지 검색")} onInput={(e) => (setQ(e.currentTarget.value), list.scrollTo(0, 0))} />
+        <input ref={search} value={q()} onCompositionStart={() => (composing = true)} onCompositionEnd={() => (composing = false)} placeholder={t("이모지 검색")} aria-label={t("이모지 검색")} onInput={(e) => (setQ(e.currentTarget.value), list.scrollTo(0, 0))} />
         <Show when={q()}>
           <button class="ep-x" aria-label={t("지우기")} onClick={() => (setQ(""), search.focus())}>
             <Icon name="x" size={12} />
           </button>
         </Show>
       </label>
-      <div class="ep-list" ref={list}>
+      <div class="ep-list" ref={list} onPointerEnter={finishWord} onPointerMove={finishWord}>
         <Show when={all()} fallback={<div class="ep-empty"><span class="spin sm" /></div>}>
           <Show
             when={q().trim()}

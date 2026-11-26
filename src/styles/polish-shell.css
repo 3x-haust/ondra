@@ -2005,8 +2005,11 @@
 }
 .app .sidebar .mbar-emoji {
   flex: none;
+  /* a box the whole glyph fits in: WebKit draws a filtered element only inside its box, so with
+     line-height 1 a tall emoji (🖥️'s stand) lost its foot while the hover fade ran */
+  display: inline-block;
   font-size: 15px;
-  line-height: 1;
+  line-height: 1.35;
   filter: grayscale(1);
   opacity: 0.6;
   transition: filter 0.18s var(--ease), opacity 0.18s var(--ease);
@@ -2054,7 +2057,9 @@
 }
 
 /* ── the cards that change one Mac: name, emoji or icon, color ── */
-.ml-pop {
+/* .pop.pop: over the dark theme's `:root[data-theme="dark"] .pop` padding, which left the
+   emoji grid against the edge with its last column cut */
+.ml-pop.pop.pop {
   position: fixed;
   padding: var(--s-10);
   border-radius: 14px;
@@ -2476,6 +2481,8 @@
 }
 .ep-list {
   height: 268px;
+  /* room for a hovered cell's scale at the edges */
+  padding: 3px;
   overflow-y: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
@@ -2493,7 +2500,7 @@
 }
 .ep-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 1px;
 }
 .ep-cell {
