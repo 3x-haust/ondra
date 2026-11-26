@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/3x-haust/ondra/releases"><b>Download for macOS ↗</b></a> · <a href="#install">Install</a> · <a href="README.ko.md">한국어</a>
+  <a href="https://github.com/3x-haust/ondra/releases"><b>Download for macOS · Windows · Linux ↗</b></a> · <a href="#install">Install</a> · <a href="README.ko.md">한국어</a>
 </p>
 
 <p align="center"><sub>macOS 13+ · Apple silicon</sub></p>
@@ -194,7 +194,10 @@ Connect another Mac once with a link, and its projects show up in your sidebar. 
 2. Open Ondra and connect a model account, such as ChatGPT/Codex or Claude, in Settings.
 3. Choose a project and say what you want done.
 
-Ondra checks GitHub Releases and offers updates in the app. Mac app actions and capture need **Accessibility and Screen Recording** permissions. To work with mobile devices, install **Xcode's iOS Simulator** or the **Android SDK emulator**.
+**Windows 10/11 x64:** run `Ondra_<version>_x64-setup.exe` from the same release. The installer isn't code-signed yet, so SmartScreen may ask first: **More info → Run anyway**.
+**Linux x64:** install `Ondra_<version>_amd64.deb` (`sudo apt install ./Ondra_*.deb`) or `Ondra-<version>-1.x86_64.rpm` (`sudo dnf install ./Ondra-*.rpm`).
+
+Ondra checks GitHub Releases and offers updates in the app, on every system. Mac app actions and capture need **Accessibility and Screen Recording** permissions. To work with mobile devices, install **Xcode's iOS Simulator** or the **Android SDK emulator**.
 
 <details>
 <summary>If macOS blocks the first launch</summary>
