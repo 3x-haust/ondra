@@ -97,6 +97,17 @@ describe("how it sounds", () => {
     expect(note).toContain("only the user's own answer counts");
   });
 
+  it("work someone else asks for is placed by the user's ways and memory, as the user's own is", async () => {
+    const { othersNote, WORK_IN_OPEN } = await import("./discord");
+    setState("agentNotes", [{ id: "n1", kind: "place", channel: "c1", text: "수다 채널", at: 1 }]);
+    const ways = "- 스토픽 서버: 작업은 #스토픽(1575417718494990337)에서";
+    const note = othersNote(msg({ author: { id: "77", name: "지수민", bot: false } }), agent, ways);
+    expect(note).toContain(WORK_IN_OPEN);
+    expect(note).toContain(ways);
+    expect(note).toContain("이곳: 수다 채널");
+    expect(othersNote(msg({ author: { id: "77", name: "지수민", bot: false } }), agent)).not.toContain("ways for you");
+  });
+
   it("is a person talking, not a list of rules", () => {
     expect(DEFAULT_VOICE).toContain("너만의 생각이랑 취향");
     expect(DEFAULT_VOICE).toContain("주인한테는 반말");
