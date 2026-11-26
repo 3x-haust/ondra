@@ -39,6 +39,9 @@ export function seeChannels(list: { id: string; name: string; kind?: string; cat
   }
 }
 
+/** a channel's name, when it has been seen */
+export const roomName = (id: string) => channels.get(id)?.name;
+
 /** for tests */
 export const forgetPeople = () => (names.clear(), rooms.clear(), servers.clear(), channels.clear());
 

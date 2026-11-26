@@ -721,16 +721,22 @@ export interface Skill {
   space?: SpaceId;
 }
 
-/** A piece of the Discord agent's memory: a person's card (per Discord user; `dm` = learned in a DM,
- *  used only in DMs with them), a place's card (a server or DM-less channel), or a lesson. */
+/** A piece of the Discord agent's memory: a person's card (per Discord user and channel), a
+ *  channel's card, or a lesson (used everywhere). A card is used only in the channel it was learned in. */
 export interface AgentNote {
   id: string;
   kind: "person" | "place" | "lesson";
   /** person: their Discord user id */
   who?: string;
   name?: string;
+  /** learned in a DM (a DM's channel is the one with that person) */
   dm?: boolean;
-  /** place: the server (guild) id */
+  /** person and place: the Discord channel it was learned in, and the only one it is used in.
+   *  None on cards kept before channels were told apart: those are used nowhere (but a DM card, see dm). */
+  channel?: string;
+  /** the channel's name when it was learned ("#잡담"), to show */
+  room?: string;
+  /** place, on cards kept before channels were told apart: the server (guild) id */
   place?: string;
   text: string;
   at: number;

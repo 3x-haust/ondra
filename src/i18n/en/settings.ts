@@ -699,6 +699,7 @@ export default {
   "이곳": "This place",
   "교훈": "Lesson",
   "DM": "DM",
+  "예전 기억 · 안 씀": "Older, not used",
   "채널 ID를 쉼표로. 비우면 부르는 곳 어디서나": "Channel IDs, comma-separated. Empty: wherever it's called",
   "말투와 성격": "Voice and character",
   "{name}(으)로 연결돼 있어요": "Connected as {name}",

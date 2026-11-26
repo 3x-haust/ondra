@@ -884,6 +884,14 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     expect(said.thrown[0].note).toContain("백엔드 개발자 민수");
     expect(said.thrown[0].note).toContain("discord tool");
+    // another channel of the same server: what was learned in c1 isn't read there, by others or the user
+    said.answer = "안녕";
+    emit({ kind: "message", message: msg({ id: "m6", channel: "c2", content: "메타몽 안녕" }) });
+    await vi.waitFor(() => expect(said.prompts).toHaveLength(4));
+    expect(said.prompts[3]).not.toContain("백엔드 개발자 민수");
+    emit({ kind: "message", message: msg({ id: "m7", channel: "c2", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 민수 알아?", mentions: ["222"] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.thrown[1].note).not.toContain("백엔드 개발자 민수");
   });
 
   it("with no owner set, the bot's owner is taken as the user", async () => {
