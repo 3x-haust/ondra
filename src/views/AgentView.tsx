@@ -13,16 +13,16 @@ import type { AgentNote, CaptainMessage } from "../state/types";
 import { UserMsg } from "../ui/MsgActions";
 import { Icon } from "../ui/Icon";
 import { keepBottom } from "../ui/stick";
-import { inSpace, kept, scrollKept } from "../state/viewState";
+import { inSpace, scrollKept } from "../state/viewState";
 import { AskDock, handed, onItsOwn, Reply, shows } from "./MainView";
 import { PaneControls } from "./PaneControls";
 import { RoutineRow } from "./Routines";
+import { agentPart, setAgentPart, type AgentPart } from "./agentPart";
 import { AgentJobs, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 
-type Part = "talk" | "work" | "routines" | "memory";
-// each workspace's agent opens on the part it was left on
-const [part, setPart] = kept<Part>(() => inSpace(state.space, "agent.part"), "talk");
+type Part = AgentPart;
+const [part, setPart] = [agentPart, setAgentPart];
 
 /** the agent's chat in a space */
 export const agentKey = (space = state.space) => chatKey(space, AGENT_CHAT);

@@ -12,10 +12,16 @@ import { t } from "../i18n";
 import { addRoutine, removeRoutine, routineById, routineLine, routinesIn, runRoutine, runsOf, saveRoutine, SNOOZE_MIN, snoozeAlarm } from "../engine/routines";
 import { dayTime, describeWhen, EVENT_LABEL, MIN_EVERY, validTime } from "../engine/routineTime";
 import { EmptyState, PageHead, Switch_ } from "./Settings";
+import { setAgentPart } from "./agentPart";
 
 /** the routine the page opens with (a chat card's 수정) */
 export const [editing, setEditing] = createSignal<string | null>(null);
-const openRoutine = (id: string) => (setEditing(id), setView({ name: "settings", tab: "routines" }));
+/** A routine opened from a card: the Discord agent's in the agent's 루틴, the rest in Settings › 루틴. */
+const openRoutine = (id: string) => {
+  setEditing(id);
+  if (routineById(id)?.agent) setAgentPart("routines"), setView({ name: "agent" });
+  else setView({ name: "settings", tab: "routines" });
+};
 
 const DAYS = ["일|day", "월|day", "화|day", "수|day", "목|day", "금|day", "토|day"];
 type Kind = "daily" | "every" | "once" | "event";
