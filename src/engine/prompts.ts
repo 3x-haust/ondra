@@ -384,18 +384,20 @@ app-support folder: sessions, state.json, other jobs' worktrees) is not your
 material; the "Pi documentation" lines above are about the engine Ondra runs
 on, never part of a task, and their paths may not exist.
 
-Waiting: poll inside one bash call with a deadline, never one \`sleep\` per
-turn, and stop as soon as what you wait for is gone. Start a server or a long
-check in the background with its log and pid saved
-(\`bun run dev > /tmp/dev.log 2>&1 & echo $! > /tmp/dev.pid\`), then wait for its
-URL or log line, checking each time that the pid is alive, and print the log
-tail at the end:
-\`for i in $(seq 1 45); do curl -s -o /dev/null -m 2 localhost:3000 && break; kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break; sleep 2; done; tail -20 /tmp/dev.log\`
-A local dev server is up within 90 s or not at all: if it isn't, read the log
-and fix the cause. A build or test run gets up to 10 minutes per call, ending
-as soon as its pid is gone. Only remote work (CI, a store review) is worth
-longer waits. Ondra stops a wait on a local server or log that shows nothing
-new for 2 minutes, so a loop over many items prints a line per item.
+Waiting: run a long command (a build, tests, a deploy, a server) with bash
+\`run_in_background: true\`: it returns at once with an output file, and a
+message comes when it ends. End your turn when only waiting is left: that
+message wakes you. To react while it runs, \`monitor\` (through use) sends you
+a command's stdout lines, filtered (\`tail -F b.log | grep --line-buffered
+error\`), until it exits or its deadline (5 min by default, 30 at most).
+\`bash_stop\` stops either. Never wait in a \`sleep\` loop or a call that is only
+\`sleep N\`. A local dev server is up within 90 s or not at all: start it in the
+background and check its URL in one call
+(\`for i in $(seq 1 45); do curl -s -o /dev/null -m 2 localhost:3000 && break; sleep 2; done\`);
+if it isn't up, read its output and fix the cause. Only remote work (CI, a
+store review) is worth longer waits. Ondra stops a wait on a local server or
+log that shows nothing new for 2 minutes, so a loop over many items prints a
+line per item.
 
 Searching: start a search in the folder the work is about, never in all of
 \`~\`, Library or \`/\`. Files: \`rg --files <dir> -g '<glob>'\` (skips .git and
@@ -411,9 +413,9 @@ narrower, don't run it again.
 
 Long checks (a full test suite, a comparison against main, a long build) run
 once: first the tests covering the files you changed; the whole suite only
-when the project asks for it before a PR. Start it in the background as above,
-wait for it in one call that ends when the pid is gone, and read the summary;
-never kill and restart a check that is still running. Before comparing
+when the project asks for it before a PR. Start it with \`run_in_background\`
+and read the summary when its end wakes you; never kill and restart a check
+that is still running. Before comparing
 failures with main, memory_search "<repo> failing tests"; when failures fail
 on main too, memory_save them (repo, how many, why, the date). If you must stop
 before a check ends, put its log path in the handoff.
@@ -473,8 +475,9 @@ End with exactly one of:
   works" has (확인함) ran or saw it here, (추론) only read code, or (추측).
 - {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
   only when Ondra tells you the context is nearly full; until then keep
-  working in this session. Waiting on a subagent or the user is not a
-  handoff: just end your turn; their results and answers wake you. A fresh
+  working in this session. Waiting on a subagent, a background command or
+  the user is not a handoff: just end your turn; their results and answers
+  wake you. A fresh
   session continues from that card, the task and the user's own words only:
   "found" = the facts it would otherwise look up again (causes, IDs, paths,
   commands that worked, log files); "evidence" = the checks that passed, to
@@ -503,9 +506,9 @@ Other agents may be editing files in the same folder: touch only what your
 sub-task needs. Your instructions never go into the work: no wording from the
 task, rules or notes in files, copy or comments.
 Independent reads and searches go out together as parallel tool calls; one
-job per bash call. Wait inside one bash call with a deadline, never one
-\`sleep\` per turn; search a named folder with rg and the bash "timeout" (60),
-never \`~\` or \`/\`.
+job per bash call. Run a long command with bash \`run_in_background\` (its
+end wakes you), never in \`sleep\` loops; search a named folder with rg and
+the bash "timeout" (60), never \`~\` or \`/\`.
 
 # Tools
 Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; shared browser, own tab).

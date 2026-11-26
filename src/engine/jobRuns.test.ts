@@ -514,6 +514,14 @@ describe("a job waiting on its background commands", () => {
     expect(sent("prompt")[1]).toContain("background command or monitor has news");
   });
 
+  it("counts a command run in the background among those a restart may have stopped", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "b1", toolName: "bash", args: { command: "pnpm build", run_in_background: true } });
+    emit({ type: "tool_execution_start", toolCallId: "b2", toolName: "bash", args: { command: "pnpm test" } });
+    await tick();
+    expect(task("job").shells.map((s) => [s.command, !!s.background])).toEqual([["pnpm build", true], ["pnpm test", false]]);
+  });
+
   it("is not woken while it waits on the user's answer", async () => {
     await working([job()]);
     status(1, 0);

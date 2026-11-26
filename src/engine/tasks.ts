@@ -1723,7 +1723,7 @@ function handlers(id: string, run: Run) {
             }
             if (ev.toolName === "bash") {
               call.shellId = ev.toolCallId;
-              t.shells.push({ id: ev.toolCallId, command: call.detail ?? call.target, startedAt: Date.now(), tail: "", background: keepsRunning(call.detail ?? "") });
+              t.shells.push({ id: ev.toolCallId, command: call.detail ?? call.target, startedAt: Date.now(), tail: "", background: !!ev.args?.run_in_background || keepsRunning(call.detail ?? "") });
               if (t.shells.length > MAX_SHELLS) t.shells.splice(0, t.shells.length - MAX_SHELLS);
             }
             if (call.kind === "browser") t.browser = true;

@@ -78,7 +78,6 @@ describe("model prompts", () => {
     expect(forModel(TASK_SYSTEM, "gpt-5.6-sol")).not.toContain("never a harness");
     const claude = forModel(TASK_SYSTEM, "claude-opus-5-5").replace(/\s+/g, " ");
     expect(claude).toContain("the exact command you ran here, copied as it was");
-    expect(claude).toContain("a call that is only `sleep N`");
     expect(claude).toContain("read the SKILL.md before the first step");
     expect(claude).toContain("When the plan check or the review below applies, it is required");
     expect(claude).toContain("never end the turn with text");

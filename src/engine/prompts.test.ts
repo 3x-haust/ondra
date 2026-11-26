@@ -69,20 +69,23 @@ describe("coding defaults", () => {
     expect(p).toMatch(/short "timeout" to anything that renders, converts, builds, installs or downloads/);
   });
 
-  it("waits end when what they wait for is gone, with deadlines that fit", () => {
+  it("runs long commands in the background and waits for their end, never in sleep loops", () => {
     const p = flat(TASK_SYSTEM);
     for (const rule of [
-      "never one `sleep` per turn",
-      "`bun run dev > /tmp/dev.log 2>&1 & echo $! > /tmp/dev.pid`",
-      "kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break",
-      "tail -20 /tmp/dev.log",
+      "bash `run_in_background: true`",
+      "a message comes when it ends",
+      "End your turn when only waiting is left: that message wakes you",
+      "`monitor` (through use)",
+      "5 min by default, 30 at most",
+      "`bash_stop` stops either",
+      "Never wait in a `sleep` loop or a call that is only `sleep N`",
       "90 s", "2 minutes",
-      "wait for it in one call that ends when the pid is gone",
+      "read the summary when its end wakes you",
     ]) expect(p).toContain(rule);
-    // no blanket long poll: the only 10-minute wait is a build or test run's
-    expect(p.match(/10 minutes/g)).toHaveLength(1);
-    expect(p).toMatch(/build or test run gets up to 10 minutes/);
+    // no long poll inside a call: a long command's end wakes the job
+    expect(p).not.toMatch(/10 minutes/);
     expect(p).toMatch(/Only remote work \(CI, a store review\)/);
+    expect(flat(SUB_SYSTEM)).toContain("bash `run_in_background` (its end wakes you)");
   });
 
   it("waits for a login the user finishes instead of asking whether it's done", () => {
@@ -115,7 +118,7 @@ describe("coding defaults", () => {
 
   it("keeps the always-on worker prompts small", () => {
     // ~4 chars a token: 8.1k tokens before, 5.4k after; the catalog of pictures lives in the visual-report skill
-    expect(TASK_SYSTEM.length).toBeLessThan(23_550); // + plain writing (ASD-STE100), ask fields, live cards
+    expect(TASK_SYSTEM.length).toBeLessThan(23_650); // + plain writing (ASD-STE100), ask fields, live cards, background commands
     expect(SUB_SYSTEM.length).toBeLessThan(8_100); // + stack-diagram, logo-design, app-check routes
     for (const type of ["arch", "er", "deps", "classes", "trace", "states"]) {
       expect(TASK_SYSTEM).not.toContain(`{"type":"${type}"`);

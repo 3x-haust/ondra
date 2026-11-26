@@ -75,18 +75,6 @@ app-support folder: sessions, state.json, other jobs' worktrees) is never read
 or searched (another job is reached with job_read);`,
   ],
   [
-    `Waiting: poll inside one bash call with a deadline, never one \`sleep\` per
-turn,`,
-    `Waiting: poll inside one bash call with a deadline, never one \`sleep\` per
-turn and never a call that is only \`sleep N\`,`,
-  ],
-  [
-    `never one
-\`sleep\` per turn;`,
-    `never one
-\`sleep\` per turn or a call that is only \`sleep N\`;`,
-  ],
-  [
     `a test/build/run ref is a command you ran here that
   passed after your last code edit;`,
     `a test/build/run ref is the exact command you ran
