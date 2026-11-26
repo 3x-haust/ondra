@@ -75,4 +75,12 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     expect(sound).toMatch(/where !clients\.contains\(object\) \{\n\s+AudioHardwareDestroyAggregateDevice\(held\.device\)\n\s+AudioHardwareDestroyProcessTap\(held\.tap\)/);
     expect(readFileSync(join(__dirname, "../../src-tauri/Info.plist"), "utf8")).toContain("NSAudioCaptureUsageDescription");
   });
+
+  it("the pointer put back off the off-screen display lands where its arrow shows", () => {
+    // the arrow is drawn right of and below its tip: at the screen's very edge it was all but gone
+    const src = readFileSync(SOURCE, "utf8");
+    const back = src.slice(src.indexOf("let arrowRoom"), src.indexOf("/// Where a window that reaches onto"));
+    expect(back).toContain("s.maxX - min(arrowRoom.width");
+    expect(back).toContain("s.maxY - min(arrowRoom.height");
+  });
 });
