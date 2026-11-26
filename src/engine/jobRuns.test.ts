@@ -4,6 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
+import { checkEvidence } from "./proof";
 import { cardFromThread, decide, finishTask, mergeCards, pauseTask, resumeTask, sleptFor, startTask, stopStalledCommands, tell, turnUsage } from "./tasks";
 
 // What the Orbit jobs of 11-06 to 11-14 ran into: another job's words read as the user's, a job
@@ -473,5 +474,95 @@ describe("a turn's usage", () => {
   it("is never negative after a new session starts the counts again", () => {
     const u = turnUsage({ input: 900, output: 4000, cacheRead: 9000, cacheWrite: 0 } as never, { input: 900, output: 493, cacheRead: 9000, cacheWrite: 0 } as never, "default");
     expect(u!.output).toBe(493);
+  });
+});
+
+describe("a job waiting on its background commands", () => {
+  const status = (running: number, queued: number, more: { cmds?: string[]; ended?: Record<string, { code: number | null; tail: string }> } = {}) =>
+    emit({ type: "extension_ui_request", id: `s${running}${queued}`, method: "setStatus", statusKey: "background", statusText: JSON.stringify({ running, queued, cmds: more.cmds ?? Array(running).fill("pnpm build"), ended: more.ended ?? {} }) });
+  const ends = async (text: string) => {
+    emit({ type: "message_start", message: { role: "assistant" } });
+    emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
+    emit({ type: "message_end", message: { role: "assistant", stopReason: "stop" } });
+    emit({ type: "agent_settled" });
+    await tick();
+    await tick();
+  };
+
+  it("stays running while they run, and is woken once one ends", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends("빌드를 백그라운드로 돌렸어요. 끝나면 이어서 해요.");
+
+    expect(task("job").status).toBe("running");
+    expect(task("job").now).toBe("백그라운드 명령 1개 기다리는 중");
+    expect(sent("prompt")).toHaveLength(1);
+    expect(state.decisions).toEqual([]);
+
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(2);
+    expect(sent("prompt")[1]).toContain("background command or monitor has news");
+    expect(task("job").now).toBe("백그라운드 결과로 이어가는 중");
+  });
+
+  it("goes on at once when the news came before its turn's end was handled", async () => {
+    await working([job()]);
+    status(0, 1);
+    await ends("빌드가 끝나기를 기다려요.");
+
+    expect(sent("prompt")).toHaveLength(2);
+    expect(sent("prompt")[1]).toContain("background command or monitor has news");
+  });
+
+  it("counts a command run in the background among those a restart may have stopped", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "b1", toolName: "bash", args: { command: "pnpm build", run_in_background: true } });
+    emit({ type: "tool_execution_start", toolCallId: "b2", toolName: "bash", args: { command: "pnpm test" } });
+    await tick();
+    expect(task("job").shells.map((s) => [s.command, !!s.background])).toEqual([["pnpm build", true], ["pnpm test", false]]);
+  });
+
+  it("counts a background check by how it ended, not by its start", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "t1", toolName: "bash", args: { command: "pnpm test", run_in_background: true } });
+    emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: { content: [{ type: "text", text: "Started in the background as bg_1." }], details: { background: "bg_1" } } });
+    await tick();
+    const proof = () => checkEvidence(task("job"), [{ kind: "test", ref: "pnpm test" }]);
+    expect((await proof())[0]).toMatchObject({ ok: false, why: "백그라운드에서 아직 끝나지 않았어요" });
+
+    status(0, 0, { cmds: [], ended: { t1: { code: 1, tail: "1 failed" } } });
+    await tick();
+    expect(task("job").shells[0]).toMatchObject({ ok: false, tail: "1 failed" });
+    expect((await proof())[0]).toMatchObject({ ok: false, check: "failed" });
+  });
+
+  it("doesn't wait for a server it left running", async () => {
+    await working([job()]);
+    status(1, 0, { cmds: ["pnpm dev"] });
+    await ends("개발 서버를 띄웠어요.");
+    expect(task("job").now).not.toBe("백그라운드 명령 1개 기다리는 중");
+    expect(sent("prompt")[1]).toContain("without a done block");
+  });
+
+  it("waits on the user when its last words ask them, even with a build running", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends("병합 완료를 알려주시면 이어갈게요.");
+    expect(task("job").status).toBe("waiting");
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(1);
+  });
+
+  it("is not woken while it waits on the user's answer", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends('```blocks\n{"type":"ask","question":"어느 쪽으로 배포할까요?","options":[{"label":"스테이징"},{"label":"운영"}]}\n```');
+    expect(task("job").status).toBe("waiting");
+
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(1);
   });
 });

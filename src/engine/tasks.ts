@@ -140,6 +140,11 @@ interface Run {
   /** searches and waits the watchdog already tried to stop */
   searchStops?: Set<string>;
   waitStops?: Set<string>;
+  /** its background commands and watches (extensions/background.ts): how many run, and how many
+   *  messages from them wait for its next turn */
+  bg?: Bg;
+  /** its turn ended and it waits on something that wakes it (subagents, background commands) */
+  idle?: boolean;
 }
 
 
@@ -1621,7 +1626,15 @@ function handlers(id: string, run: Run) {
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
+          run.idle = false;
           run.turnStart ||= Date.now();
+          break;
+        case "extension_ui_request":
+          if (ev.method !== "setStatus" || ev.statusKey !== BG_STATUS) break;
+          run.bg = readBg(ev.statusText);
+          endBackground(id, run.bg.ended);
+          // a command ended (or a watch spoke) after its turn ended: it goes on with that now
+          if (run.bg.queued && run.idle) void wakeForBackground(id, run);
           break;
         case "message_start":
           // a message it was sent goes into the conversation: the model has it now
@@ -1711,7 +1724,7 @@ function handlers(id: string, run: Run) {
             }
             if (ev.toolName === "bash") {
               call.shellId = ev.toolCallId;
-              t.shells.push({ id: ev.toolCallId, command: call.detail ?? call.target, startedAt: Date.now(), tail: "", background: keepsRunning(call.detail ?? "") });
+              t.shells.push({ id: ev.toolCallId, command: call.detail ?? call.target, startedAt: Date.now(), tail: "", background: !!ev.args?.run_in_background || keepsRunning(call.detail ?? ""), ...(ev.args?.run_in_background ? { runInBackground: true } : {}) });
               if (t.shells.length > MAX_SHELLS) t.shells.splice(0, t.shells.length - MAX_SHELLS);
             }
             if (call.kind === "browser") t.browser = true;
@@ -1741,7 +1754,9 @@ function handlers(id: string, run: Run) {
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           // a search that found nothing (exit 1) is an answer, not a failed step
           const failed = !!ev.isError && !(done?.kind === "tool" && done.tool.name === "bash" && answeredNo(done.tool.target ?? "", out));
-          if (done?.kind === "tool") loopGuard(id, run, done.tool, !failed);
+          // started in the background: it has neither passed nor failed yet (endBackground says when)
+          const inBackground = !!ev.result?.details?.background && !failed;
+          if (done?.kind === "tool" && !inBackground) loopGuard(id, run, done.tool, !failed);
           // a fork's plan that stopped moving: ask where it is. Subagents and reviews
           // aren't asked (their list is short-lived), and a fork at most twice a session:
           // 225 reminders in 312 sessions bought a status line, not a fix.
@@ -1779,7 +1794,8 @@ function handlers(id: string, run: Run) {
               if (shot) t.shot = shot;
             }
             const sh = t.shells.find((s) => s.id === ev.toolCallId);
-            if (sh) {
+            if (sh && inBackground) sh.runInBackground = true;
+            else if (sh) {
               sh.endedAt = Date.now();
               sh.ok = !failed;
               if (typeof out === "string") sh.tail = out.slice(-TAIL);
@@ -1877,6 +1893,20 @@ export async function reattachJobs() {
     // idle while "running": the turn ended unheard. Its last answer, unless it was heard before the reload.
     const msgs: any[] = (await request(agent, { type: "get_messages" }, 15000).catch(() => null))?.messages ?? [];
     if (runs.get(id) !== run || run.streaming || run.ended) continue;
+    // its background commands: news that came after its turn goes on now; still running, it waits
+    // (extensions/background.ts says how they end once it next sends its status)
+    if (msgs[msgs.length - 1]?.customType === BG_STATUS) {
+      await wakeForBackground(id, run);
+      continue;
+    }
+    const open = (taskById(id)?.shells ?? []).filter((s) => s.runInBackground && !s.endedAt);
+    if (open.length) {
+      run.bg = { running: open.length, queued: 0, cmds: open.map((s) => s.command), ended: {} };
+      if (awaitedBackground(run.bg)) {
+        run.idle = true;
+        continue;
+      }
+    }
     const last = [...msgs].reverse().find((m) => m?.role === "assistant");
     const at = Number(last?.timestamp ?? 0);
     const text = Array.isArray(last?.content) ? last.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("") : "";
@@ -2133,7 +2163,25 @@ async function settle(id: string, run: Run) {
   // Stopped without done / handoff / ask.
   // its last words wait on the user ("병합해 주세요", "알려주시면 이어갈게요"): it needs an answer, not "finished?"
   const said = lastWords(t);
-  if (said && waitsOnUser(said)) {
+  const userTurn = !!said && waitsOnUser(said);
+  // paused or stopped while the numbers above were fetched
+  if (runs.get(id) !== run) return;
+  // a background command ended, or a watch spoke, while no turn ran: it goes on with that now
+  if (!userTurn && run.bg?.queued) {
+    await wakeForBackground(id, run);
+    return;
+  }
+  // background commands it waits for (a server left running is not one): their end wakes it
+  const waitFor = awaitedBackground(run.bg);
+  if (!userTurn && waitFor) {
+    run.idle = true;
+    updateTask(id, (x) => {
+      x.status = "running";
+      x.now = `백그라운드 명령 ${waitFor}개 기다리는 중`;
+    });
+    return;
+  }
+  if (userTurn) {
     if (drainQueue(id)) return;
     updateTask(id, (x) => {
       x.status = "waiting";
@@ -2179,6 +2227,65 @@ async function settle(id: string, run: Run) {
   });
 }
 
+/** The status extensions/background.ts sends (its Status), or nothing before anything ran. */
+const BG_STATUS = "background";
+type Bg = { running: number; queued: number; cmds: string[]; ended: Record<string, { code: number | null; tail: string }> };
+export function readBg(text: unknown): Bg {
+  try {
+    const v = typeof text === "string" ? JSON.parse(text) : {};
+    return {
+      running: Number(v?.running) || 0,
+      queued: Number(v?.queued) || 0,
+      cmds: Array.isArray(v?.cmds) ? v.cmds.map(String) : [],
+      ended: v?.ended && typeof v.ended === "object" ? v.ended : {},
+    };
+  } catch {
+    return { running: 0, queued: 0, cmds: [], ended: {} };
+  }
+}
+
+/** How many of its background commands it waits for: a server or watcher it left running never ends. */
+export function awaitedBackground(bg: Bg | undefined): number {
+  if (!bg?.running) return 0;
+  // monitors (running beyond the bash commands) end at their deadline
+  const watches = Math.max(0, bg.running - bg.cmds.length);
+  return watches + bg.cmds.filter((c) => !keepsRunning(c)).length;
+}
+
+/** Its backgrounded bash calls that ended: their shell and step get the real exit code. */
+function endBackground(id: string, ended: Bg["ended"]) {
+  const open = (t: Task) => t.shells.filter((s) => s.runInBackground && !s.endedAt && ended[s.id]);
+  const t = taskById(id);
+  if (!t || !open(t).length) return;
+  updateTask(id, (x) => {
+    for (const sh of open(x)) {
+      const { code, tail } = ended[sh.id];
+      sh.endedAt = Date.now();
+      sh.tail = String(tail ?? "").slice(-TAIL);
+      if (code === null) sh.stopped = true;
+      else sh.ok = code === 0;
+      const e = x.entries.find((e) => e.kind === "tool" && e.tool.shellId === sh.id);
+      if (e?.kind === "tool" && code !== null) e.tool.ok = code === 0;
+    }
+  });
+}
+
+/** Its background news waits in the engine for the next turn: start that turn. */
+async function wakeForBackground(id: string, run: Run) {
+  run.idle = false;
+  updateTask(id, (x) => {
+    x.status = "running";
+    x.now = "백그라운드 결과로 이어가는 중";
+  });
+  try {
+    run.turnStart = Date.now();
+    await request(agentOf(id), { type: "prompt", message: BG_WAKE });
+  } catch {
+    // a turn started meanwhile (a subagent's result, the user): the news goes in with it
+  }
+}
+const BG_WAKE = "(Ondra) Your background command or monitor has news (the message above). Carry on from it.";
+
 /** A handoff card whose only next step is waiting (for the user, a result, a review). */
 export function onlyWaits(card: Handoff): boolean {
   const next = (card.next ?? "").trim();
@@ -2223,6 +2330,9 @@ export function cardFromThread(t: Task): Handoff {
 async function newSession(id: string, run: Run, card: Handoff, to?: string) {
   clearExtensionUi(id);
   const agent = agentOf(id);
+  // the old session's background commands stop with it
+  run.bg = undefined;
+  run.idle = false;
   run.longNudges = 0;
   run.limitAsked = false;
   updateTask(id, (x) => {
@@ -2232,6 +2342,7 @@ async function newSession(id: string, run: Run, card: Handoff, to?: string) {
       leg.handoff = card;
     }
     x.legs.push({ startedAt: Date.now() });
+    for (const sh of x.shells) if (sh.runInBackground && !sh.endedAt) Object.assign(sh, { endedAt: Date.now(), stopped: true });
     x.status = "running";
     x.now = "새 세션으로 이어가는 중";
     push(x, { kind: "handoff", leg: x.legs.length, handoff: card });
@@ -3208,7 +3319,7 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
         void request(agentOf(id), {
           type: "steer",
           message:
-            "(Ondra) You are checking on the same thing turn after turn. Wait for it in one bash call instead: `for i in $(seq 1 60); do <is it done?> && break; <is it still running?> || break; sleep 10; done; <show the result>`. Give it a deadline that fits: 90s for a local server, 10 minutes for a build or test run, longer only for CI or a store review. Don't stop or restart what is running.",
+            "(Ondra) You are checking on the same thing turn after turn. Stop looking in on it: a command you started with bash run_in_background sends a message when it ends, so end your turn if only waiting is left. For something else (a log, CI, a status), start `monitor` (through use) with a command that prints a line only when it changes or is done, and end your turn; its lines wake you. Don't stop or restart what is running.",
         }).catch(() => {});
     }
     return;

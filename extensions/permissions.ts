@@ -379,8 +379,10 @@ export default function (pi: any) {
       const hit = foreignData(JSON.stringify(event.input ?? {}), data, allowed, process.env.ONDRA_SPACE_KEY ?? "");
       if (hit) return { block: true, reason: `Ondra 데이터(${hit})는 이 일의 것이 아니에요. 필요한 건 일에 주어진 내용과 작업 폴더에서 찾으세요.` };
     }
+    // a watch (background.ts monitor) runs a shell command too: the same rules and questions
+    const shell = event.toolName === "bash" || event.toolName === "monitor";
     // in every mode: killing by name also kills the user's own apps (Electron → Discord, VS Code)
-    if (event.toolName === "bash") {
+    if (shell) {
       const host = hostComputerUse(String(event.input?.command ?? ""));
       if (host) return { block: true, reason: `${host}는 이 실행 경로에서 지원하지 않아요. ${HOST_POLICY}` };
       const broad = broadKill(String(event.input?.command ?? ""), ctx.cwd);
@@ -425,7 +427,7 @@ export default function (pi: any) {
     const input = event.input ?? {};
     let question: string | undefined;
     let action = "";
-    if (name === "bash") {
+    if (shell) {
       const command = String(input.command ?? "");
       if (mode === "auto" && quietCommand(command)) return undefined;
       question = `명령을 실행해도 될까요?\n\n${command.slice(0, 600)}`;
