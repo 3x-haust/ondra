@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
-import { pauseTask, REPLAN_CALLS, sendNow, startTask, tell } from "./tasks";
+import { pauseTask, REPLAN_CALLS, startTask, tell } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Survey",
@@ -73,6 +73,7 @@ describe("the user's words while the job works", () => {
     await tell("job", "배포는 mmhs app 써줘", { now: true });
     const steer = sent("steer")[0];
     expect(steer).toMatch(/^배포는 mmhs app 써줘\n\n\(Ondra\) The user said this while you were working/);
+    expect(steer).toContain("Answer them first, now");
     expect(steer).toContain("by what depends on what");
     expect(steer).toContain("send the updated plan block before any other tool call");
     // the to-do list shows them at once, until the job places them
@@ -86,20 +87,25 @@ describe("the user's words while the job works", () => {
     expect(sent("steer")[0]).toContain("Ondra stopped `ssh -n ubuntu-125-186-161-87");
     await vi.waitFor(() => expect(native.agentStopCommand).toHaveBeenCalledTimes(1));
     expect(vi.mocked(native.agentStopCommand).mock.calls[0].slice(0, 2)).toEqual(["t:job", "bash"]);
-    expect(task().entries.some((e) => e.kind === "note" && e.text === "기다림 멈춤 · 새 메시지를 바로 전해요")).toBe(true);
+    expect(task().entries.some((e) => e.kind === "note" && e.text === "명령 멈춤 · 새 메시지를 바로 전해요")).toBe(true);
   });
 
-  it("leave real work and a wait that just began alone; the user can stop it", async () => {
+  it("stop real work and a wait that just began too, and tell the job they were cut", async () => {
     await working();
     bash("pnpm build --filter web");
-    bash("sleep 30 && gh run view 1", 500);
-    await tell("job", "설문도 만들어줘", { now: true });
-    expect(sent("steer")[0]).not.toContain("Ondra stopped");
-    expect(native.agentStopCommand).not.toHaveBeenCalled();
-
-    sendNow("job");
+    bash("for i in $(seq 1 60); do aws sts get-caller-identity && break; sleep 5; done", 500);
+    await tell("job", "로그인 했어", { by: "main", now: true });
+    expect(sent("steer")).toHaveLength(1);
+    expect(sent("steer")[0]).toContain("Ondra stopped `pnpm build --filter web`, `for i in $(seq 1 60)");
+    expect(sent("steer")[0]).toContain("cut off, not finished");
     await vi.waitFor(() => expect(native.agentStopCommand).toHaveBeenCalledTimes(2));
-    expect(last(sent("steer"))).toContain("The user stopped `pnpm build --filter web`");
+  });
+
+  it("from another job, wait for the running command", async () => {
+    await working();
+    bash("pnpm build --filter web");
+    await tell("job", "(Ondra) A message from another job", { by: "t2" });
+    expect(native.agentStopCommand).not.toHaveBeenCalled();
   });
 
   it("not placed after a few tool calls: the job is asked once", async () => {

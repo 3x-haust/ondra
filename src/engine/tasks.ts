@@ -28,7 +28,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentStopCommand
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
-import { answeredNo, commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
+import { answeredNo, commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { causeFooting, checkEvidence, isBugFix, isCodeFile, leftovers, promisesLater, readUnverified, reproGap, reviewUnresolved, riskyChange, unbackedChecked, unbackedClaim, uncheckedLine, unreasoned } from "./proof";
 import { checksCovering, checksFor, checksOwed, loadLocalChecks } from "./localChecks";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
@@ -3231,48 +3231,28 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
 
 /** what the model is told with the user's words said while it worked */
 const midNote = (open: boolean) =>
-  `\n\n(Ondra) The user said this while you were working. Before your next tool call, decide where it goes:
-- a question: answer it in a sentence or two, don't change files for it, and go on.
-- a change to the step you are on: apply it now.
-- something for a later step (how to deploy, what to check at the end) or new work: don't jump to it. Put it in your plan where it belongs by what depends on what, not by when it came (a survey that ships with the deploy is built before the deploy), with "user": true. Say in one line where it went ("설문 먼저 끝내고, 배포할 때 말씀하신 방식으로 할게요"), finish the small step in your hands, and go on in plan order.
+  `\n\n(Ondra) The user said this while you were working. Answer them first, now: a short reply in your own voice before your next tool call, the way someone busy with something else looks up and answers, not after the step in your hands is over. Then decide where it goes:
+- a question: the reply is the answer, a sentence or two; don't change files for it, and go on.
+- a change to the step you are on: say so and apply it now.
+- something for a later step (how to deploy, what to check at the end) or new work: don't jump to it. Put it in your plan where it belongs by what depends on what, not by when it came (a survey that ships with the deploy is built before the deploy), with "user": true. The reply says where it went ("설문 먼저 끝내고, 배포할 때 말씀하신 방식으로 할게요"); finish the small step in your hands, and go on in plan order.
 - stop, now, or instead of what you are doing: switch now.
 ${open ? "Added or changed work: send the updated plan block before any other tool call." : "Added work: send a plan block with the whole job in it (what is done, this, what is left) before any other tool call."}`;
 
-/** a wait younger than this is about to answer on its own */
-const WAIT_STOP_AFTER_MS = 3000;
 /**
- * Commands of its own still running that keep the user's words from it: ones that only wait or look
- * (sleep, pgrep, tail, a status check, here or over ssh), or with `all` every one (the user asked).
+ * Its own commands still running in the foreground: steered words wait for them, so the user's go in
+ * only once they are stopped. Left running on purpose (a dev server, a watcher) is not among them.
  */
-function waitsToStop(id: string, run: Run, all = false) {
-  const now = Date.now();
+function commandsToStop(id: string, run: Run) {
   const live = (taskById(id)?.shells ?? []).filter((s) => run.tools.has(s.id) && !s.endedAt && !s.background);
   return live.flatMap((s) => {
-    if (!all && (now - s.startedAt < WAIT_STOP_AFTER_MS || !waitsOnly(s.command))) return [];
     const arg = shellArg(s.command, live.filter((x) => x.id !== s.id).map((x) => x.command));
     return arg ? [{ id: s.id, command: s.command, arg }] : [];
   });
 }
 /** the shells running them (`/bin/bash -c <command>`): the call returns and the steered words go in */
-function stopShells(id: string, list: { arg: string }[], note: string) {
+function stopShells(id: string, list: { arg: string }[]) {
   for (const w of list) void agentStopCommand(agentOf(id), "bash", w.arg).catch(() => 0);
-  updateTask(id, (t) => void push(t, { kind: "note", text: note }));
-}
-
-/** The user's words wait on a command doing real work (a build, a test): the user stops it to get them in now. */
-export function sendNow(id: string) {
-  { const r = far(id, "sendNow", [id]); if (r) return r as never; }
-  const run = runs.get(id);
-  if (!run?.streaming) return;
-  const list = waitsToStop(id, run, true);
-  if (!list.length) return;
-  const cmds = list.map((w) => `\`${shortCmd(w.command)}\``).join(", ");
-  void request(agentOf(id), {
-    type: "steer",
-    message: `(Ondra) The user stopped ${cmds} to get their message to you now. If it was work the plan still needs (a build, a test, a deploy), run it again when you are back at that step.`,
-  })
-    .catch(() => {})
-    .then(() => stopShells(id, list, "명령 멈춤 · 새 메시지를 바로 전해요"));
+  updateTask(id, (t) => void push(t, { kind: "note", text: "명령 멈춤 · 새 메시지를 바로 전해요" }));
 }
 
 /** A word from Ondra itself to a job at work: taken after its current step, not shown in its
@@ -3345,10 +3325,10 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     // said in the middle of the work: placed in the plan by what depends on what, not done on arrival.
     // Only the user's (or main relaying them): a job's message already says it is not the user
     const mid = !!run?.streaming && (!opts.by || opts.by === "main");
-    // a command that only waits or looks would keep these words from it for minutes: it stops
-    const waits = mid && run ? waitsToStop(id, run) : [];
-    const stopNote = waits.length
-      ? `\n\n(Ondra) To bring you this now, Ondra stopped ${waits.map((w) => `\`${shortCmd(w.command)}\``).join(", ")}: it only waited or looked, and what it waited on still runs. Look again once if you still need it.`
+    // a running command would keep these words from it until it ends (a login poll, a build): it stops
+    const cut = mid && run ? commandsToStop(id, run) : [];
+    const stopNote = cut.length
+      ? `\n\n(Ondra) To bring you this now, Ondra stopped ${cut.map((w) => `\`${shortCmd(w.command)}\``).join(", ")}: its result above is cut off, not finished. If you still need it (a build, a test, a deploy, a wait), run it again when you are back at that step; what a wait waited on still runs.`
       : "";
     // the user's words may change the plan: the model is asked to update it (the user sees only their words)
     const planNote = !mid && open ? "\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step." : "";
@@ -3363,7 +3343,7 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     }
     try {
       await request(agent, run?.streaming ? { type: "steer", message: sent } : { type: "prompt", message: sent });
-      if (waits.length) stopShells(id, waits, "기다림 멈춤 · 새 메시지를 바로 전해요");
+      if (cut.length) stopShells(id, cut);
     } catch (e) {
       if (run?.replanFor === sent) run.replanFor = undefined;
       updateTask(id, (x) => (x.planAsk = undefined));

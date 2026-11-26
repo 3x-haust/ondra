@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PlanStep } from "../state/types";
 import { closePlan, moveTo, nextPlan, openAsked, planText, stepAt, unexplained } from "./plan";
-import { answeredNo, unwrapSsh, waitsOnly } from "./commandKind";
+import { answeredNo } from "./commandKind";
 
 const states = (plan: PlanStep[]) => plan.map((s) => [s.state, ...(s.sub ?? []).map((x) => x.state)].join(" "));
 
@@ -145,46 +145,6 @@ describe("planText", () => {
   it("indents smaller steps and says which the user asked for", () => {
     const p = nextPlan([], ["A", { text: "B", user: true, sub: ["b0"] }]);
     expect(planText(p)).toEqual(["[>] A", "[ ] B (user asked)", "    [ ] b0"]);
-  });
-});
-
-describe("waitsOnly", () => {
-  it("sees waits and looks, here and over ssh", () => {
-    for (const c of [
-      `ssh -n ubuntu-125-186-161-87 'pgrep -f "docker build" || echo done'`,
-      `for i in $(seq 1 60); do ssh -n host 'pgrep -f "docker build"' >/dev/null || break; sleep 10; done; ssh host 'tail -5 /tmp/build.log'`,
-      "sleep 300",
-      "gh run watch 42159843976",
-      "for i in $(seq 1 30); do gh run view 1 --json status | jq -r .status; sleep 20; done",
-      `ssh -n ubuntu-125-186-161-87 'kubectl get cm,secret -A 2>/dev/null | grep -i mmhs'`,
-      "docker logs -f web",
-      // a CI wait with its run id kept in a variable and a jq filter piping inside its quotes
-      `cd "$APP_SCRATCH_DIR/probe"; R=45578109180; for i in $(seq 1 50); do s=$(gh run view $R --json jobs -q '[.jobs[] | .name[7:14] + ":" + .status + ":" + .conclusion + ":" + ([.steps[]|select(.status=="completed")|.name]|last)] | join(" | ")'); echo "$s"; echo "$s" | grep -q "ubuntu-:completed" && break; sleep 25; done`,
-      `for i in $(seq 1 60); do s=$(gh pr checks 839 -R 3x-haust/ondra 2>/dev/null | rg -c 'pending' ); [ "\${s:-0}" = 0 ] && break; sleep 10; done`,
-    ])
-      expect(waitsOnly(c), c).toBe(true);
-  });
-
-  it("never real work, here or over ssh", () => {
-    for (const c of [
-      "pnpm build",
-      `ssh -n host 'cd app && docker build -t web .'`,
-      "ssh host 'kubectl apply -f deploy.yaml'",
-      "docker compose up -d --build",
-      "curl -sL -o app.zip https://example.com/app.zip",
-      "curl -X POST https://example.com/hook",
-      "pnpm test",
-      // work inside $(…) or a double-quoted $(…) is still work
-      "for i in $(seq 1 3); do out=$(pnpm build); sleep 1; done",
-      `echo "$(pnpm build)"`,
-      `R=1; gh run rerun $R`,
-    ])
-      expect(waitsOnly(c), c).toBe(false);
-  });
-
-  it("unwraps the quoted remote command", () => {
-    expect(unwrapSsh(`ssh -n h 'pgrep -f "docker build"'`)).toBe(`pgrep -f "docker build"`);
-    expect(unwrapSsh(`x; ssh -p 22 h "tail -f log"`)).toBe("x; tail -f log");
   });
 });
 
