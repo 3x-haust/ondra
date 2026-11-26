@@ -3309,13 +3309,14 @@ func startWindowKeeper() {
 // ───────────────────────── the job apps' sound ─────────────────────────
 /// The apps a job runs make no sound on the user's Mac: an on-screen keyboard's clicks in a
 /// remote PC, a chime, a video. Each audio client that is a job's app or one of its processes
-/// (Chromium plays from a helper it starts) gets a private, muted process tap (macOS 14.2+):
-/// while the tap exists Core Audio sends that process's audio nowhere. The tap goes when the app
-/// is no longer the job's, and with this helper. The first tap asks for the system audio
-/// recording permission (nothing is recorded: the tap is never read); refused, apps play as before.
+/// (Chromium plays from a helper it starts) gets a private, muted process tap (macOS 14.2+), put
+/// in a private aggregate device of its own: a muted tap silences its process only while a device
+/// holds it (a tap alone left the sound playing; with the device it stopped, checked by ear, and
+/// nothing asked for a permission). Nothing reads the tap, so nothing is recorded. Both go when the
+/// app is no longer the job's, and with this helper.
 enum JobSound {
-    /// audio process object → its tap
-    static var taps: [AudioObjectID: AudioObjectID] = [:]
+    /// audio process object → its tap and the device holding it
+    static var taps: [AudioObjectID: (tap: AudioObjectID, device: AudioObjectID)] = [:]
     /// clients a tap failed for (one that just quit), and failures in a row: three is a refusal
     static var failed = Set<AudioObjectID>()
     static var failures = 0
@@ -3324,8 +3325,9 @@ enum JobSound {
     static func keepQuiet(_ apps: Set<pid_t>) {
         guard #available(macOS 14.2, *), !refused else { return }
         let clients = apps.isEmpty ? [] : audioClients().filter { descends($0.pid, from: apps) }.map(\.object)
-        for (object, tap) in taps where !clients.contains(object) {
-            AudioHardwareDestroyProcessTap(tap)
+        for (object, held) in taps where !clients.contains(object) {
+            AudioHardwareDestroyAggregateDevice(held.device)
+            AudioHardwareDestroyProcessTap(held.tap)
             taps[object] = nil
         }
         for object in clients where taps[object] == nil && !failed.contains(object) {
@@ -3334,14 +3336,24 @@ enum JobSound {
             d.muteBehavior = .muted
             d.name = "Ondra: a job's app, muted"
             var tap = AudioObjectID(kAudioObjectUnknown)
-            let status = AudioHardwareCreateProcessTap(d, &tap)
-            guard status == noErr, tap != kAudioObjectUnknown else {
-                dbgLog("sound: no tap for \(object) (\(status))")
+            var status = AudioHardwareCreateProcessTap(d, &tap)
+            var device = AudioObjectID(kAudioObjectUnknown)
+            if status == noErr, tap != kAudioObjectUnknown {
+                let holder: [String: Any] = [
+                    kAudioAggregateDeviceNameKey: "Ondra: a job's app, muted", kAudioAggregateDeviceUIDKey: "dev.3xhaust.ondra.mute.\(UUID().uuidString)",
+                    kAudioAggregateDeviceIsPrivateKey: true, kAudioAggregateDeviceTapAutoStartKey: true,
+                    kAudioAggregateDeviceTapListKey: [[kAudioSubTapUIDKey: d.uuid.uuidString]],
+                ]
+                status = AudioHardwareCreateAggregateDevice(holder as CFDictionary, &device)
+                if status != noErr || device == kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tap); tap = AudioObjectID(kAudioObjectUnknown) }
+            }
+            guard tap != kAudioObjectUnknown else {
+                dbgLog("sound: no muted tap for \(object) (\(status))")
                 failed.insert(object); failures += 1
                 if refused { return }
                 continue
             }
-            taps[object] = tap; failures = 0
+            taps[object] = (tap, device); failures = 0
             dbgLog("sound: muted audio client \(object)")
         }
     }

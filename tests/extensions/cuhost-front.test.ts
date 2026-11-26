@@ -70,7 +70,9 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     // a private tap that sends the process's audio nowhere, and goes when the app is no longer the job's
     expect(sound).toContain("d.muteBehavior = .muted");
     expect(sound).toContain("d.isPrivate = true");
-    expect(sound).toMatch(/where !clients\.contains\(object\) \{\n\s+AudioHardwareDestroyProcessTap\(tap\)/);
+    // a tap mutes only while a device holds it
+    expect(sound).toContain("kAudioAggregateDeviceTapListKey: [[kAudioSubTapUIDKey: d.uuid.uuidString]]");
+    expect(sound).toMatch(/where !clients\.contains\(object\) \{\n\s+AudioHardwareDestroyAggregateDevice\(held\.device\)\n\s+AudioHardwareDestroyProcessTap\(held\.tap\)/);
     expect(readFileSync(join(__dirname, "../../src-tauri/Info.plist"), "utf8")).toContain("NSAudioCaptureUsageDescription");
   });
 });
