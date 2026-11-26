@@ -169,6 +169,7 @@ export default {
   "증거를 채우는 중": "Gathering evidence",
   "답을 기다리는 중": "Waiting for a reply",
   "새 세션으로 이어가는 중": "Continuing in a new session",
+  "백그라운드 결과로 이어가는 중": "Continuing from background results",
   "답변함": "Answered",
   "일시정지됨": "Paused",
   "다시 하는 중": "Retrying",
@@ -177,6 +178,7 @@ export default {
   "{f} 수정 중": "Editing {f}",
   "{f} 작성 중": "Writing {f}",
   "서브에이전트 {n}개 기다리는 중": "Waiting for {n} subagent|Waiting for {n} subagents",
+  "백그라운드 명령 {n}개 기다리는 중": "Waiting for {n} background command|Waiting for {n} background commands",
 
   // notes in a task's thread (stored in Korean, shown through noteText())
   "이전 작업의 리뷰가 그대로 유효해요": "The previous task's review still holds",

@@ -27,7 +27,7 @@ const fill = (s: string, vars?: Record<string, string>) => (vars ? s.replace(/\{
 const S = (label: string, now: string, target?: string, vars?: Record<string, string>): Said => ({ label: t(label, vars), now: t(now, vars), nowKo: fill(now, vars), target });
 
 /** The shapes a stored "now" line takes when a name is filled in (the rest are plain t() keys). */
-const NOW_FORMS = ["{f} 읽는 중", "{f}에 적는 중", "{f} 수정 중", "{f} 작성 중", "서브에이전트 {n}개 기다리는 중", "{h} 요청 중", "{p} 실행 중"];
+const NOW_FORMS = ["{f} 읽는 중", "{f}에 적는 중", "{f} 수정 중", "{f} 작성 중", "서브에이전트 {n}개 기다리는 중", "백그라운드 명령 {n}개 기다리는 중", "{h} 요청 중", "{p} 실행 중"];
 const escape = (s: string) => s.replace(/[.*+?^$()[\]\\|]/g, "\\$&");
 const FORM_RES = NOW_FORMS.map((f) => ({ f, keys: [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]), re: new RegExp(`^${escape(f).replace(/\{\w+\}/g, "(.+?)")}$`) }));
 

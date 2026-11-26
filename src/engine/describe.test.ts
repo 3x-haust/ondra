@@ -155,6 +155,7 @@ describe("nowText", () => {
     expect(nowText("tool.py 실행 중")).toBe("Running tool.py");
     expect(nowText("서브에이전트 1개 기다리는 중")).toBe("Waiting for 1 subagent");
     expect(nowText("서브에이전트 3개 기다리는 중")).toBe("Waiting for 3 subagents");
+    expect(nowText("백그라운드 명령 1개 기다리는 중")).toBe("Waiting for 1 background command");
     // what the model wrote stays as written
     expect(nowText("프로 요금제 결제 버튼을 누르는 중")).toBe("프로 요금제 결제 버튼을 누르는 중");
     expect(nowText("a | b")).toBe("a | b");

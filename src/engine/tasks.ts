@@ -140,6 +140,11 @@ interface Run {
   /** searches and waits the watchdog already tried to stop */
   searchStops?: Set<string>;
   waitStops?: Set<string>;
+  /** its background commands and watches (extensions/background.ts): how many run, and how many
+   *  messages from them wait for its next turn */
+  bg?: { running: number; queued: number };
+  /** its turn ended and it waits on something that wakes it (subagents, background commands) */
+  idle?: boolean;
 }
 
 
@@ -1621,7 +1626,14 @@ function handlers(id: string, run: Run) {
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
+          run.idle = false;
           run.turnStart ||= Date.now();
+          break;
+        case "extension_ui_request":
+          if (ev.method !== "setStatus" || ev.statusKey !== BG_STATUS) break;
+          run.bg = readBg(ev.statusText);
+          // a command ended (or a watch spoke) after its turn ended: it goes on with that now
+          if (run.bg.queued && run.idle) void wakeForBackground(id, run);
           break;
         case "message_start":
           // a message it was sent goes into the conversation: the model has it now
@@ -2099,11 +2111,17 @@ async function settle(id: string, run: Run) {
     await newSession(id, run, card);
     return;
   }
-  // Subagents still working: wait for them; their results wake it up.
-  if (activeKids(id).length) {
+  // a background command ended, or a watch spoke, while no turn ran: it goes on with that now
+  if (run.bg?.queued) {
+    await wakeForBackground(id, run);
+    return;
+  }
+  // Subagents or background commands still working: wait for them; their results wake it up.
+  if (activeKids(id).length || run.bg?.running) {
+    run.idle = true;
     updateTask(id, (x) => {
       x.status = "running";
-      x.now = `서브에이전트 ${activeKids(id).length}개 기다리는 중`;
+      x.now = activeKids(id).length ? `서브에이전트 ${activeKids(id).length}개 기다리는 중` : `백그라운드 명령 ${run.bg!.running}개 기다리는 중`;
     });
     return;
   }
@@ -2178,6 +2196,33 @@ async function settle(id: string, run: Run) {
     x.unread = true;
   });
 }
+
+/** The status extensions/background.ts sends: {running, queued}, or nothing once all is over. */
+const BG_STATUS = "background";
+export function readBg(text: unknown): { running: number; queued: number } {
+  try {
+    const v = typeof text === "string" ? JSON.parse(text) : {};
+    return { running: Number(v?.running) || 0, queued: Number(v?.queued) || 0 };
+  } catch {
+    return { running: 0, queued: 0 };
+  }
+}
+
+/** Its background news waits in the engine for the next turn: start that turn. */
+async function wakeForBackground(id: string, run: Run) {
+  run.idle = false;
+  updateTask(id, (x) => {
+    x.status = "running";
+    x.now = "백그라운드 결과로 이어가는 중";
+  });
+  try {
+    run.turnStart = Date.now();
+    await request(agentOf(id), { type: "prompt", message: BG_WAKE });
+  } catch {
+    // a turn started meanwhile (a subagent's result, the user): the news goes in with it
+  }
+}
+const BG_WAKE = "(Ondra) Your background command or monitor has news (the message above). Carry on from it.";
 
 /** A handoff card whose only next step is waiting (for the user, a result, a review). */
 export function onlyWaits(card: Handoff): boolean {

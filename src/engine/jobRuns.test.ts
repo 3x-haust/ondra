@@ -475,3 +475,53 @@ describe("a turn's usage", () => {
     expect(u!.output).toBe(493);
   });
 });
+
+describe("a job waiting on its background commands", () => {
+  const status = (running: number, queued: number) =>
+    emit({ type: "extension_ui_request", id: `s${running}${queued}`, method: "setStatus", statusKey: "background", statusText: running || queued ? JSON.stringify({ running, queued }) : undefined });
+  const ends = async (text: string) => {
+    emit({ type: "message_start", message: { role: "assistant" } });
+    emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
+    emit({ type: "message_end", message: { role: "assistant", stopReason: "stop" } });
+    emit({ type: "agent_settled" });
+    await tick();
+    await tick();
+  };
+
+  it("stays running while they run, and is woken once one ends", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends("빌드를 백그라운드로 돌렸어요. 끝나면 이어서 해요.");
+
+    expect(task("job").status).toBe("running");
+    expect(task("job").now).toBe("백그라운드 명령 1개 기다리는 중");
+    expect(sent("prompt")).toHaveLength(1);
+    expect(state.decisions).toEqual([]);
+
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(2);
+    expect(sent("prompt")[1]).toContain("background command or monitor has news");
+    expect(task("job").now).toBe("백그라운드 결과로 이어가는 중");
+  });
+
+  it("goes on at once when the news came before its turn's end was handled", async () => {
+    await working([job()]);
+    status(0, 1);
+    await ends("빌드가 끝나기를 기다려요.");
+
+    expect(sent("prompt")).toHaveLength(2);
+    expect(sent("prompt")[1]).toContain("background command or monitor has news");
+  });
+
+  it("is not woken while it waits on the user's answer", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends('```blocks\n{"type":"ask","question":"어느 쪽으로 배포할까요?","options":[{"label":"스테이징"},{"label":"운영"}]}\n```');
+    expect(task("job").status).toBe("waiting");
+
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(1);
+  });
+});
