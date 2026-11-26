@@ -7,12 +7,11 @@ import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
 import { inSpace, kept } from "../state/viewState";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
-import { answeredIn, type Answered } from "../state/answered";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, decide, finishTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
@@ -789,26 +788,6 @@ export function MainView() {
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
     });
-  /** questions of this chat's tasks already answered: one quiet line each where the card was.
-   *  Not in a project's chat: each job's own result shows there under its row, and the answers are in it. */
-  const answered = createMemo((): Answered[] =>
-    project()
-      ? []
-      : answeredIn(
-          tasksShown(state.space).filter((t) => t.space === state.space),
-          // cleared, it starts over
-          { after: state.chatCleared?.[key()] ?? 0 },
-        ),
-  );
-  /** the conversation in order: messages, and the answered questions between them */
-  const timeline = createMemo(() => {
-    const list: (CaptainMessage | Answered)[] = [...msgs()];
-    for (const a of answered()) {
-      const i = list.findIndex((m) => m.at > a.at);
-      list.splice(i < 0 ? list.length : i, 0, a);
-    }
-    return list;
-  });
   /** a project's own chat: how its tasks stand, in the head */
   /** the project's notes, once a job has left them (read again when a job rewrites them) */
   const [hasNotes] = createResource(
@@ -967,7 +946,6 @@ export function MainView() {
                 <ProjectStrip project={p().id} all />
                 <div class="thread proj-empty">
                   <div class="thread-inner convo">
-                    <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
                     <Picks project={p().id} />
                   </div>
                 </div>
@@ -987,25 +965,21 @@ export function MainView() {
         <Show when={project()}>{(p) => <ProjectStrip project={p().id} />}</Show>
         <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el, undefined, { key: () => inSpace(state.space, `main/${key()}`) })); }}>
           <div class="thread-inner convo">
-            <For each={timeline()}>
+            <For each={msgs()}>
               {(m) => (
-                <Show when={!("taskId" in m) && m} fallback={<AnsweredLine a={m as Answered} />}>
-                  {(c) => (
-                    <Show
-                      when={c().from === "me"}
-                      fallback={
-                        // main reacting to a job's end on its own shows only what it added (nothing while it reads it)
-                        <Show when={!onItsOwn(c()) || (!c().pending && shows(c()))}>
-                          <Reply m={c()} retry={() => retry(c())} active={openRoot()} lastRow={(id) => lastRow().get(id)} full={!!project()} />
-                        </Show>
-                      }
-                    >
-                      {/* main's own question answered: the same compact card a task's thread keeps */}
-                      <Show when={answerOf(c().text ?? "")} fallback={<UserMsg id={c().id} text={c().text ?? ""} at={c().at} from={c().via === "main" ? t("메인에서") : undefined} onEdit={c().via === "main" ? undefined : (t) => void editMain(c().id, t)} />}>
-                        {(a) => <AnsweredCard q={a().q} a={a().a} />}
-                      </Show>
+                <Show
+                  when={m.from === "me"}
+                  fallback={
+                    // main reacting to a job's end on its own shows only what it added (nothing while it reads it)
+                    <Show when={!onItsOwn(m) || (!m.pending && shows(m))}>
+                      <Reply m={m} retry={() => retry(m)} active={openRoot()} lastRow={(id) => lastRow().get(id)} full={!!project()} />
                     </Show>
-                  )}
+                  }
+                >
+                  {/* main's own question answered: the same compact card a task's thread keeps */}
+                  <Show when={answerOf(m.text ?? "")} fallback={<UserMsg id={m.id} text={m.text ?? ""} at={m.at} from={m.via === "main" ? t("메인에서") : undefined} onEdit={m.via === "main" ? undefined : (t) => void editMain(m.id, t)} />}>
+                    {(a) => <AnsweredCard q={a().q} a={a().a} />}
+                  </Show>
                 </Show>
               )}
             </For>
@@ -1096,23 +1070,6 @@ export function ProjectTasks(props: { list: Task[] }) {
   );
 }
 
-
-/** "4월 회고 초안 · 초안으로 저장": the task (opens it) and what was answered; the question on hover.
- *  A follow-up goes by the job its line started from, as the sidebar files it */
-function AnsweredLine(props: { a: Answered }) {
-  const task = () => {
-    const x = taskById(props.a.taskId);
-    return x && lineHead(x);
-  };
-  return (
-    <button class="answered-line" onClick={() => openTask(props.a.taskId)} title={`${props.a.q} → ${props.a.a}`}>
-      <Icon name="check" size={14} />
-      <span class="answered-task">{task()?.title ?? t("작업")}</span>
-      <span class="answered-sep">·</span>
-      <span class="answered-a">{props.a.a}</span>
-    </button>
-  );
-}
 
 type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "review" | "done"; at: number };
 
