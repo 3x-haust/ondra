@@ -3222,10 +3222,10 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
 
 /** what the model is told with the user's words said while it worked */
 const midNote = (open: boolean) =>
-  `\n\n(Ondra) The user said this while you were working. Before your next tool call, decide where it goes:
-- a question: answer it in a sentence or two, don't change files for it, and go on.
-- a change to the step you are on: apply it now.
-- something for a later step (how to deploy, what to check at the end) or new work: don't jump to it. Put it in your plan where it belongs by what depends on what, not by when it came (a survey that ships with the deploy is built before the deploy), with "user": true. Say in one line where it went ("설문 먼저 끝내고, 배포할 때 말씀하신 방식으로 할게요"), finish the small step in your hands, and go on in plan order.
+  `\n\n(Ondra) The user said this while you were working. Answer them first, now: a short reply in your own voice before your next tool call, the way someone busy with something else looks up and answers, not after the step in your hands is over. Then decide where it goes:
+- a question: the reply is the answer, a sentence or two; don't change files for it, and go on.
+- a change to the step you are on: say so and apply it now.
+- something for a later step (how to deploy, what to check at the end) or new work: don't jump to it. Put it in your plan where it belongs by what depends on what, not by when it came (a survey that ships with the deploy is built before the deploy), with "user": true. The reply says where it went ("설문 먼저 끝내고, 배포할 때 말씀하신 방식으로 할게요"); finish the small step in your hands, and go on in plan order.
 - stop, now, or instead of what you are doing: switch now.
 ${open ? "Added or changed work: send the updated plan block before any other tool call." : "Added work: send a plan block with the whole job in it (what is done, this, what is left) before any other tool call."}`;
 

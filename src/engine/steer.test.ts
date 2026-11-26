@@ -73,6 +73,7 @@ describe("the user's words while the job works", () => {
     await tell("job", "배포는 mmhs app 써줘", { now: true });
     const steer = sent("steer")[0];
     expect(steer).toMatch(/^배포는 mmhs app 써줘\n\n\(Ondra\) The user said this while you were working/);
+    expect(steer).toContain("Answer them first, now");
     expect(steer).toContain("by what depends on what");
     expect(steer).toContain("send the updated plan block before any other tool call");
     // the to-do list shows them at once, until the job places them
