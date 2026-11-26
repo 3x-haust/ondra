@@ -52,7 +52,7 @@ export { DEFAULT_VOICE } from "./agentVoice";
 import { DEFAULT_VOICE } from "./agentVoice";
 import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
 import { forThem, nonLatin } from "./tongue";
-import { allowed, placeOf, seeChannels, seePeople, seeServers, tagged } from "./discordPeople";
+import { allowed, placeOf, roomName, seeChannels, seePeople, seeServers, tagged } from "./discordPeople";
 import { localLinks, openClick, openRow } from "./discordFiles";
 
 /**
@@ -306,7 +306,7 @@ export const WORK_IN_OPEN = `Work you start from here is done in the open: while
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
-  const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], place: m.guild ?? undefined, dm: !m.guild });
+  const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], channel: m.channel, dm: !m.guild });
   return [
     `(Ondra) The user sent this from Discord (${whereIs(m)}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
@@ -1545,7 +1545,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const after = at >= 0 ? around.slice(at + 1) : [];
   const { oneShot } = await import("./aside");
   const space = a.space ?? ownSpaces()[0]?.id ?? state.space;
-  const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
+  const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), channel: m.channel, dm: !m.guild });
   const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways, Date.now(), after, whereIs(m, true)));
   // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
   let out = (await say(before).catch((e) => (before.length && isRefusal(e instanceof Error ? e.message : String(e)) ? say([]) : Promise.reject(e)))).trim();
@@ -1611,8 +1611,9 @@ export async function digest(channel: string) {
   const dm = !h.guild;
   try {
     const { oneShot } = await import("./aside");
-    const out = await oneShot(agentSpace(a), "~", digestPrompt(a, h.lines, { place: h.guild, dm }));
-    const n = applyDigest(out, { place: h.guild, dm, people });
+    const out = await oneShot(agentSpace(a), "~", digestPrompt(a, h.lines, { channel, dm }));
+    const room = roomName(channel);
+    const n = applyDigest(out, { channel, room: room && `#${room}`, dm, people });
     if (n) logInfo("agent", `memory: ${n} from ${channel}`);
   } catch (e) {
     logError("agent", `memory pass: ${e instanceof Error ? e.message : String(e)}`);
