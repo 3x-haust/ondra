@@ -14,7 +14,7 @@ import {
 } from "lucide-solid";
 import { decisionsIn, setState, spacesOf, state } from "../state/store";
 import { switchSpace } from "../state/workspace";
-import { mirror } from "../state/mirror";
+import { linkWord, mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
 import { askRemoveHost, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
@@ -481,28 +481,34 @@ export function MacBar() {
   return (
     <>
       <div class="mbar" role="toolbar" aria-label={t("기기")}>
-        <For each={macs()}>
-          {(m, i) => (
-            <button
-              class="mbar-mac"
-              style={tintVars(m)}
-              classList={{ on: current() === m.id, ctx: ctxFor() === `mac:${m.id}` || open()?.id === m.id, off: !tabsOf(m).length, away: statusOf(m) !== "ok" }}
-              aria-pressed={current() === m.id}
-              aria-label={m.name}
-              title={[m.name, m.local ? "" : hostState(m.id), i() < 9 ? shortcutHint(`mac${i() + 1}` as ShortcutId) : ""].filter(Boolean).join(" · ")}
-              onClick={() => pickMac(m.id)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const at = e.currentTarget.getBoundingClientRect();
-                openMenuAt(`mac:${m.id}`, () => macMenu(m, at), e);
-              }}
-            >
-              <MacMark mac={m} />
-              {/* a question waits in one of its workspaces (the tabs show only the open device's) */}
-              <Show when={current() !== m.id && tabsOf(m).some((s) => decisionsIn(s.id).length)}><i class="space-alert" /></Show>
-              {/* the one picked opens into a pill with its name */}
-              <span class="mbar-name">{m.name}</span>
-            </button>
+        {/* keyed by id: macs() makes new objects on every settings change, and a button made again
+            under a still pointer loses its hover */}
+        <For each={macs().map((x) => x.id)}>
+          {(id, i) => (
+            <Show when={macs().find((x) => x.id === id)}>
+              {(m) => (
+                <button
+                  class="mbar-mac"
+                  style={tintVars(m())}
+                  classList={{ on: current() === id, ctx: ctxFor() === `mac:${id}` || open()?.id === id, off: !tabsOf(m()).length, away: statusOf(m()) !== "ok" }}
+                  aria-pressed={current() === id}
+                  aria-label={m().local ? m().name : `${m().name}, ${t(linkWord(mirror.hosts[id]))}`}
+                  title={[m().name, m().local ? "" : hostState(id), i() < 9 ? shortcutHint(`mac${i() + 1}` as ShortcutId) : ""].filter(Boolean).join(" · ")}
+                  onClick={() => pickMac(id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const at = e.currentTarget.getBoundingClientRect();
+                    openMenuAt(`mac:${id}`, () => macMenu(m(), at), e);
+                  }}
+                >
+                  <MacMark mac={m()} />
+                  {/* a question waits in one of its workspaces (the tabs show only the open device's) */}
+                  <Show when={current() !== id && tabsOf(m()).some((s) => decisionsIn(s.id).length)}><i class="space-alert" /></Show>
+                  {/* the one picked opens into a pill with its name */}
+                  <span class="mbar-name">{m().name}</span>
+                </button>
+              )}
+            </Show>
           )}
         </For>
       </div>

@@ -13,6 +13,7 @@ import { addRoutine, removeRoutine, routineById, routineLine, routinesIn, runRou
 import { dayTime, describeWhen, EVENT_LABEL, MIN_EVERY, validTime } from "../engine/routineTime";
 import { EmptyState, PageHead, Switch_ } from "./Settings";
 import { setAgentPart } from "./agentPart";
+import { createSpacePick, SpacePick } from "./SpacePick";
 
 /** the routine the page opens with (a chat card's 수정) */
 export const [editing, setEditing] = createSignal<string | null>(null);
@@ -152,6 +153,9 @@ function Editor(props: { r: Routine; onDone: () => void }) {
   );
 }
 
+/** the form closed: a draft made here goes (one main proposed stays as its card) */
+const stopEditing = (r: Routine) => (r.draft && !r.from ? removeRoutine(r.id) : undefined, setEditing(null));
+
 /** One routine's row: on/off, name, when · where · next, and its actions. */
 export function RoutineRow(props: { r: Routine }) {
   const r = () => props.r;
@@ -161,7 +165,7 @@ export function RoutineRow(props: { r: Routine }) {
   return (
     <Show
       when={editing() !== r().id}
-      fallback={<Editor r={r()} onDone={() => (r().draft && !r().from ? removeRoutine(r().id) : undefined, setEditing(null))} />}
+      fallback={<Editor r={r()} onDone={() => stopEditing(r())} />}
     >
       <div class="rt-row" classList={{ off: !r().enabled }}>
         <Switch_ on={r().enabled} set={(on) => saveRoutine(r().id, { enabled: on })} label={r().enabled ? t("켜짐") : t("꺼짐")} />
@@ -192,13 +196,22 @@ export function RoutineRow(props: { r: Routine }) {
 }
 
 export function RoutinesSettings() {
+  // opened on a routine (a chat card's 수정): its workspace
+  const [space, setSpace] = createSpacePick(() => routineById(editing() ?? "")?.space ?? state.space);
+  // another workspace picked: the form open in this one closes
+  const pick = (id: string) => {
+    const r = routineById(editing() ?? "");
+    if (r) stopEditing(r);
+    setSpace(id);
+  };
   // the Discord agent's are in its tab
-  const list = () => [...routinesIn(state.space).filter((r) => !r.agent), ...(state.routines ?? []).filter((r) => r.space === state.space && r.draft && !r.agent && editing() === r.id)];
-  const add = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, mode: "continue", draft: true }));
-  const addAlarm = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "once", at: Date.now() + 3_600_000 }, mode: "fresh", quiet: false, alarm: true, draft: true }));
+  const list = () => [...routinesIn(space()).filter((r) => !r.agent), ...(state.routines ?? []).filter((r) => r.space === space() && r.draft && !r.agent && editing() === r.id)];
+  const add = () => setEditing(addRoutine({ space: space(), title: "", prompt: "", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, mode: "continue", draft: true }));
+  const addAlarm = () => setEditing(addRoutine({ space: space(), title: "", prompt: "", when: { kind: "once", at: Date.now() + 3_600_000 }, mode: "fresh", quiet: false, alarm: true, draft: true }));
   return (
     <>
       <PageHead tab="routines">
+        <SpacePick space={space()} onPick={pick} />
         <Show when={list().length}>
           <button class="btn sm" onClick={addAlarm}><Icon name="bell" size={14} />{t("알람 추가")}</button>
           <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>

@@ -2,6 +2,7 @@ import { binding, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts
 import { nextWaiting, stepFork } from "../views/Sidebar";
 import { deviceSpaces, state, taskById } from "./store";
 import { switchSpace } from "./workspace";
+import { splitSpaceId } from "./mirror";
 import { macs, otherMacs, pickMac } from "../ui/MacBar";
 import { canClosePane, closeFocused, hasAttention, nextAttention, splitNew } from "../views/PaneControls";
 import { stepZoom } from "./zoom";
@@ -72,7 +73,7 @@ export function appCommands(): ShortcutCommand[] {
     { id: "boardList", label: t("보드"), section: t("이동"), icon: "board", run: showBoard },
     command("memory", "메모리", "이동", "memory", () => setView({ name: "memory" }), undefined, true),
     command("results", "결과물", "이동", "inbox", () => setView({ name: "results" }), undefined, true),
-    { id: "agentTab", label: t("에이전트"), section: t("이동"), icon: "pet", run: () => setView({ name: "agent" }) },
+    { id: "agentTab", label: t("에이전트"), section: t("이동"), icon: "pet", run: () => setView({ name: "agent" }), enabled: () => !splitSpaceId(state.space) },
     command("devices", "디바이스", "이동", "phone", () => setView({ name: "devices" }), undefined, true),
     command("settings", "설정", "이동", "gear", () => setView({ name: "settings" }), undefined, true),
     command("back", "뒤로", "이동", "back", () => step(-1), () => canStep(-1), true),

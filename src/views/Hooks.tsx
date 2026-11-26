@@ -3,10 +3,12 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import { kept } from "../state/viewState";
 import { hooksLoad, hooksSave } from "../lib/native";
-import { state, uid, ownSpaces } from "../state/store";
+import { uid, ownSpaces } from "../state/store";
 import { toast } from "../state/ui";
 import { Fold } from "../ui/Fold";
 import { EmptyState, PageHead } from "./Settings";
+import { createSpacePick, SpacePick } from "./SpacePick";
+import { hooksFor } from "./hooksFor";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 
@@ -34,6 +36,8 @@ const forTools = (e: HookEvent) => e === "before_tool" || e === "after_tool";
 export function HooksTab() {
   const [list, setList] = createSignal<Hook[]>([]);
   const [loaded, setLoaded] = createSignal(false);
+  const [space, setSpace] = createSpacePick();
+  const shown = () => hooksFor(list(), space(), ownSpaces().map((s) => s.id));
   // "훅에 넘기는 값" stays open once opened
   const [more, setMore] = kept("settings.hooks.more", false);
   onMount(async () => {
@@ -56,19 +60,20 @@ export function HooksTab() {
     patch(h.id, { command, enabled: has ? (h.command.trim() ? h.enabled : true) : false });
   };
   const add = () => {
-    save([...list(), { id: uid("hk"), event: "before_tool", matcher: "", command: "", enabled: false, space: state.space }]);
+    save([...list(), { id: uid("hk"), event: "before_tool", matcher: "", command: "", enabled: false, space: space() }]);
     requestAnimationFrame(() => [...document.querySelectorAll<HTMLTextAreaElement>(".hk-cmd")].pop()?.focus());
   };
 
   return (
     <>
       <PageHead tab="hooks">
-        <Show when={list().length}>
+        <SpacePick space={space()} onPick={setSpace} />
+        <Show when={shown().length}>
           <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>
         </Show>
       </PageHead>
       <div class="set-group">
-        <For each={list()} fallback={
+        <For each={shown()} fallback={
           <Show when={loaded()} fallback={<div class="empty-line">{t("불러오는 중…")}</div>}>
             <EmptyState icon="bolt" title={t("훅 없음")} desc={t("도구를 쓰기 전후나 작업이 끝날 때 내 명령을 돌려요. 예: 수정 뒤 포맷터 실행")}>
               <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("훅 만들기")}</button>

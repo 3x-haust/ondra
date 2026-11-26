@@ -1907,7 +1907,8 @@
 
 /* ───────────── Mac bar: this Mac and the added ones at the foot of the sidebar (⌃1…⌃9) ─────────────
    Quiet until used: each Mac is a small grey dot (or its emoji or icon); the one new work runs on
-   opens into a pill in its own color with its name. Not connected: a hollow ring.
+   opens into a pill in its own color with its name. Not connected: a hollow ring (on an icon's
+   corner), and a grey pill when it is the one shown.
    --mh / --mc (hue, chroma) are set per Mac inline. */
 .mbar-mac,
 .ml-pop,
@@ -2048,6 +2049,25 @@
 }
 .app .sidebar .mbar-mac.away :is(.mbar-ic, .mbar-emoji) {
   opacity: 0.4;
+}
+/* an icon or emoji has no dot to hollow: the ring sits on its corner instead */
+.app .sidebar .mbar-mac.away:has(.mbar-ic, .mbar-emoji)::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+/* the device shown but not connected: its pill goes grey, not its color (its name says which) */
+.app .sidebar .mbar-mac.on.away::after {
+  display: none;
+}
+.app .sidebar .mbar-mac.on.away {
+  background: var(--hover);
+  color: var(--ink-3);
 }
 .app .sidebar .mbar-mac.off:not(.on) {
   opacity: 0.45;

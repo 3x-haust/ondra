@@ -127,6 +127,14 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
   });
 }
 
+/** a device's state in one word (the Mac bar's mark, read out): trying for the first time is
+ *  "연결 중"; once it was connected and isn't, "연결 안 됨" even while it tries again */
+export function linkWord(h: HostMirror | undefined): "연결됨" | "연결 중" | "연결 안 됨" {
+  const s = h?.status ?? "connecting";
+  if (s === "ok") return "연결됨";
+  return (s === "connecting" || s === "waiting") && !h?.since ? "연결 중" : "연결 안 됨";
+}
+
 /** a Mac's state in words, the same everywhere (settings, sidebar, the run chip, a job): "연결됨",
  *  "10분 전부터 연결 안 됨" … */
 export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: string, v?: Record<string, string | number>) => string = (k) => k, ago: (at?: number) => string = () => ""): string {

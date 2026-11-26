@@ -8,7 +8,7 @@
 // A project added from another device keeps its secrets there (its jobs run there): picking it asks
 // that device (engine/remote.ts secret*), which takes in its .env files and says the names it keeps. A
 // value typed here goes there once, to be saved in that device's keychain; none ever comes back.
-import { createMemo, createResource, createSignal, For, on, onMount, Show, createEffect } from "solid-js";
+import { createMemo, createResource, createSignal, For, on, Show, createEffect, untrack } from "solid-js";
 import { secretDelete, secretList, secretOverview, secretSet, secretSync, type SavedSecrets, type SecretGroup } from "../lib/native";
 import { projectsShown, state } from "../state/store";
 import { splitProjectId } from "../state/mirror";
@@ -18,6 +18,7 @@ import { forgetSecret, noteSecrets } from "../engine/secretMemory";
 import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { PageHead } from "./Settings";
+import { createSpacePick, SpacePick } from "./SpacePick";
 import { t } from "../i18n";
 
 const GLOBAL = "";
@@ -33,8 +34,9 @@ export function SecretsSettings() {
   const [groups, { refetch: regroup }] = createResource(secretOverview, { initialValue: [] as SecretGroup[] });
   // each secret also gets a memory piece (where it is, what it is for), so jobs find its use there
   const mutate = (s: SavedSecrets) => (setSaved(s), regroup(), noteSecrets(s, state.projects ?? []));
-  // the current workspace's projects: this Mac's, and those added from another device (kept there)
-  const projects = createMemo(() => projectsShown(state.space));
+  // the picked workspace's projects (this device's own workspaces only)
+  const [space, setSpace] = createSpacePick();
+  const projects = createMemo(() => projectsShown(space()));
   const mine = createMemo(() => projects().filter((p) => !p.host));
   const [scope, setScope] = createSignal(GLOBAL);
   const project = () => projects().find((p) => p.id === scope());
@@ -74,16 +76,18 @@ export function SecretsSettings() {
   const [confirm, setConfirm] = createSignal<string | null>(null);
   const clean = () => name().trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
 
-  // what the projects' .env files already hold comes in by itself
-  onMount(async () => {
-    try {
-      const r = await secretSync(mine().map((p) => [p.id, p.folder]));
-      mutate(r.saved);
-      if (r.added.length) toast(t("프로젝트 .env에서 {n}개를 가져왔어요", { n: r.added.length }));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "bad");
-    }
-  });
+  // what the projects' .env files already hold comes in by itself (on opening, and for each workspace picked)
+  createEffect(
+    on(space, async () => {
+      try {
+        const r = await secretSync(untrack(mine).map((p) => [p.id, p.folder]));
+        mutate(r.saved);
+        if (r.added.length) toast(t("프로젝트 .env에서 {n}개를 가져왔어요", { n: r.added.length }));
+      } catch (e) {
+        toast(e instanceof Error ? e.message : String(e), "bad");
+      }
+    }),
+  );
 
   const save = async (addIgnore = false) => {
     if (!clean() || !value()) return;
@@ -141,6 +145,7 @@ export function SecretsSettings() {
   return (
     <>
       <PageHead tab="secrets">
+        <SpacePick space={space()} onPick={(id) => (setSpace(id), setScope(GLOBAL), setAskIgnore(false), setConfirm(null))} />
         <select class="select" aria-label={t("적용 범위")} value={scope()} onChange={(e) => (setScope(e.currentTarget.value), setAskIgnore(false), setConfirm(null))}>
           <option value={GLOBAL}>{t("전체")}</option>
           {/* another device's project names that device: its secrets are kept there */}

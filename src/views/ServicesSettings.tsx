@@ -3,18 +3,18 @@
 // is never the personal one's. A service that only takes known clients (Google, Slack) asks for
 // the user's own OAuth app: its id goes into the space's mcp.json, its secret into the keychain.
 import { createResource, createSignal, For, Show } from "solid-js";
-import { state, ownSpaces } from "../state/store";
 import { toast } from "../state/ui";
 import { openExternal } from "../lib/native";
 import { addServer, PRESETS, readServers, removeServer, serverConfig, serverName, serverStates, setEnabled, signIn, type Preset, type Server, type ServerState } from "../engine/services";
 import { Icon } from "../ui/Icon";
 import { PageHead } from "./Settings";
+import { createSpacePick, SpacePick } from "./SpacePick";
 import { t } from "../i18n";
 
 const STATE_LABEL: Record<string, string> = { connected: "연결됨", "needs-auth": "로그인 필요", failed: "연결 안 됨", disabled: "꺼짐", connecting: "연결 중" };
 
 export function ServicesSettings() {
-  const [space, setSpace] = createSignal(state.space);
+  const [space, setSpace] = createSpacePick();
   const [servers, { refetch: reread }] = createResource(space, readServers, { initialValue: {} as Record<string, Server> });
   // the engine connects to each to say how it is: a moment, so it comes after the list
   const [states, { refetch: recheck }] = createResource(space, (s) => serverStates(s).catch(() => [] as ServerState[]), { initialValue: [] });
@@ -88,9 +88,7 @@ export function ServicesSettings() {
   return (
     <>
       <PageHead tab="services">
-        <select class="select" aria-label={t("워크스페이스")} value={space()} onChange={(e) => (setSpace(e.currentTarget.value), reset(), setConfirm(null))}>
-          <For each={ownSpaces()}>{(s) => <option value={s.id}>{s.label}</option>}</For>
-        </select>
+        <SpacePick space={space()} onPick={(id) => (setSpace(id), reset(), setConfirm(null))} />
       </PageHead>
       <p class="set-note">{t("연결한 서비스는 이 워크스페이스의 메인과 작업만 써요. 필요할 때만 불러 써서 평소 대화를 무겁게 하지 않아요.")}</p>
 
