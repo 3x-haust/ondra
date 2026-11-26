@@ -889,12 +889,18 @@ dl.hk-doc dd {
   min-width: 160px;
 }
 .rt-days {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: repeat(7, 28px);
   gap: 2px;
 }
 .rt-day {
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
+  padding: 0;
+  line-height: 1;
+  text-align: center;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--bg);
