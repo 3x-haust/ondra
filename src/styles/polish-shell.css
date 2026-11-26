@@ -2005,8 +2005,11 @@
 }
 .app .sidebar .mbar-emoji {
   flex: none;
+  /* a box the whole glyph fits in: WebKit draws a filtered element only inside its box, so with
+     line-height 1 a tall emoji (🖥️'s stand) lost its foot while the hover fade ran */
+  display: inline-block;
   font-size: 15px;
-  line-height: 1;
+  line-height: 1.35;
   filter: grayscale(1);
   opacity: 0.6;
   transition: filter 0.18s var(--ease), opacity 0.18s var(--ease);
