@@ -538,6 +538,12 @@ export function openChecks(blocks: any[], listed: { what: string }[]): string[] 
     .filter((l: string, i: number, all: string[]) => all.indexOf(l) === i && !said.some((w) => w.includes(l) || l.includes(w)));
 }
 
+/** the same question with the same choices and things to fill in */
+const sameAsk = (a: Decision, b: Decision) =>
+  !a.ui && a.kind === b.kind && a.question.trim() === b.question.trim() &&
+  a.options.map((o) => o.label).join("\n") === b.options.map((o) => o.label).join("\n") &&
+  (a.form ?? []).map((f) => f.label).join("\n") === (b.form ?? []).map((f) => f.label).join("\n");
+
 function applyBlocks(t: Task, items: any[], run: Run) {
   const sent = items;
   for (const b of items) {
@@ -591,7 +597,9 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           }),
           context: Array.isArray(b.context) ? b.context : [],
         };
-        setState("decisions", (list) => [...list.filter((x) => x.taskId !== t.id), d]);
+        // the same question asked again (woken before it was answered): the card it has stays
+        const open = state.decisions.find((x) => x.taskId === t.id);
+        if (!open || !sameAsk(open, d)) setState("decisions", (list) => [...list.filter((x) => x.taskId !== t.id), d]);
         run.asked = true;
         break;
       }
@@ -841,7 +849,8 @@ function recallOnTheWay(id: string, run: Run, about: string[], names: boolean) {
   void (async () => {
     await prepareQuery(query, 800);
     const t = taskById(id);
-    if (!t || runs.get(id) !== run || !run.streaming) return;
+    // a job that just asked waits on the user: a steer now would wake it to ask again
+    if (!t || runs.get(id) !== run || !run.streaming || run.asked) return;
     const hits = recallNow(t, query, names);
     if (!hits.length) return;
     markUsed(hits.map((m) => m.id));
@@ -1660,7 +1669,7 @@ function handlers(id: string, run: Run) {
           });
           run.cursor = run.text.length;
           // narration slipping into English for a user who writes Korean: one reminder per session
-          if (run.streaming && !run.langNudged && text && notTheirLanguage(text, taskById(id))) {
+          if (run.streaming && !run.asked && !run.langNudged && text && notTheirLanguage(text, taskById(id))) {
             run.langNudged = true;
             void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls are read by the user: write them in the language they write in (here Korean: \"이제 사진을 올려요\"), not English." }).catch(() => {});
           }
@@ -1674,14 +1683,14 @@ function handlers(id: string, run: Run) {
           // the gauge follows every call (the engine's own count only comes when the turn ends)
           if (prompt && win) setCtx(agentOf(id), { tokens: prompt, window: win, percent: (prompt / win) * 100 });
           const at = handoffAt(win);
-          if (run.streaming && level < at.length && prompt > at[level] && !run.done && !run.handoff) {
+          if (run.streaming && level < at.length && prompt > at[level] && !run.done && !run.handoff && !run.asked) {
             run.longNudges = level + 1;
             void request(agentOf(id), { type: "steer", message: handoffSteer(level, prompt, win) }).catch(() => {});
           }
           // its account is nearly out (on 자동, with another that has room): it hands off while it can still
           // write the card, and the fresh session goes on on the other account (newSession)
           if (job) void refreshLimits(job.accountId);
-          if (run.streaming && !run.limitAsked && !run.done && !run.handoff && job && autoRouted(job) && accountFull(job.accountId) && spareAccount(job.space, job.accountId)) {
+          if (run.streaming && !run.limitAsked && !run.done && !run.handoff && !run.asked && job && autoRouted(job) && accountFull(job.accountId) && spareAccount(job.space, job.accountId)) {
             run.limitAsked = true;
             void request(agentOf(id), { type: "steer", message: LIMIT_STEER }).catch(() => {});
           }
