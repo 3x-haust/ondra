@@ -45,7 +45,9 @@ export function AgentView() {
     const order = { person: 0, place: 1, lesson: 2 } as const;
     return [...(state.agentNotes ?? [])].sort((x, y) => order[x.kind] - order[y.kind] || (y.updatedAt ?? y.at) - (x.updatedAt ?? x.at));
   };
-  const noteLabel = (n: AgentNote) => (n.kind === "person" ? `${n.name ?? n.who}${n.dm ? ` · ${t("DM")}` : ""}` : n.kind === "place" ? t("이곳") : t("교훈"));
+  // the channel a card is used in; one kept before channels were told apart isn't used (a DM card is, in that DM)
+  const noteWhere = (n: AgentNote) => (n.kind === "lesson" ? "" : n.dm ? t("DM") : n.channel ? (n.room ?? "") : t("예전 기억 · 안 씀"));
+  const noteLabel = (n: AgentNote) => [n.kind === "person" ? (n.name ?? n.who) : n.kind === "place" ? t("이곳") : t("교훈"), noteWhere(n)].filter(Boolean).join(" · ");
   const statusText = () => {
     const s = status();
     if (s.state === "on") return t("연결됨");
