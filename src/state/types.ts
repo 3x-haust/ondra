@@ -298,6 +298,11 @@ export interface Task {
     threadIn?: string;
     /** its thread was put away once it had ended a while (named ✅/❌ and archived) */
     threadClosed?: boolean;
+    /** the message in the channel its thread hangs from: "⏳ title" while it works, then "✅ title" and
+     *  what came of it (its whole work stays folded in the thread under it, as a finished job in the app) */
+    head?: string;
+    /** the head shows how it ended */
+    folded?: boolean;
   };
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
