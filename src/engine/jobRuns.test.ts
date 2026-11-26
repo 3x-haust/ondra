@@ -4,6 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
+import { checkEvidence } from "./proof";
 import { cardFromThread, decide, finishTask, mergeCards, pauseTask, resumeTask, sleptFor, startTask, stopStalledCommands, tell, turnUsage } from "./tasks";
 
 // What the Orbit jobs of 11-06 to 11-14 ran into: another job's words read as the user's, a job
@@ -477,8 +478,8 @@ describe("a turn's usage", () => {
 });
 
 describe("a job waiting on its background commands", () => {
-  const status = (running: number, queued: number) =>
-    emit({ type: "extension_ui_request", id: `s${running}${queued}`, method: "setStatus", statusKey: "background", statusText: running || queued ? JSON.stringify({ running, queued }) : undefined });
+  const status = (running: number, queued: number, more: { cmds?: string[]; ended?: Record<string, { code: number | null; tail: string }> } = {}) =>
+    emit({ type: "extension_ui_request", id: `s${running}${queued}`, method: "setStatus", statusKey: "background", statusText: JSON.stringify({ running, queued, cmds: more.cmds ?? Array(running).fill("pnpm build"), ended: more.ended ?? {} }) });
   const ends = async (text: string) => {
     emit({ type: "message_start", message: { role: "assistant" } });
     emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
@@ -520,6 +521,38 @@ describe("a job waiting on its background commands", () => {
     emit({ type: "tool_execution_start", toolCallId: "b2", toolName: "bash", args: { command: "pnpm test" } });
     await tick();
     expect(task("job").shells.map((s) => [s.command, !!s.background])).toEqual([["pnpm build", true], ["pnpm test", false]]);
+  });
+
+  it("counts a background check by how it ended, not by its start", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "t1", toolName: "bash", args: { command: "pnpm test", run_in_background: true } });
+    emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: { content: [{ type: "text", text: "Started in the background as bg_1." }], details: { background: "bg_1" } } });
+    await tick();
+    const proof = () => checkEvidence(task("job"), [{ kind: "test", ref: "pnpm test" }]);
+    expect((await proof())[0]).toMatchObject({ ok: false, why: "백그라운드에서 아직 끝나지 않았어요" });
+
+    status(0, 0, { cmds: [], ended: { t1: { code: 1, tail: "1 failed" } } });
+    await tick();
+    expect(task("job").shells[0]).toMatchObject({ ok: false, tail: "1 failed" });
+    expect((await proof())[0]).toMatchObject({ ok: false, check: "failed" });
+  });
+
+  it("doesn't wait for a server it left running", async () => {
+    await working([job()]);
+    status(1, 0, { cmds: ["pnpm dev"] });
+    await ends("개발 서버를 띄웠어요.");
+    expect(task("job").now).not.toBe("백그라운드 명령 1개 기다리는 중");
+    expect(sent("prompt")[1]).toContain("without a done block");
+  });
+
+  it("waits on the user when its last words ask them, even with a build running", async () => {
+    await working([job()]);
+    status(1, 0);
+    await ends("병합 완료를 알려주시면 이어갈게요.");
+    expect(task("job").status).toBe("waiting");
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")).toHaveLength(1);
   });
 
   it("is not woken while it waits on the user's answer", async () => {

@@ -176,6 +176,8 @@ export interface Shell {
   tail: string;
   /** Left running on purpose: dev server, watcher, `&`, tail -f… */
   background?: boolean;
+  /** Started with bash run_in_background: it ends (endedAt, ok) when the engine says it did. */
+  runInBackground?: boolean;
 }
 
 export interface PlanStep {

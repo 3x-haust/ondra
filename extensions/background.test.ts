@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // the engine provides typebox at run time; the schemas don't matter here
@@ -33,7 +33,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   }),
 }));
 
-const { default: background, endNotice, splitLines, lastLines, STATUS_KEY } = await import("./background");
+const { default: background, endNotice, splitLines, lastLines, burstBody, STATUS_KEY } = await import("./background");
 
 function load(env: Record<string, string> = {}) {
   const saved = { ...process.env };
@@ -51,9 +51,11 @@ function load(env: Record<string, string> = {}) {
   });
   process.env = saved;
   on.session_start?.({}, ctx);
-  const run = (name: string, args: unknown) => tools[name].execute("call", args, undefined, undefined, ctx);
+  let calls = 0;
+  const run = (name: string, args: unknown) => tools[name].execute(`call${++calls}`, args, undefined, undefined, ctx);
+  const last = () => (status.at(-1) ? JSON.parse(status.at(-1)!) : undefined);
   const out = async (name: string, args: unknown) => (await run(name, args)).content[0].text as string;
-  return { tools, on, sent, status, ctx, out, setIdle: (v: boolean) => (idle = v) };
+  return { tools, on, sent, status, last, ctx, out, setIdle: (v: boolean) => (idle = v) };
 }
 const until = async (ok: () => boolean, ms = 8000) => {
   for (const end = Date.now() + ms; !ok(); ) {
@@ -71,15 +73,18 @@ describe("background", () => {
     x = load();
     const said = await x.out("bash", { command: "sleep 0.3; echo built; exit 3", run_in_background: true });
     expect(said).toMatch(/Started in the background as bg_\w+/);
-    expect(x.status.at(-1)).toBe(JSON.stringify({ running: 1, queued: 0 }));
+    expect(x.last()).toEqual({ running: 1, queued: 0, cmds: ["sleep 0.3; echo built; exit 3"], ended: {} });
     await until(() => x.sent.length > 0);
     expect(x.sent[0].content).toContain(`Background command ${idOf(said)} ended with exit code 3`);
     expect(x.sent[0].content).toContain("built");
-    expect(readFileSync(/Output: (\S+)/.exec(said)![1], "utf8")).toBe("built\n");
-    // the engine was idle: kept for the next turn, and Ondra is told to wake the job
-    expect(x.status.at(-1)).toBe(JSON.stringify({ running: 0, queued: 1 }));
+    const file = /Output: (\S+)/.exec(said)![1];
+    expect(readFileSync(file, "utf8")).toBe("built\n");
+    // the raw output is only this user's to read
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // the engine was idle: kept for the next turn, and Ondra is told to wake the job and how it ended
+    expect(x.last()).toEqual({ running: 0, queued: 1, cmds: [], ended: { call1: { code: 3, tail: "built\n" } } });
     x.on.agent_start({}, x.ctx);
-    expect(x.status.at(-1)).toBeUndefined();
+    expect(x.last().queued).toBe(0);
   });
 
   it("steers the end into a turn that runs, without asking Ondra to wake it", async () => {
@@ -88,7 +93,7 @@ describe("background", () => {
     await x.out("bash", { command: "true", run_in_background: true });
     await until(() => x.sent.length > 0);
     expect(x.sent[0].deliverAs).toBe("steer");
-    expect(x.status.at(-1)).toBeUndefined();
+    expect(x.last()).toMatchObject({ running: 0, queued: 0 });
   });
 
   it("leaves a foreground command to the built-in bash", async () => {
@@ -112,7 +117,7 @@ describe("background", () => {
     await until(() => x.sent.length > 0, 4000);
     expect(x.sent).toHaveLength(1);
     expect(x.sent[0].content).toContain("reached its deadline");
-    expect(x.status.at(-1)).toBe(JSON.stringify({ running: 0, queued: 1 }));
+    expect(x.last()).toMatchObject({ running: 0, queued: 1 });
   });
 
   it("stops one by its id, quietly", async () => {
@@ -122,8 +127,42 @@ describe("background", () => {
     expect(await x.out("bash_stop", { id })).toMatch(new RegExp(`Stopped ${id} after \\d+s[\\s\\S]*started`));
     await new Promise((r) => setTimeout(r, 300));
     expect(x.sent).toHaveLength(0);
-    expect(x.status.at(-1)).toBeUndefined();
+    expect(x.last()).toMatchObject({ running: 0, queued: 0, ended: { call1: { code: null } } });
     expect(await x.out("bash_stop", { id: "bg_nope" })).toContain("None is running");
+  });
+
+  it("keeps a long burst's first and last lines, and says how many are left out", async () => {
+    x = load();
+    await x.out("monitor", { command: "seq 1 25; sleep 2" });
+    await until(() => x.sent.length > 0, 4000);
+    const lines = x.sent[0].content.split("\n");
+    expect(lines[0]).toMatch(/: 25 new lines$/);
+    expect(lines.slice(1, 11)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+    expect(lines[11]).toMatch(/^… 5 more lines \(in .+mon_\w+\.log\) …$/);
+    expect(lines.slice(12)).toEqual(["16", "17", "18", "19", "20", "21", "22", "23", "24", "25"]);
+  });
+
+  it("stops a watch that speaks all the time", async () => {
+    x = load();
+    await x.out("monitor", { command: "while true; do echo tick; sleep 1.1; done" });
+    await until(() => x.sent.some((s) => s.content.includes("was stopped")), 20_000);
+    expect(x.sent.at(-1)!.content).toContain("more than 8 messages a minute");
+    expect(x.last()).toMatchObject({ running: 0 });
+  }, 25_000);
+
+  it("keeps a character split across two reads whole", async () => {
+    x = load();
+    await x.out("bash", { command: "printf '\\355\\225'; sleep 0.2; printf '\\234\\n'", run_in_background: true });
+    await until(() => x.sent.length > 0);
+    expect(x.sent[0].content).toContain("한");
+  });
+
+  it("stops what runs when the session ends, and says so", async () => {
+    x = load();
+    await x.out("bash", { command: "sleep 30", run_in_background: true });
+    x.on.session_shutdown({}, x.ctx);
+    expect(x.last()).toEqual({ running: 0, queued: 0, cmds: [], ended: { call1: { code: null, tail: "" } } });
+    expect(x.sent).toHaveLength(0);
   });
 
   it("hides secret values in what it sends", async () => {
@@ -138,6 +177,9 @@ describe("background", () => {
 describe("background helpers", () => {
   it("splits whole lines and keeps the unfinished rest", () => {
     expect(splitLines("pa", "rt\nnext\r\n\nlast")).toEqual({ lines: ["part", "next"], rest: "last" });
+  });
+  it("leaves a short burst whole", () => {
+    expect(burstBody(["a"], ["b"], 2, "/f")).toBe("a\nb");
   });
   it("keeps the last lines", () => {
     expect(lastLines("a\nb\nc\n", 2)).toBe("b\nc");

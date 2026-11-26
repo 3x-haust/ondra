@@ -72,13 +72,13 @@ describe("coding defaults", () => {
   it("runs long commands in the background and waits for their end, never in sleep loops", () => {
     const p = flat(TASK_SYSTEM);
     for (const rule of [
-      "bash `run_in_background: true`",
+      "run a long command that ends (a build, tests, a deploy) with bash `run_in_background: true`",
       "a message comes when it ends",
       "End your turn when only waiting is left: that message wakes you",
-      "`monitor` (through use)",
       "5 min by default, 30 at most",
-      "`bash_stop` stops either",
-      "Never wait in a `sleep` loop or a call that is only `sleep N`",
+      "`bash_stop` stops either (both through use)",
+      "Never wait in a `sleep` loop",
+      "a dev server left for the user starts detached",
       "90 s", "2 minutes",
       "read the summary when its end wakes you",
     ]) expect(p).toContain(rule);

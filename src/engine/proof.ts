@@ -65,7 +65,7 @@ export function commandCore(cmd: string): string[] {
     );
 }
 
-function ranCommand(t: Task, ref: string): { at: number; ok: boolean; shellId?: string } | null {
+function ranCommand(t: Task, ref: string): { at: number; ok: boolean; shellId?: string; running?: boolean } | null {
   const want = norm(ref.replace(/^\$\s*/, ""));
   if (want.length < 2) return null;
   const core = commandCore(ref);
@@ -74,10 +74,13 @@ function ranCommand(t: Task, ref: string): { at: number; ok: boolean; shellId?: 
     if (!x || (x.kind !== "bash" && x.kind !== "test")) continue;
     const raw = x.detail ?? x.target ?? "";
     const cmd = norm(raw);
-    if (cmd.includes(want) || (cmd.length > 4 && want.includes(cmd))) return { at: i, ok: x.ok !== false, shellId: x.shellId };
+    // started in the background: it counts once it ended, by its exit code
+    const sh = x.shellId ? t.shells.find((s) => s.id === x.shellId) : undefined;
+    const hit = { at: i, ok: x.ok !== false && sh?.ok !== false && !(sh?.runInBackground && sh.stopped), shellId: x.shellId, running: !!sh?.runInBackground && !sh.endedAt };
+    if (cmd.includes(want) || (cmd.length > 4 && want.includes(cmd))) return hit;
     // the same command written another way (another folder variable, its output piped elsewhere)
     const ran = commandCore(raw);
-    if (core.length && core.join(" ").length >= 4 && core.every((c) => ran.includes(c))) return { at: i, ok: x.ok !== false, shellId: x.shellId };
+    if (core.length && core.join(" ").length >= 4 && core.every((c) => ran.includes(c))) return hit;
   }
   return null;
 }
@@ -196,6 +199,7 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
       if (e.kind === "test" || e.kind === "build" || e.kind === "run" || e.kind === "repro") {
         const r = ranCommand(t, e.ref);
         if (!r) return { ...e, ok: false, check: "no-run", why: "돌린 기록이 없어요" };
+        if (r.running) return { ...e, ok: false, check: "no-run", why: "백그라운드에서 아직 끝나지 않았어요" };
         if (!r.ok) return { ...e, ok: false, check: "failed", why: "마지막 실행이 실패했어요" };
         // a status look (a CI run, a store review, a URL) says nothing about the code: it doesn't go stale
         if (edited > r.at && commandKind(e.ref) !== "poll") return { ...e, ok: false, check: "stale", why: "돌린 뒤에 코드가 바뀌었어요" };

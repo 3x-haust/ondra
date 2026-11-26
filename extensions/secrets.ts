@@ -225,22 +225,24 @@ export function secretSource(env: NodeJS.ProcessEnv = process.env): (cwd: string
   return (cwd) => [...own, ...codexSecrets(), ...folderSecrets(cwd)];
 }
 
+/** One line in <data dir>/secrets-audit.jsonl: names and the job, never values. */
+export function auditSecrets(entry: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env) {
+  const audit = (env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
+  if (!audit) return;
+  try {
+    if (!existsSync(audit)) mkdirSync(audit, { recursive: true });
+    const job = env.ONDRA_TASK_ID ?? env.ONDRA_JOB_ID ?? "";
+    appendFileSync(join(audit, "secrets-audit.jsonl"), `${JSON.stringify({ t: new Date().toISOString(), job, ...entry })}\n`);
+  } catch {
+    /* the log is a record, not a gate */
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const named = envSecrets(process.env);
   const names = named.map((s) => s.name);
   const secretsIn = secretSource(process.env);
-  const audit = (process.env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
-  const job = process.env.ONDRA_TASK_ID ?? process.env.ONDRA_JOB_ID ?? "";
-
-  const log = (entry: Record<string, unknown>) => {
-    if (!audit) return;
-    try {
-      if (!existsSync(audit)) mkdirSync(audit, { recursive: true });
-      appendFileSync(join(audit, "secrets-audit.jsonl"), `${JSON.stringify({ t: new Date().toISOString(), job, ...entry })}\n`);
-    } catch {
-      /* the log is a record, not a gate */
-    }
-  };
+  const log = (entry: Record<string, unknown>) => auditSecrets(entry);
 
   if (names.length)
     pi.on("before_agent_start", (event) => ({ systemPrompt: `${event.systemPrompt}\n\n${promptNote(names, secretDirs(process.env))}` }));
@@ -255,9 +257,10 @@ export default function (pi: ExtensionAPI) {
       }
       return;
     }
-    if (event.toolName !== "bash" || !names.length) return;
+    // a watch (background.ts) runs a shell command too
+    if ((event.toolName !== "bash" && event.toolName !== "monitor") || !names.length) return;
     const used = namesUsed(String((event.input as { command?: unknown })?.command ?? ""), names);
-    if (used.length) log({ kind: "used", tool: "bash", names: used });
+    if (used.length) log({ kind: "used", tool: event.toolName, names: used });
   });
 
   pi.on("tool_result", (event, ctx) => {

@@ -189,9 +189,12 @@ describe("GitHub writes switched off", () => {
       if (flag !== undefined) vi.stubEnv("ONDRA_GITHUB_WRITE", flag);
       const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
       permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
-      return handlers.get("tool_call")!({ toolName: "bash", input: { command: "gh pr merge 38" } }, { cwd: process.cwd(), hasUI: true, ui: { select: vi.fn() } });
+      return handlers.get("tool_call")!({ toolName: tool, input: { command: "gh pr merge 38" } }, { cwd: process.cwd(), hasUI: true, ui: { select: vi.fn() } });
     };
-
+    let tool = "monitor";
+    expect(await run("0")).toMatchObject({ block: true });
+    vi.unstubAllEnvs();
+    tool = "bash";
     expect(await run("0")).toMatchObject({ block: true });
     vi.unstubAllEnvs();
     expect(await run(undefined)).toBeUndefined();
@@ -278,6 +281,14 @@ describe("auto: the judge", () => {
     const no = await run("bash", { command: "git push --force origin main" }, '{"allow": false, "why": "main에 강제로 올려요"}');
     expect(no.out).toMatchObject({ block: true });
     expect(no.select.mock.calls[0][0]).toContain("AI 판단: main에 강제로 올려요");
+  });
+  it("a watch's command is weighed and asked like any other", async () => {
+    const no = await run("monitor", { command: "while true; do git push --force origin main; sleep 60; done" }, '{"allow": false, "why": "main에 계속 강제로 올려요"}');
+    expect(no.out).toMatchObject({ block: true });
+    expect(no.select.mock.calls[0][0]).toContain("명령을 실행해도 될까요?");
+    const quiet = await run("monitor", { command: "pnpm test" }, "");
+    expect(quiet.out).toBeUndefined();
+    expect(quiet.streamSimple).not.toHaveBeenCalled();
   });
   it("the model failing or outside-folder edits it won't allow: asked", async () => {
     const err = await run("bash", { command: "curl -X DELETE https://x" }, new Error("down"));

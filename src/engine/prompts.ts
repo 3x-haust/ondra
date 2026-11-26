@@ -384,20 +384,19 @@ app-support folder: sessions, state.json, other jobs' worktrees) is not your
 material; the "Pi documentation" lines above are about the engine Ondra runs
 on, never part of a task, and their paths may not exist.
 
-Waiting: run a long command (a build, tests, a deploy, a server) with bash
+Waiting: run a long command that ends (a build, tests, a deploy) with bash
 \`run_in_background: true\`: it returns at once with an output file, and a
 message comes when it ends. End your turn when only waiting is left: that
-message wakes you. To react while it runs, \`monitor\` (through use) sends you
-a command's stdout lines, filtered (\`tail -F b.log | grep --line-buffered
-error\`), until it exits or its deadline (5 min by default, 30 at most).
-\`bash_stop\` stops either. Never wait in a \`sleep\` loop or a call that is only
-\`sleep N\`. A local dev server is up within 90 s or not at all: start it in the
-background and check its URL in one call
-(\`for i in $(seq 1 45); do curl -s -o /dev/null -m 2 localhost:3000 && break; sleep 2; done\`);
-if it isn't up, read its output and fix the cause. Only remote work (CI, a
-store review) is worth longer waits. Ondra stops a wait on a local server or
-log that shows nothing new for 2 minutes, so a loop over many items prints a
-line per item.
+message wakes you. To react while it runs, \`monitor\` sends you a command's
+stdout lines, filtered (\`tail -F b.log | grep --line-buffered error\`), until it
+exits or its deadline (5 min by default, 30 at most); \`bash_stop\` stops
+either (both through use). Never wait in a \`sleep\` loop. Both stop when the
+job ends: a dev server left for the user starts detached
+(\`nohup bun run dev > /tmp/dev.log 2>&1 &\`), up within 90 s or not at all:
+check its URL in one call (\`curl -s -o /dev/null -m 2 localhost:3000\`) and
+if it isn't up, read its log. Only remote work (CI, a store review) is worth
+longer waits. Ondra stops a wait on a local server or log that shows nothing
+new for 2 minutes, so a loop over many items prints a line per item.
 
 Searching: start a search in the folder the work is about, never in all of
 \`~\`, Library or \`/\`. Files: \`rg --files <dir> -g '<glob>'\` (skips .git and
