@@ -25,7 +25,9 @@ import { viaHost } from "./hosts";
 /** What a run says, at the start of its last message, when there was nothing to do or report. */
 export const NOTHING = "(루틴: 없음)";
 /** events are looked at this often */
-const EVENT_EVERY = 5 * 60_000;
+/** how often an event routine asks GitHub what is new (gh only, no model): once a minute, as t3code
+ *  asks a tracker about opened issues and PRs */
+const EVENT_EVERY = 60_000;
 
 export const routinesIn = (space: SpaceId) => (state.routines ?? []).filter((r) => r.space === space && !r.draft);
 export const routineById = (id: string) => (state.routines ?? []).find((r) => r.id === id);
@@ -274,7 +276,8 @@ export async function tickRoutines(now = Date.now(), o: { alarmsOnly?: boolean }
   try {
     for (const r of state.routines ?? []) {
       if (r.when.kind !== "event" || !r.enabled || r.draft) continue;
-      if (now - (lastPoll.get(r.id) ?? 0) < EVENT_EVERY) continue;
+      // (a tick a little early, or one the last poll ran into, isn't a reason to wait another minute)
+      if (now - (lastPoll.get(r.id) ?? 0) < EVENT_EVERY - 10_000) continue;
       lastPoll.set(r.id, now);
       await pollRoutine(r, now);
     }

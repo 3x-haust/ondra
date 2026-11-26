@@ -166,6 +166,19 @@ describe("routine runs", () => {
     expect(t.ask).toContain("#7 로그인 버그");
   });
 
+  it("an event routine asks GitHub once a minute, as its line says", async () => {
+    const r = make({ when: { kind: "event", event: "pr" } });
+    expect(routineLine(routineById(r.id)!)).toBe("1분마다 확인해요");
+    const spy = vi.spyOn(native, "ghWatch").mockResolvedValue("[]");
+    vi.spyOn(native, "spaceEnv").mockResolvedValue([]);
+    const at = Date.now() + 10 * 60_000;
+    await tickRoutines(at);
+    await tickRoutines(at + 30_000);
+    // the next minute's tick, even one that fires a little early
+    await tickRoutines(at + 58_000);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
   it("one the user asked for plainly is saved and on at once; main's card can still change or drop it", async () => {
     const out = await applyRoutes("home", [{ kind: "routine", title: "아침 정리", task: "어제 머지된 PR 요약", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, project: "app" }], "평일 9시마다 어제 머지된 PR 요약해줘");
     const r = routineById((out[0] as { routineId: string }).routineId)!;
