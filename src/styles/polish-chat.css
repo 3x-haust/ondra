@@ -1197,50 +1197,6 @@
   font-weight: var(--fw-medium);
 }
 
-/* Main: a task's question answered, one quiet line where the card was */
-.answered-line {
-  display: flex;
-  align-items: center;
-  gap: var(--s-6);
-  align-self: flex-start;
-  max-width: 100%;
-  min-width: 0;
-  height: var(--h-sm);
-  margin-left: calc(-1 * var(--s-8));
-  padding: 0 var(--s-8);
-  border-radius: var(--r-md);
-  font-size: var(--fs-sm);
-  color: var(--ink-3);
-  text-align: left;
-}
-.answered-line:hover {
-  background: var(--hover);
-  color: var(--ink-2);
-}
-.answered-line > .icon {
-  flex: none;
-  color: var(--ok-ink);
-}
-.answered-line .answered-task {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink-2);
-}
-.answered-line .answered-sep {
-  flex: none;
-  color: var(--ink-4);
-}
-.answered-line .answered-a {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Main: each job a reply started or relayed to, one quiet line that keeps up with it
    (its step, then its own result line and screenshot). Several stack tightly. */
 .job-rows {
