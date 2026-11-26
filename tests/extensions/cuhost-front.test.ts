@@ -53,4 +53,12 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
       "cuhost.swift:4 (openTarget): cfg.activates = true",
     ]);
   });
+
+  it("the off-screen display's keeper never pulls a job's copy onto the user's screen", () => {
+    // the keeper pulls the front app's windows off the off-screen display each second; the job's
+    // helper pushes its copy's windows back on: a copy at the front flickered between the two
+    const src = readFileSync(SOURCE, "utf8");
+    const body = src.slice(src.indexOf("func pullBackWindows("), src.indexOf("extension CGRect { var area"));
+    expect(body).toMatch(/^func pullBackWindows\(of pid: pid_t\) \{\n\s+guard !isJobCopy\(pid\) else \{ return \}/);
+  });
 });
