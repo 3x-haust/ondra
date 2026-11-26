@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/3x-haust/ondra/releases"><b>macOS용 다운로드 ↗</b></a> · <a href="#설치">설치 안내</a> · <a href="README.md">English</a>
+  <a href="https://github.com/3x-haust/ondra/releases"><b>macOS · Windows · Linux용 다운로드 ↗</b></a> · <a href="#설치">설치 안내</a> · <a href="README.md">English</a>
 </p>
 
 <p align="center"><sub>macOS 13 이상 · Apple silicon</sub></p>
@@ -194,7 +194,10 @@ GitHub 계정을 연결하면 PR 상태, 검사, 리뷰와 바뀐 파일을 작�
 2. Ondra를 열고 설정에서 사용할 모델 계정(ChatGPT/Codex, Claude 등)을 연결해요.
 3. 프로젝트를 선택하고 원하는 일을 말해요.
 
-Ondra는 GitHub Releases를 확인해 앱 안에서 업데이트를 안내해요. Mac 앱 조작과 캡처에는 **손쉬운 사용·화면 기록** 권한이 필요해요. 모바일 기기에서 확인하려면 **Xcode의 iOS 시뮬레이터** 또는 **Android SDK의 에뮬레이터**를 준비해요.
+**Windows 10/11 x64:** 같은 릴리스의 `Ondra_<버전>_x64-setup.exe`를 실행해요. 설치 파일에 아직 코드 서명이 없어서 SmartScreen이 막으면 **추가 정보 → 실행**을 눌러요.
+**Linux x64:** `Ondra_<버전>_amd64.deb`(`sudo apt install ./Ondra_*.deb`)나 `Ondra-<버전>-1.x86_64.rpm`(`sudo dnf install ./Ondra-*.rpm`)을 설치해요.
+
+Ondra는 어느 운영체제에서나 GitHub Releases를 확인해 앱 안에서 업데이트를 안내해요. Mac 앱 조작과 캡처에는 **손쉬운 사용·화면 기록** 권한이 필요해요. 모바일 기기에서 확인하려면 **Xcode의 iOS 시뮬레이터** 또는 **Android SDK의 에뮬레이터**를 준비해요.
 
 <details>
 <summary>macOS가 처음 실행을 막는 경우</summary>

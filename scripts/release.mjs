@@ -18,6 +18,9 @@
 //      update needs no further download: the app copies each component out of itself
 //   4. a full Ondra.app (components inside, signed again) for the dmg, which works offline
 //   5. latest.json, components.json, and the archive of each component new in this release
+//   6. once published, .github/workflows/release.yml builds the Windows installer and the Linux
+//      packages of the same commit, adds them to the release and names them in its latest.json
+//      (scripts/release-desktop.mjs); a failed run goes again with its workflow_dispatch and the tag
 // Secrets come from the environment only and are never printed.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
