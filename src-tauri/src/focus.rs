@@ -211,6 +211,41 @@ mod imp {
         unsafe { CGEventSourceSecondsSinceLastEventType(SESSION, kind) }
     }
 
+    #[link(name = "ApplicationServices", kind = "framework")]
+    unsafe extern "C" {
+        fn AXUIElementCreateApplication(pid: i32) -> *const std::ffi::c_void;
+        fn AXUIElementSetAttributeValue(element: *const std::ffi::c_void, attribute: *const std::ffi::c_void, value: *const std::ffi::c_void) -> i32;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        static kCFBooleanTrue: *const std::ffi::c_void;
+        fn CFRelease(cf: *const std::ffi::c_void);
+    }
+
+    /// Bring the user's app back to the front. An app that isn't in front can't activate another
+    /// one (macOS 14's cooperative activation drops the request, and "ignoring other apps" is
+    /// gone), so the user's app is asked through Accessibility to come forward itself, which
+    /// macOS takes from the background; a plain activation stays as the fallback.
+    fn bring_back(back: &NSRunningApplication) -> bool {
+        let pid = back.processIdentifier();
+        let attr = objc2_foundation::NSString::from_str("AXFrontmost");
+        let ax = unsafe {
+            let el = AXUIElementCreateApplication(pid);
+            if el.is_null() {
+                -1
+            } else {
+                let r = AXUIElementSetAttributeValue(el, Retained::as_ptr(&attr).cast(), kCFBooleanTrue);
+                CFRelease(el);
+                r
+            }
+        };
+        if ax == 0 {
+            return true;
+        }
+        #[allow(deprecated)]
+        back.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps)
+    }
+
     pub fn parent(pid: i32) -> Option<i32> {
         let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
         let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
@@ -296,8 +331,7 @@ mod imp {
             }
             Verdict::Restore => {
                 let Some(back) = prev_app else { return };
-                #[allow(deprecated)]
-                let ok = back.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+                let ok = bring_back(&back);
                 if ok {
                     st.restored.entry(pid).or_default().push(now);
                     st.pending = Some((back.processIdentifier(), name(app), now));
