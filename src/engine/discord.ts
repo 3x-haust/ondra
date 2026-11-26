@@ -1300,6 +1300,9 @@ export async function openThreads() {
     const a = t.agent;
     const place = a?.room || a?.channel;
     if (!a || !place || t.parentId || !jobOpen(t) || (a.thread !== undefined && a.threadIn === place)) continue;
+    // moved to another place: the thread it left says where it went and is put away, so the
+    // channel it started in doesn't keep a thread of work that goes on elsewhere
+    if (a.thread && a.threadIn) await leaveThread(t, a.thread, a.threadIn, a.head, place);
     // a DM (no threads): where it was asked
     const dm = !servers.has(place) && place === (await dmChannel().catch(() => undefined));
     if (dm) {
@@ -1314,8 +1317,16 @@ export async function openThreads() {
       ? discordApi("POST", `/channels/${place}/messages/${head.id}/threads`, { name, auto_archive_duration: 1440 })
       : discordApi("POST", `/channels/${place}/threads`, { name, type: 11, auto_archive_duration: 1440 })
     ).catch(fail)) as { id?: string } | undefined;
-    setJobAgent(t.id, { thread: made?.id ?? "", threadIn: place, threadClosed: false, ...(made?.id && head?.id ? { head: head.id, folded: false } : {}) });
+    setJobAgent(t.id, { thread: made?.id ?? "", threadIn: place, threadClosed: false, head: made?.id && head?.id ? head.id : undefined, folded: false });
   }
+}
+
+/** The thread of a job that moved elsewhere: a last line pointing there, its head saying so, put away. */
+async function leaveThread(t: Task, thread: string, was: string, head: string | undefined, to: string) {
+  const title = cut(t.title || t.ask, 100);
+  await discordApi("POST", `/channels/${thread}/messages`, { content: `↪ <#${to}>에서 이어서 해요`, allowed_mentions: { parse: [] } }).catch(() => {});
+  if (head) await discordApi("PATCH", `/channels/${was}/messages/${head}`, { content: `↪ **${title}** → <#${to}>`, allowed_mentions: { parse: [] } }).catch(() => {});
+  await discordApi("PATCH", `/channels/${thread}`, { name: cut(`↪ ${title}`, 100), archived: true }).catch(() => {});
 }
 
 /**

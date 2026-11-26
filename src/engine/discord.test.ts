@@ -819,6 +819,19 @@ describe("the whole way round", () => {
     expect(headLine({ id: "t8", title: "빌드", status: "failed", error: "서명 키가 없어요", entries: [] } as never)).toBe("❌ **빌드**\n서명 키가 없어요");
   });
 
+  it("a job moved to another channel leaves its first thread pointing there, put away", async () => {
+    await ready();
+    const api = vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path.endsWith("/threads") ? { id: "th9" } : { id: "h9" }));
+    setState("tasks", [{ id: "t9", title: "Orbit 이슈 #110", status: "running", entries: [], agent: { channel: "c1", room: "c2", thread: "th1", threadIn: "c1", head: "h1", folded: false } } as never]);
+    await openThreads();
+    expect(api).toHaveBeenCalledWith("POST", "/channels/th1/messages", { content: "↪ <#c2>에서 이어서 해요", allowed_mentions: { parse: [] } });
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h1", { content: "↪ **Orbit 이슈 #110** → <#c2>", allowed_mentions: { parse: [] } });
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/th1", { name: "↪ Orbit 이슈 #110", archived: true });
+    expect(api).toHaveBeenCalledWith("POST", "/channels/c2/messages/h9/threads", expect.objectContaining({ name: "Orbit 이슈 #110" }));
+    expect(taskById("t9")?.agent).toMatchObject({ thread: "th9", threadIn: "c2", head: "h9" });
+    expect(channelOf("t9")).toBe("th9");
+  });
+
   it("a job's thread is put away a while after it ended; a job asked in a DM works in the DM", async () => {
     await ready();
     const api = vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path === "/users/@me/channels" ? { id: "dm1" } : { id: "x" }));
