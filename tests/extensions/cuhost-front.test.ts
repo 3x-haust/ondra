@@ -83,4 +83,12 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     expect(back).toContain("s.maxX - min(arrowRoom.width");
     expect(back).toContain("s.maxY - min(arrowRoom.height");
   });
+
+  it("the pointer that reaches the off-screen display stops where it just was", () => {
+    // put back inside the corner instead, it jumped there under the user's hand
+    const src = readFileSync(SOURCE, "utf8");
+    const keeper = src.slice(src.indexOf("func keepUserOffBackdrop()"), src.indexOf("var keeperTap"));
+    expect(keeper).toContain("let back = fresh ?? nearestUserPoint(p, in: userDisplayBounds())");
+    expect(keeper).toContain("keeperLast = (p, now)");
+  });
 });
