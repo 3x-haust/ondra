@@ -77,7 +77,7 @@ export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) &&
 // (another device's project is "r:<host>:<id>": every colon goes, not just the first)
 const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace(/[~:]/g, "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
-const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
+const queues = new Map<string, { text: string; note?: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
 /** what main is told about when no user spoke: a fork it started ended, or a project it handed work to finished */
 type Event = "fork" | "project";
 /** follow-ups main made on its own since the user last spoke, per chat (stops runaway chains) */
@@ -179,7 +179,7 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
   setState("captain", (list) => trimChats([...list, me, reply]));
   followUps.set(space, 0);
   // `note`: for the model only (the chat shows the user's words)
-  queues.set(space, [...(queues.get(space) ?? []), { text: opts.note ? `${t}\n\n${opts.note}` : t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
+  queues.set(space, [...(queues.get(space) ?? []), { text: t, note: opts.note, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
   void pump(space);
   return reply.id;
 }
@@ -486,7 +486,7 @@ async function pump(space: string) {
         isolateOf.set(space, next.isolate);
         answering.set(space, next.replyId ?? "");
         if (isAgentChat(space)) await freshSession(space);
-        const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
+        const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event, next.note);
         setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
         // 결과물 is the user's: the agent's chat keeps none there
@@ -508,10 +508,10 @@ async function pump(space: string) {
   }
 }
 
-async function routeWithRetry(space: string, text: string, cwd?: string, event?: Event): Promise<{ reply: string; routes: Route[] }> {
+async function routeWithRetry(space: string, text: string, cwd?: string, event?: Event, note?: string): Promise<{ reply: string; routes: Route[] }> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await route(space, text, cwd, event);
+      return await route(space, text, cwd, event, note);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // the engine went silent and was restarted: the same message once more on the new one,
@@ -538,7 +538,7 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
       // on every later message (each resends it all), so once, a fresh session without the old talk
       if (attempt === 0 && isRefusal(msg) && (await freshSession(space))) {
         // the channel's recent talk that came along may be what tripped it: once more without it
-        text = text.replace(/<recent-talk>[\s\S]*?<\/recent-talk>/g, "(left out)");
+        note = note?.replace(/<recent-talk>[\s\S]*?<\/recent-talk>/g, "(left out)");
         continue;
       }
       // the account hit its limit: 자동 sits it out and main sends again on one with room, in a fresh
@@ -1075,7 +1075,8 @@ export function nowLine(now = Date.now()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function context(space: string, text: string, cwd?: string, event?: Event): string {
+/** `note`: for the model alone, after the user's words; memory and the rest are picked by the words */
+function context(space: string, text: string, cwd?: string, event?: Event, note?: string): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
   // the agent's chat sees its own work; main and the projects never see it
@@ -1166,13 +1167,13 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : isAgentChat(space) ? AGENT_ENDED : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
-  else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
+  else out.push("", `# Now\n${nowLine()}`, "", "# Message", note ? `${text}\n\n${note}` : text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, routines: (state.routines ?? []).filter((r) => r.space === sp(space) && !r.draft).map((r) => `- ${r.id} | ${r.title} | ${r.alarm ? "alarm, " : ""}${describeWhen(r.when)} | ${r.enabled ? "on" : "off"}`).join("\n"), spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
 }
 
-async function route(space: string, text: string, cwd?: string, event?: Event): Promise<{ reply: string; routes: Route[] }> {
+async function route(space: string, text: string, cwd?: string, event?: Event, note?: string): Promise<{ reply: string; routes: Route[] }> {
   clearTimeout(idleTimers.get(space));
   await ensureCaptain(space);
   const agent = agentOf(space);
@@ -1189,7 +1190,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
     heardAt.set(space, Date.now());
     watch = setInterval(() => watchCommands(space), 5_000);
-    await request(agent, { type: "prompt", message: context(space, text, cwd, event) });
+    await request(agent, { type: "prompt", message: context(space, text, cwd, event, note) });
     await done;
   } finally {
     clearInterval(watch);
