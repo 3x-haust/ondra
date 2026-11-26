@@ -11,7 +11,7 @@ import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
 import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, deviceSpaces, spaceById, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
-import { mirror, splitProjectId } from "../state/mirror";
+import { mirror, splitProjectId, splitSpaceId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath, revealLabel } from "../lib/native";
 import { revealOn } from "../engine/far";
@@ -625,8 +625,8 @@ export function Sidebar() {
   const needs = createMemo(() => every().filter(needsYou).length);
   const boardLive = () => every().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
-  // the agent: on, or something of it here
-  const agentShown = () => !!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space);
+  // the agent: on, or something of it here; this device's only, not in a connected device's workspace
+  const agentShown = () => !splitSpaceId(state.space) && (!!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space));
   // its jobs going now, counted as a project row counts its own (top-level jobs only)
   const agentLive = () => state.tasks.filter((x) => x.agent && x.space === state.space && !x.parentId && x.status === "running").length;
   const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");

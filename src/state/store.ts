@@ -211,6 +211,12 @@ const none: Task[] = [];
 export const spaceById = (id: SpaceId) => state.spaces.find((s) => s.id === id)!;
 /** this device's own workspaces (not those of the devices added in Settings › 연결) */
 export const ownSpaces = () => state.spaces.filter((s) => !s.host);
+/** the one of this device's workspaces a per-space settings page shows: `want` when it is one of them,
+ *  else the first (a device's workspace keeps its settings on that device) */
+export const ownSpace = (want?: SpaceId): SpaceId => {
+  const own = ownSpaces();
+  return own.some((s) => s.id === want) ? want! : (own[0]?.id ?? "home");
+};
 /** the workspaces of one device: this one's (undefined), or an added device's */
 export const spacesOf = (host?: string) => state.spaces.filter((s) => s.host === host);
 /** the workspaces of the device whose workspace is open (the tabs, ⌘1…⌘9) */

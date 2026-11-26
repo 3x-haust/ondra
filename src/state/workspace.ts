@@ -6,6 +6,7 @@ import { batch, createEffect, untrack } from "solid-js";
 import { projectById, setSpace, state, taskById } from "./store";
 import type { SpaceId } from "./types";
 import { devicesIn } from "./devices";
+import { splitSpaceId } from "./mirror";
 import { activeTab, blankPane, layout, newPaneId, panelOpen, previewPath, ptabs, setActiveTab, setLayout, setPanelOpen, setPreviewPath, setPtabs, setView, view, type PTab, type View } from "./ui";
 import * as L from "./layout";
 import { keepLayout, layoutOf } from "./panes";
@@ -32,11 +33,13 @@ export function carried(v: View, space: SpaceId): View {
   // a result is one space's own: that space's list opens at its first
   if (v.name === "results") return v.id ? { name: "results" } : v;
   if (v.name === "devices" && v.device) return devicesIn(space).some((d) => d.id === v.device) ? v : { name: "devices" };
+  // the Discord agent is this device's only: a connected device's workspace opens on its Main
+  if (v.name === "agent") return splitSpaceId(space) ? { name: "main" } : v;
   return v;
 }
 
 /** A screen that can be shown in `space` (its job or project is that space's). */
-const inSpace = (v: View, space: SpaceId) => (v.name === "task" || v.name === "changes" ? taskById(v.id)?.space === space : v.name === "main" && v.project ? projectById(v.project)?.space === space : true);
+const inSpace = (v: View, space: SpaceId) => (v.name === "agent" ? !splitSpaceId(space) : v.name === "task" || v.name === "changes" ? taskById(v.id)?.space === space : v.name === "main" && v.project ? projectById(v.project)?.space === space : true);
 
 /** The space a screen belongs to, if it belongs to one. */
 function spaceOfView(v: View): SpaceId | undefined {
