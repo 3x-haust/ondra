@@ -3205,6 +3205,15 @@ func nearestUserPoint(_ p: CGPoint, in screens: [CGRect]) -> CGPoint {
     .min { hypot($0.x - p.x, $0.y - p.y) < hypot($1.x - p.x, $1.y - p.y) } ?? p
 }
 
+/// Where the user's pointer that moved onto the off-screen display goes: it stops at the edge of
+/// the screen it was on (`last`, where it just was), as at any screen's edge, so a quick push
+/// into the corner the display touches reaches the corner (a hot corner fires there). Back
+/// where it just was, it stopped short of it; inside the corner, it jumped under the user's hand.
+func putBack(_ p: CGPoint, last: CGPoint?, screens: [CGRect]) -> CGPoint {
+    guard let last, let s = screens.first(where: { $0.contains(last) }) else { return nearestUserPoint(p, in: screens) }
+    return CGPoint(x: min(max(p.x, s.minX), s.maxX - 1), y: min(max(p.y, s.minY), s.maxY - 1))
+}
+
 /// Where a window that reaches onto an off-screen display goes: moved the least way (left or
 /// up) that clears it, kept on the user's screen it is mostly on. nil when it is clear already.
 func clearedOrigin(_ f: CGRect, off: [CGRect], screen: CGRect) -> CGPoint? {
@@ -3239,10 +3248,8 @@ func keepUserOffBackdrop() -> Never {
         let p = event.location
         let now = nowMs()
         if off.contains(where: { $0.contains(p) }) {
-            // the pointer stops where it just was, as at a screen's edge: put anywhere else (a
-            // point inside the corner) it jumped there under the user's hand
             let fresh = keeperLast.flatMap { now - $0.at < 1000 ? $0.p : nil }
-            let back = fresh ?? nearestUserPoint(p, in: userDisplayBounds())
+            let back = putBack(p, last: fresh, screens: userDisplayBounds())
             // the event goes on from the user's screen, so no app sees the pointer there
             event.location = back
             CGWarpMouseCursorPosition(back)
