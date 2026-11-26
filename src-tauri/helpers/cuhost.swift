@@ -2426,6 +2426,18 @@ func execPath(_ pid: pid_t) -> String? {
     return i > 4 ? String(decoding: buf[4..<i], as: UTF8.self) : nil
 }
 
+/// The folder background copies run from, as the path a process's executable shows (both spellings).
+func copyDirs() -> [String] {
+    let dir = cacheAppsDir()
+    return Array(Set([dir.path, dir.resolvingSymlinksInPath().path].map { $0.hasSuffix("/") ? $0 : $0 + "/" }))
+}
+
+/// A background copy a job runs, whichever helper started it.
+func isJobCopy(_ pid: pid_t) -> Bool {
+    guard let exe = execPath(pid) else { return false }
+    return copyDirs().contains { exe.hasPrefix($0) }
+}
+
 func isOrphanCopy(_ pid: pid_t, under dirs: [String]) -> Bool {
     var info = proc_bsdinfo()
     let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -2436,8 +2448,7 @@ func isOrphanCopy(_ pid: pid_t, under dirs: [String]) -> Bool {
 
 /// Kill every orphaned copy. Returns how many there were.
 @discardableResult func reapOrphanCopies() -> Int {
-    let dir = cacheAppsDir()
-    let dirs = Array(Set([dir.path, dir.resolvingSymlinksInPath().path].map { $0.hasSuffix("/") ? $0 : $0 + "/" }))
+    let dirs = copyDirs()
     let me = getpid()
     let orphans = allPids().filter { $0 != me && $0 > 1 && isOrphanCopy($0, under: dirs) }
     guard !orphans.isEmpty else { return 0 }
@@ -3256,7 +3267,12 @@ func keepUserOffBackdrop() -> Never {
 var keeperTap: CFMachPort?
 
 /// Move the app's windows that reach onto an off-screen display back onto the user's screen.
+/// Never a job's background copy: its windows belong there, and the job's helper puts them back
+/// (keepOffUserScreen) as soon as they are pulled out. A copy at the front for a moment (a pointer
+/// click it lifted itself on) had its window pulled onto the user's screen and pushed off again
+/// each second, flickering there and failing the job's captures.
 func pullBackWindows(of pid: pid_t) {
+    guard !isJobCopy(pid) else { return }
     let off = onlineDisplays().filter(Backdrop.isOurs).map { CGDisplayBounds($0) }
     let screens = userDisplayBounds()
     var winsRef: CFTypeRef?
