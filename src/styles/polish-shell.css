@@ -2054,7 +2054,9 @@
 }
 
 /* ── the cards that change one Mac: name, emoji or icon, color ── */
-.ml-pop {
+/* .pop.pop: over the dark theme's `:root[data-theme="dark"] .pop` padding, which left the
+   emoji grid against the edge with its last column cut */
+.ml-pop.pop.pop {
   position: fixed;
   padding: var(--s-10);
   border-radius: 14px;
@@ -2476,6 +2478,8 @@
 }
 .ep-list {
   height: 268px;
+  /* room for a hovered cell's scale at the edges */
+  padding: 3px;
   overflow-y: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
@@ -2493,7 +2497,7 @@
 }
 .ep-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 1px;
 }
 .ep-cell {
