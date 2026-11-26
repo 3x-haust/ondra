@@ -84,11 +84,14 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     expect(back).toContain("s.maxY - min(arrowRoom.height");
   });
 
-  it("the pointer that reaches the off-screen display stops where it just was", () => {
-    // put back inside the corner instead, it jumped there under the user's hand
+  it("the pointer that reaches the off-screen display stops at the edge of the screen it was on", () => {
+    // put back inside the corner instead, it jumped there under the user's hand; put back where it
+    // just was, a quick push into the top-right corner stopped short of it and the hot corner never fired
     const src = readFileSync(SOURCE, "utf8");
     const keeper = src.slice(src.indexOf("func keepUserOffBackdrop()"), src.indexOf("var keeperTap"));
-    expect(keeper).toContain("let back = fresh ?? nearestUserPoint(p, in: userDisplayBounds())");
+    expect(keeper).toContain("let back = putBack(p, last: fresh, screens: userDisplayBounds())");
     expect(keeper).toContain("keeperLast = (p, now)");
+    const back = src.slice(src.indexOf("func putBack("), src.indexOf("/// Where a window that reaches onto"));
+    expect(back).toContain("x: min(max(p.x, s.minX), s.maxX - 1), y: min(max(p.y, s.minY), s.maxY - 1)");
   });
 });
