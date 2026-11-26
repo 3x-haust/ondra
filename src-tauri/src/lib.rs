@@ -19,6 +19,8 @@ mod logos;
 mod linkcard;
 mod browser;
 mod inbrowser;
+#[cfg(target_os = "macos")]
+mod passkeys;
 mod devices;
 mod engine;
 pub mod focus;

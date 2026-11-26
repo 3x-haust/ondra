@@ -93,4 +93,6 @@ libc = "0.2"
 objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSGeometry", "NSNotification", "NSString", "NSDictionary", "NSDate", "NSOperation", "NSObject", "NSRunLoop", "NSData"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "libc", "NSWorkspace", "NSRunningApplication", "NSPasteboard"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "libc", "NSWorkspace", "NSRunningApplication", "NSPasteboard", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSView"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "WKWebView", "WKWebViewConfiguration", "WKUserContentController", "WKScriptMessage", "WKScriptMessageHandlerWithReply", "WKContentWorld", "WKFrameInfo", "WKSecurityOrigin"] }
+ring = "0.17"

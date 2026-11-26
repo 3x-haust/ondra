@@ -239,8 +239,12 @@ pub async fn inbrowser_show(app: AppHandle, x: f64, y: f64, w: f64, h: f64, url:
     let popup_app = app.clone();
     let popup_label = label(&space);
     let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start));
+    // popups share these scripts and the passkey handler (they take the opener's configuration)
     #[cfg(target_os = "macos")]
-    let builder = builder.data_store_identifier(store_id(&space)).user_agent(user_agent());
+    let builder = builder
+        .data_store_identifier(store_id(&space))
+        .user_agent(user_agent())
+        .initialization_script_for_all_frames(crate::passkeys::SHIM);
     // its own cookie store per space (WebView2 and WebKitGTK take a folder)
     #[cfg(not(target_os = "macos"))]
     let builder = builder.data_directory(crate::engine::data_dir(&app).join("webviews").join(format!("space-{:x}", u128::from_be_bytes(store_id(&space)))));
@@ -258,9 +262,12 @@ pub async fn inbrowser_show(app: AppHandle, x: f64, y: f64, w: f64, h: f64, url:
                 share_cookies(events.clone(), sp.clone(), wv, p.url().clone());
             }
         });
-    window
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    let wv = window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w.max(1.0), h.max(1.0)))
         .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::passkeys::attach(&app, &wv, &space);
     Ok(())
 }
 
