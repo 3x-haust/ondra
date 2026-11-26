@@ -61,4 +61,16 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     const body = src.slice(src.indexOf("func pullBackWindows("), src.indexOf("extension CGRect { var area"));
     expect(body).toMatch(/^func pullBackWindows\(of pid: pid_t\) \{\n\s+guard !isJobCopy\(pid\) else \{ return \}/);
   });
+
+  it("the apps a job runs are muted while they are the job's", () => {
+    const src = readFileSync(SOURCE, "utf8");
+    const keeper = src.slice(src.indexOf("func startWindowKeeper()"), src.indexOf("enum JobSound"));
+    expect(keeper).toContain("JobSound.keepQuiet(Set(pids).union(real))");
+    const sound = src.slice(src.indexOf("enum JobSound"), src.indexOf("static func audioClients()"));
+    // a private tap that sends the process's audio nowhere, and goes when the app is no longer the job's
+    expect(sound).toContain("d.muteBehavior = .muted");
+    expect(sound).toContain("d.isPrivate = true");
+    expect(sound).toMatch(/where !clients\.contains\(object\) \{\n\s+AudioHardwareDestroyProcessTap\(tap\)/);
+    expect(readFileSync(join(__dirname, "../../src-tauri/Info.plist"), "utf8")).toContain("NSAudioCaptureUsageDescription");
+  });
 });

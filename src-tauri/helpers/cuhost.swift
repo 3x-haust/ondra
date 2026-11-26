@@ -48,6 +48,7 @@
 
 import AppKit
 import ApplicationServices
+import CoreAudio
 import CoreGraphics
 import Foundation
 import ScreenCaptureKit
@@ -3293,11 +3294,87 @@ extension CGRect { var area: CGFloat { isNull ? 0 : width * height } }
 /// (a global drag monitor, a timer), not only during an action.
 func startWindowKeeper() {
     Thread.detachNewThread {
+        var tick = 0
         while true {
             usleep(250_000)
-            bgLock.lock(); let pids = Array(bgApps.keys); bgLock.unlock()
+            bgLock.lock(); let pids = Array(bgApps.keys); let real = launchedApps.union(offscreenApps); bgLock.unlock()
             for p in pids { keepOffUserScreen(p) }
+            // a new audio client (a helper the app starts to play) is caught within a second
+            tick += 1
+            if tick % 4 == 0 { JobSound.keepQuiet(Set(pids).union(real)) }
         }
+    }
+}
+
+// ───────────────────────── the job apps' sound ─────────────────────────
+/// The apps a job runs make no sound on the user's Mac: an on-screen keyboard's clicks in a
+/// remote PC, a chime, a video. Each audio client that is a job's app or one of its processes
+/// (Chromium plays from a helper it starts) gets a private, muted process tap (macOS 14.2+):
+/// while the tap exists Core Audio sends that process's audio nowhere. The tap goes when the app
+/// is no longer the job's, and with this helper. The first tap asks for the system audio
+/// recording permission (nothing is recorded: the tap is never read); refused, apps play as before.
+enum JobSound {
+    /// audio process object → its tap
+    static var taps: [AudioObjectID: AudioObjectID] = [:]
+    /// clients a tap failed for (one that just quit), and failures in a row: three is a refusal
+    static var failed = Set<AudioObjectID>()
+    static var failures = 0
+    static var refused: Bool { failures >= 3 }
+
+    static func keepQuiet(_ apps: Set<pid_t>) {
+        guard #available(macOS 14.2, *), !refused else { return }
+        let clients = apps.isEmpty ? [] : audioClients().filter { descends($0.pid, from: apps) }.map(\.object)
+        for (object, tap) in taps where !clients.contains(object) {
+            AudioHardwareDestroyProcessTap(tap)
+            taps[object] = nil
+        }
+        for object in clients where taps[object] == nil && !failed.contains(object) {
+            let d = CATapDescription(stereoMixdownOfProcesses: [object])
+            d.isPrivate = true
+            d.muteBehavior = .muted
+            d.name = "Ondra: a job's app, muted"
+            var tap = AudioObjectID(kAudioObjectUnknown)
+            let status = AudioHardwareCreateProcessTap(d, &tap)
+            guard status == noErr, tap != kAudioObjectUnknown else {
+                dbgLog("sound: no tap for \(object) (\(status))")
+                failed.insert(object); failures += 1
+                if refused { return }
+                continue
+            }
+            taps[object] = tap; failures = 0
+            dbgLog("sound: muted audio client \(object)")
+        }
+    }
+
+    /// Every process Core Audio knows as a client, with its pid.
+    static func audioClients() -> [(object: AudioObjectID, pid: pid_t)] {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &objects) == noErr else { return [] }
+        return objects.compactMap { object in
+            var a = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyPID, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var pid: pid_t = 0
+            var n = UInt32(MemoryLayout<pid_t>.size)
+            return AudioObjectGetPropertyData(object, &a, 0, nil, &n, &pid) == noErr && pid > 0 ? (object, pid) : nil
+        }
+    }
+
+    /// `pid` is one of `apps` or a process one of them started.
+    static func descends(_ pid: pid_t, from apps: Set<pid_t>) -> Bool {
+        var p = pid
+        for _ in 0..<16 {
+            if apps.contains(p) { return true }
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(p, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
+            let parent = pid_t(info.pbi_ppid)
+            if parent <= 1 || parent == p { return false }
+            p = parent
+        }
+        return false
     }
 }
 
