@@ -3193,10 +3193,16 @@ func userDisplayBounds() -> [CGRect] {
     return own.isEmpty ? [CGDisplayBounds(CGMainDisplayID())] : own
 }
 
-/// Where the pointer goes back to: the nearest point on the user's screens.
+/// Where the pointer goes back to: the nearest point on the user's screens where the arrow shows
+/// whole. The arrow is drawn right of and below its tip, so the screen's very edge (where the
+/// off-screen display touches it, a corner) left it all but gone: it looked lost on that display.
+let arrowRoom = CGSize(width: 24, height: 32)
 func nearestUserPoint(_ p: CGPoint, in screens: [CGRect]) -> CGPoint {
-    screens.map { s in CGPoint(x: min(max(p.x, s.minX), s.maxX - 1), y: min(max(p.y, s.minY), s.maxY - 1)) }
-        .min { hypot($0.x - p.x, $0.y - p.y) < hypot($1.x - p.x, $1.y - p.y) } ?? p
+    screens.map { s in
+        CGPoint(x: min(max(p.x, s.minX), s.maxX - min(arrowRoom.width, s.width / 2)),
+                y: min(max(p.y, s.minY), s.maxY - min(arrowRoom.height, s.height / 2)))
+    }
+    .min { hypot($0.x - p.x, $0.y - p.y) < hypot($1.x - p.x, $1.y - p.y) } ?? p
 }
 
 /// Where a window that reaches onto an off-screen display goes: moved the least way (left or
