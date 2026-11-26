@@ -58,13 +58,17 @@ jobs:
           $tools >> $env:GITHUB_PATH
           rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
 
-      # Restores the compiled dependencies of both crates and the cargo registry; only the app and
-      # the remote helper themselves are compiled again. The key follows the toolchain and Cargo.lock.
+      # Restores the compiled dependencies of every crate the build compiles (the app, the remote
+      # helper, and the dictation and browser helpers the app's build script makes, each with its own
+      # target dir) and the cargo registry; only those crates themselves are compiled again. The key
+      # follows the toolchain and the Cargo.locks.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             src-tauri -> target
             remote/host -> target
+            dictate -> target
+            browser -> target
 
       # The app crate is compiled again on every run (the checkout makes its sources new), so the
       # incremental state of the last build here or on main is kept: rustc then redoes only the code
