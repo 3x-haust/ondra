@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const far = vi.hoisted(() => ({ started: [] as unknown[][] }));
+vi.mock("./hosts", async (orig) => ({ ...(await orig<typeof import("./hosts")>()), startFar: (...a: unknown[]) => void far.started.push(a) }));
 import { reconcile } from "solid-js/store";
 import { freshState, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
-import { applyRoutes, userParked } from "./captain";
+import { applyRoutes, elsewhere, endChat, userParked } from "./captain";
 import { trimEntries } from "./tasks";
 
 const job = (id: string, space: Task["space"], status: Task["status"]): Task => ({
@@ -218,5 +221,49 @@ describe("main's card that keeps changing", () => {
     expect(a.blocks.map((b) => b.type)).toEqual(["text"]);
     // another chat's card stays
     expect((state.captain.find((m) => m.id === "b")!.routes![0] as { blocks: unknown[] }).blocks).toHaveLength(1);
+  });
+});
+
+describe("work handed to another space or device", () => {
+  const PC = "a".repeat(64);
+  const spaces = () =>
+    setState("spaces", [
+      { id: "home", label: "개인", folder: "/Users/u/p", rules: "" },
+      { id: "work", label: "회사", folder: "/Users/u/Work", rules: "" },
+      { id: `h:${PC}:home`, label: "개인", folder: "C:/Users/u", rules: "", host: PC },
+    ] as never);
+
+  it("is made in the space the user named and its end comes back to the chat that handed it", async () => {
+    spaces();
+    const out = await applyRoutes("home", [{ kind: "new", title: "빌드 확인", task: "회사 레포 빌드 확인", space: "work" }], "회사 공간에서 빌드 확인해줘");
+    const made = taskById((out[0] as { taskId: string }).taskId)!;
+    expect(made.space).toBe("work");
+    expect(made.cwd).toBe("/Users/u/Work");
+    expect(made.reach ?? []).toEqual([]);
+    setState("captain", [{ id: "c1", at: 1, space: "home", from: "captain", text: "", routes: out } as never]);
+    expect(endChat(made)).toEqual({ project: undefined, space: "home" });
+  });
+
+  it("a device's space runs it on that device", async () => {
+    spaces();
+    const out = await applyRoutes("home", [{ kind: "new", title: "윈도우 빌드", task: "윈도우에서 빌드해 봐", space: `h:${PC}:home` }], "윈도우 PC에서 돌려줘");
+    const id = (out[0] as { taskId: string }).taskId;
+    expect(far.started).toEqual([[PC, expect.objectContaining({ id, host: PC, cwd: "~" }), expect.objectContaining({ id, hostSpace: "home", ask: "윈도우에서 빌드해 봐" })]]);
+    expect(taskById(id)).toBeUndefined();
+  });
+
+  it("finds a device's space by id, and not one of a device switched off", () => {
+    spaces();
+    expect(elsewhere(`h:${PC}:home`, "home")?.host).toBe(PC);
+    expect(elsewhere("개인", "work")?.id).toBe("home");
+    expect(elsewhere("home", "home")).toBeUndefined();
+    setState("settings", "hosts", [{ id: PC, name: "윈도우 PC", off: true }]);
+    expect(elsewhere(`h:${PC}:home`, "home")).toBeUndefined();
+  });
+
+  it("main on its own (a job's end) keeps new work in its own space", async () => {
+    spaces();
+    const out = await applyRoutes("home", [{ kind: "new", title: "다음", task: "next", space: "work" }], "Fork x finished.", undefined, false);
+    expect(taskById((out[0] as { taskId: string }).taskId)?.space).toBe("home");
   });
 });
