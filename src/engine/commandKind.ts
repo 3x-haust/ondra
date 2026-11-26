@@ -106,21 +106,6 @@ export function commandKind(cmd: string): "poll" | "check" | "other" {
   return "other";
 }
 
-/** `ssh -n host 'pgrep -f "docker build"'` runs its quoted command over there: that command is what it does */
-const SSH = /(^|[\s;&|(])ssh\s+(?:[^\s'";|&]+\s+)*?(['"])((?:(?!\2)[\s\S])*)\2/g;
-export const unwrapSsh = (cmd: string) => cmd.replace(SSH, (_m, lead: string, _q, inner: string) => `${lead}${inner}`);
-/** a download saves what it fetches: cut, it is lost */
-const SAVES = /\bcurl\b[^|;&\n]*\s(-o|-O|--output|--remote-name)(\s|$)/;
-
-/**
- * A command that only waits or looks (sleep, pgrep, tail, a status check, a watch on CI), here or
- * over ssh: stopping it loses nothing, as what it waits on runs on without it.
- */
-export const waitsOnly = (cmd: string) => {
-  const c = unwrapSsh(cmd);
-  return commandKind(c) === "poll" && !SAVES.test(c);
-};
-
 // Searches and listings walk a folder tree: from a small project folder they are
 // quick, from ~ or / they can run for many minutes and print nothing.
 //   `rg foo src | head` still counts: rg walks src either way, and while it prints

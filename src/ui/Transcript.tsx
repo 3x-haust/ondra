@@ -11,7 +11,7 @@ import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index,
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
 import { kidsOf, queueWith, taskById } from "../state/store";
-import { editTurn, sendNow, startTask } from "../engine/tasks";
+import { editTurn, startTask } from "../engine/tasks";
 import { describeBrowser, describeCommand, describeComputer, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView, type ProofBlock } from "./Blocks";
@@ -915,17 +915,23 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   /** all its work is over: only then do turns fold */
   const settled = () => props.task.status === "done" || props.task.status === "failed";
   /** a running tool row already says what is happening (one still running above the user's words too) */
-  const toolRunning = () => {
+  const runningTool = () => {
     const es = props.task.entries;
     for (let i = es.length - 1; i >= Math.max(0, es.length - 40); i--) {
       const e = es[i];
-      if (e.kind === "tool" && !e.tool.endedAt) return true;
-      if (e.kind === "turn" || e.kind === "text") return false;
+      if (e.kind === "tool" && !e.tool.endedAt) return e.tool;
+      if (e.kind === "turn" || e.kind === "text") return undefined;
     }
-    return false;
+    return undefined;
   };
-  /** the user's words were sent while it worked and wait for its running command to end */
-  const heldBehind = () => toolRunning() && !!props.task.pending?.some((p) => !p.from);
+  const toolRunning = () => !!runningTool();
+  /** the user's words were sent while it worked and wait for its running step to end: a command
+   *  in the foreground is stopped for them, any other tool is waited for */
+  const heldBehind = () => {
+    const tool = runningTool();
+    if (!tool || !props.task.pending?.some((p) => !p.from)) return false;
+    return !props.task.shells.some((s) => s.id === tool.shellId && !s.background);
+  };
   const [stick, setStick] = createSignal(true);
   // a finished job opens on its answer, not below its proof: when the end doesn't fit, its first line is at the top.
   // Only on opening it: a reply finishing while the user watches stays at the bottom, where they are.
@@ -988,15 +994,11 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
             <button class="btn sm" onClick={() => void startTask(props.task.id)}>{tr("지금 시작")}</button>
           </div>
         </Show>
-        {/* the user's words go in once the running command ends: a build or a test isn't cut on its own */}
+        {/* the user's words go in once the running step ends */}
         <Show when={working() && heldBehind()}>
           <div class="live-line muted held-line">
             <Icon name="clock" size={14} />
-            <span>{tr("지금 명령이 끝나면 메시지를 읽어요")}</span>
-            <span class="spacer" />
-            <button class="btn sm" title={tr("돌고 있는 명령을 멈추고 메시지를 바로 전해요")} onClick={() => sendNow(props.task.id)}>
-              {tr("멈추고 바로 전달")}
-            </button>
+            <span>{tr("지금 단계가 끝나면 메시지를 읽어요")}</span>
           </div>
         </Show>
         {/* waiting on its subagents: their card above already shows that */}
