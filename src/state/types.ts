@@ -327,6 +327,8 @@ export interface Task {
   project?: string;
   /** memory lines given when it started, reused on every later session (stable prefix) */
   memorySnapshot?: string[];
+  /** memory pieces sent while it worked, about what it turned to (never sent twice) */
+  recalled?: string[];
   /** "provider/id"; empty = the account's model. */
   model?: string;
   /** Reasoning effort: low | medium | high | xhigh | max. */

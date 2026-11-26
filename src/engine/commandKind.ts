@@ -60,6 +60,27 @@ export const answeredNo = (cmd: string, out: string | undefined) =>
   /Command exited with code 1\s*$/.test(out ?? "") &&
   steps(unwrap(cmd)).every((p) => onlyReads(p) || /^cd(\s|$)/.test(p));
 
+/**
+ * The programs a command works with (`git`, `pnpm`, `adb`), not the shell's own words or what only
+ * reads, prints or waits; for `ssh`/`scp`/`rsync` the host it reaches too.
+ */
+export function programsOf(cmd: string): string[] {
+  const out = new Set<string>();
+  for (const p of steps(unwrap(cmd))) {
+    if (onlyReads(p) || WAIT.test(p)) continue;
+    const words = p.split(/\s+/);
+    const name = words[0].replace(/^.*\//, "");
+    if (!/^[A-Za-z][\w.+-]*$/.test(name) || /^(cd|export|set|unset|source|\.|eval|exec|env|sudo|nohup|xargs|tee|kill|pkill|rm|mv|cp|mkdir|touch|chmod|ln|open|exit|return|local|read|wait|trap|bash|sh|zsh|time|timeout|python3?|node|npx|bunx|tsx)$/.test(name)) continue;
+    out.add(name);
+    if (/^(ssh|scp|rsync|sftp)$/.test(name)) {
+      const host = words.slice(1).find((w) => !w.startsWith("-") && /^[\w.-]+@?[\w.-]*(:|$)/.test(w) && !/^\d+$/.test(w));
+      const h = host?.replace(/^[^@]*@/, "").replace(/:.*$/, "");
+      if (h) out.add(h);
+    }
+  }
+  return [...out];
+}
+
 /** A command that runs `program` itself, not one that reads or searches for its name (`rg ondra-browser`). */
 export const runsProgram = (cmd: string, program: RegExp) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && program.test(p));
 
