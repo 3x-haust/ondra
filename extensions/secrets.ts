@@ -4,7 +4,8 @@
 // ONDRA_SECRET_NAMES, values in the variables themselves; src-tauri/src/secrets.rs). Here:
 // - the model is told which names exist and to use them as $NAME in commands;
 // - every tool result has each value (and its base64, URL-encoded and hex forms) replaced by
-//   [secret:NAME] before the model sees it;
+//   [secret:NAME] before the model sees it (background.ts hides them the same way in the messages
+//   it sends in, with secretSource);
 // - values in the job folder's .env files whose key looks secret are hidden the same way, so
 //   `cat .env` or reading it shows the keys but not the values;
 // - the tokens in Codex's login files (~/.codex/auth.json and $CODEX_HOME/auth.json) are hidden the
@@ -167,12 +168,12 @@ export function envFilesUnder(root: string): string[] {
   return out.sort();
 }
 
-export default function (pi: ExtensionAPI) {
-  const named = envSecrets(process.env);
-  const names = named.map((s) => s.name);
-  const own = [...named, ...maskSecrets(process.env)];
-  const audit = (process.env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
-  const job = process.env.ONDRA_TASK_ID ?? process.env.ONDRA_JOB_ID ?? "";
+/**
+ * Every value to hide for a job in `cwd`: Ondra's secrets, values in the folder's .env files
+ * and Codex's tokens, each read again only when it changed.
+ */
+export function secretSource(env: NodeJS.ProcessEnv = process.env): (cwd: string) => Secret[] {
+  const own = [...envSecrets(env), ...maskSecrets(env)];
 
   // .env files anywhere in the job's folder: found again at most every 15 s, read again when one changes
   let cache = { key: "", secrets: [] as Secret[] };
@@ -201,7 +202,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   // Codex's tokens: read again when the file changes (a token refresh rewrites it)
-  const codex = new Map(codexAuthPaths(process.env).map((p) => [p, { stamp: -1, secrets: [] as Secret[] }]));
+  const codex = new Map(codexAuthPaths(env).map((p) => [p, { stamp: -1, secrets: [] as Secret[] }]));
   const codexSecrets = (): Secret[] =>
     [...codex].flatMap(([path, seen]) => {
       let stamp = 0;
@@ -221,6 +222,16 @@ export default function (pi: ExtensionAPI) {
       return secrets;
     });
 
+  return (cwd) => [...own, ...codexSecrets(), ...folderSecrets(cwd)];
+}
+
+export default function (pi: ExtensionAPI) {
+  const named = envSecrets(process.env);
+  const names = named.map((s) => s.name);
+  const secretsIn = secretSource(process.env);
+  const audit = (process.env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
+  const job = process.env.ONDRA_TASK_ID ?? process.env.ONDRA_JOB_ID ?? "";
+
   const log = (entry: Record<string, unknown>) => {
     if (!audit) return;
     try {
@@ -237,7 +248,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("tool_call", (event, ctx) => {
     // memory outlives the job and goes to other jobs: a value in it is refused, the name is fine
     if (event.toolName === "memory_save") {
-      const r = redact(JSON.stringify(event.input ?? {}), [...own, ...codexSecrets(), ...folderSecrets(ctx?.cwd ?? process.cwd())]);
+      const r = redact(JSON.stringify(event.input ?? {}), secretsIn(ctx?.cwd ?? process.cwd()));
       if (r.hits.length) {
         log({ kind: "refused", tool: event.toolName, names: r.hits });
         return { block: true, reason: `This holds the value of ${r.hits.join(", ")}. Memory keeps the name and what it is for, never the value: write \`NAME\` instead and save again.` };
@@ -250,7 +261,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("tool_result", (event, ctx) => {
-    const secrets = [...own, ...codexSecrets(), ...folderSecrets(ctx.cwd)];
+    const secrets = secretsIn(ctx.cwd);
     if (!secrets.length || !event.content?.length) return;
     const hits = new Set<string>();
     const content = event.content.map((c) => {
