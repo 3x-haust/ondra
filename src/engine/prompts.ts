@@ -693,6 +693,13 @@ route each item:
   past work. When the user asks to use another space's things ("회사에서 한
   거 참고해서", "개인 메모리 봐줘"), add "reach": ["<that space's id>"] (see
   "Other spaces"); never on your own.
+  When the user asks for the work itself to be done in another space or on
+  another device ("회사 공간에서 해", "윈도우 PC에서 돌려"), add "space":
+  "<that space's id>" (see "Other spaces"; a device's space runs it on that
+  device): the job is made and runs there, with that space's folders,
+  accounts and memory, and its result comes back to this chat. Only the
+  request goes, so write "task" to stand on its own; "project" may name one
+  of that space's projects. Never on your own.
   For coding requests, pass the user's own words and the success condition
   they gave (what they will see working), never a stricter one of yours:
   "고쳐야할듯?" is "fix it", not "prove X holds the whole time". Add no

@@ -20,7 +20,7 @@ import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid, ownSpaces } from "../state/store";
-import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
+import type { Block, CaptainMessage, Decision, Memory, Priority, Route, Space, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { mcpArgs, mcpSig } from "./services";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -193,10 +193,14 @@ export { userParked } from "./jobs";
  */
 /** The chat a job's end goes to: the one that started it (the project chat it was handed to, for
  *  the user's work; the agent's chat, for the agent's), or the agent's chat for a run of its
- *  routine with something to say. None: nobody in a chat asked for it. */
-export function endChat(t: Task): { project?: string } | undefined {
-  const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
-  return t.agent ? (owners.find((m) => m.project === AGENT_CHAT) ?? agentRun(t)) : (owners.find((m) => m.project && m.project !== AGENT_CHAT) ?? owners[0]);
+ *  routine with something to say. None: nobody in a chat asked for it. `space`: the chat is in
+ *  another space than the job (work handed to another space or device: its result comes back). */
+export function endChat(t: Task): { project?: string; space?: SpaceId } | undefined {
+  const owners = state.captain.filter((m) => (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
+  const own = owners.filter((m) => m.space === t.space);
+  const m = t.agent ? (own.find((x) => x.project === AGENT_CHAT) ?? owners.find((x) => x.project === AGENT_CHAT)) : (own.find((x) => x.project && x.project !== AGENT_CHAT) ?? own[0] ?? owners[0]);
+  if (!m) return t.agent ? agentRun(t) : undefined;
+  return { project: m.project, ...(m.space !== t.space ? { space: m.space } : {}) };
 }
 
 /** The jobs of a group that ended since main last heard of it (just the job when it has no group). */
@@ -220,14 +224,16 @@ function jobEnded(t: Task) {
   const batch = endedBatch(t);
   // its own result, kept now: the chat's row for it opens this (the agent's work isn't in 결과물)
   if (!t.agent) keepJobResult(t, undefined, batch);
-  const space = chatKey(t.space, from.project);
+  // the chat's space: the job's own, or the one that handed it to this space or device
+  const home = from.space ?? t.space;
+  const space = chatKey(home, from.project);
   const handed = from.project ? requestsOf(space).find((q) => batch.some((x) => q.jobs.has(x.id)))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
   followUps.set(space, n);
-  const asked = userFollowUps(t.space, batch.map((x) => x.id));
+  const asked = userFollowUps(home, batch.map((x) => x.id));
   // main already sent this fork back since the user last spoke: once is enough
-  const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
+  const chat = state.captain.filter((m) => m.space === home && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
   // a group's report shares the room: each job gets its part of it
   const room = Math.floor(3500 / batch.length);
@@ -259,7 +265,7 @@ function jobEnded(t: Task) {
       state.tasks.filter((x) => x.after?.includes(t.id)),
     ),
   ].filter(Boolean).join(batch.length > 1 ? "\n\n" : "\n");
-  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
+  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: home, project: from.project, from: "captain", pending: true, after: t.id };
   setState("captain", (list) => trimChats([...list, reply]));
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
@@ -1118,8 +1124,14 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   // spaces are separate; the user pointing at another one opens it for this message
   const others0 = ownSpaces().filter((s) => s.id !== sp(space));
-  const spacesLine = others0.map((s) => `- ${s.id}: ${s.label} (${s.folder})`).join("\n");
-  if (spacesLine && spacesLine !== sent.spaces) out.push("", "# Other spaces (separate; open one only when the user asks, with \"reach\")", spacesLine);
+  // and the spaces of the devices added in Settings › 연결: work handed to one runs on that device
+  const deviceName = (h: string) => state.settings.hosts?.find((x) => x.id === h)?.name ?? "another device";
+  const theirs0 = state.spaces.filter((s) => s.host && !state.settings.hosts?.find((x) => x.id === s.host)?.off && s.id !== sp(space));
+  const spacesLine = [
+    ...others0.map((s) => `- ${s.id}: ${s.label} (${s.folder})`),
+    ...theirs0.map((s) => `- ${s.id}: ${s.label} on ${deviceName(s.host!)} (another device: work there runs on it)`),
+  ].join("\n");
+  if (spacesLine && spacesLine !== sent.spaces) out.push("", "# Other spaces (separate: open one only when the user asks, with \"reach\"; hand work to one with \"space\" on a new route)", spacesLine);
   for (const id of event ? [] : namedSpaces(text, sp(space), ownSpaces())) {
     const s = spaceById(id);
     const theirs = state.memory.filter((m) => isLive(m) && m.scope === "space" && m.space === id);
@@ -1284,6 +1296,16 @@ function spokenPart(text: string): string {
  * (by name or repo folder, "acme pc" → acme). New projects are made by
  * main with a folder; this only finds ones that exist.
  */
+/** The space a new route hands its work to: another of this device's, or one of an added device's
+ *  (switched on), by id or name; undefined for this chat's own. */
+export function elsewhere(to: unknown, space: string): Space | undefined {
+  if (typeof to !== "string" || !to.trim()) return undefined;
+  const here = sp(space);
+  const off = (s: Space) => !!s.host && !!state.settings.hosts?.find((x) => x.id === s.host)?.off;
+  const pick = state.spaces.filter((s) => s.id !== here && !off(s));
+  return pick.find((s) => s.id === to.trim()) ?? pick.find((s) => s.label === to.trim());
+}
+
 function existingProject(space: SpaceId, r: any, original: string) {
   const list = projectsShown(space);
   if (!list.length) return undefined;
@@ -1385,6 +1407,28 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         isolate: isolateOf.get(space),
       });
       out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
+    } else if (r?.kind === "new" && (r.task || r.title) && fromUser && elsewhere(r.space, space)) {
+      // handed to another space or device the user named: made there, with that space's folders,
+      // accounts and memory (on that device, for a device's space). Only the request goes; its
+      // result comes back to this chat (endChat)
+      const to = elsewhere(r.space, space)!;
+      const proj = typeof r.project === "string" ? projectsShown(to.id).find((p) => p.name.toLowerCase() === String(r.project).toLowerCase()) : undefined;
+      const id = createTask({
+        space: to.id,
+        title: String(r.title ?? "작업"),
+        topic: proj?.name ?? String(r.topic ?? "기타"),
+        ask: String(r.task ?? r.title),
+        cwd: proj?.folder ?? (to.host ? "~" : to.folder),
+        project: proj?.id,
+        priority: clampPriority(r.priority),
+        weight: r.weight === "heavy" ? "heavy" : "light",
+        size: r.size === "small" || r.size === "large" ? r.size : undefined,
+        display: work === 1 ? original : undefined,
+        // the agent's work shows on Discord as it goes; a device's job is that device's to show
+        ...(isAgentChat(space) && !to.host ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
+      });
+      if (r.key) byKey.set(String(r.key), id);
+      out.push({ kind: "new", taskId: id });
     } else if (r?.kind === "new" && (r.task || r.title)) {
       // carrying on a job keeps its project; main naming a folder makes or finds that one, never a guess
       const before = job(r.from)?.project ? projectById(job(r.from)!.project!, sp(space)) : undefined;
