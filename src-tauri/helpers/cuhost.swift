@@ -3193,8 +3193,8 @@ func userDisplayBounds() -> [CGRect] {
     return own.isEmpty ? [CGDisplayBounds(CGMainDisplayID())] : own
 }
 
-/// Where the pointer goes back to: the nearest point on the user's screens where the arrow shows
-/// whole. The arrow is drawn right of and below its tip, so the screen's very edge (where the
+/// Where the pointer goes back to when where it just was isn't known (it was put there, not
+/// moved): the nearest point on the user's screens where the arrow shows whole. The arrow is drawn right of and below its tip, so the screen's very edge (where the
 /// off-screen display touches it, a corner) left it all but gone: it looked lost on that display.
 let arrowRoom = CGSize(width: 24, height: 32)
 func nearestUserPoint(_ p: CGPoint, in screens: [CGRect]) -> CGPoint {
@@ -3237,14 +3237,20 @@ func keepUserOffBackdrop() -> Never {
         }
         let off = onlineDisplays().filter(Backdrop.isOurs).map { CGDisplayBounds($0) }
         let p = event.location
+        let now = nowMs()
         if off.contains(where: { $0.contains(p) }) {
-            let back = nearestUserPoint(p, in: userDisplayBounds())
+            // the pointer stops where it just was, as at a screen's edge: put anywhere else (a
+            // point inside the corner) it jumped there under the user's hand
+            let fresh = keeperLast.flatMap { now - $0.at < 1000 ? $0.p : nil }
+            let back = fresh ?? nearestUserPoint(p, in: userDisplayBounds())
             // the event goes on from the user's screen, so no app sees the pointer there
             event.location = back
             CGWarpMouseCursorPosition(back)
             dbgLog("keeper: pointer \(Int(p.x)),\(Int(p.y)) put back at \(Int(back.x)),\(Int(back.y))")
             // a warp holds the pointer still for a moment; the user's mouse keeps moving it
             CGAssociateMouseAndMouseCursorPosition(1)
+        } else {
+            keeperLast = (p, now)
         }
         if type == .leftMouseUp, !off.isEmpty, let front = NSWorkspace.shared.frontmostApplication?.processIdentifier {
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) { pullBackWindows(of: front) }
@@ -3272,6 +3278,8 @@ func keepUserOffBackdrop() -> Never {
     exit(0)
 }
 var keeperTap: CFMachPort?
+/// where the user's pointer last was off the off-screen display, and when (ms)
+var keeperLast: (p: CGPoint, at: Double)?
 
 /// Move the app's windows that reach onto an off-screen display back onto the user's screen.
 /// Never a job's background copy: its windows belong there, and the job's helper puts them back
