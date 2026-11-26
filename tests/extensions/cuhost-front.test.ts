@@ -94,4 +94,14 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     const back = src.slice(src.indexOf("func putBack("), src.indexOf("/// Where a window that reaches onto"));
     expect(back).toContain("x: min(max(p.x, s.minX), s.maxX - 1), y: min(max(p.y, s.minY), s.maxY - 1)");
   });
+
+  it("a pointer pushed on into that corner is moved back each time, not left out of sight", () => {
+    // macOS had it where the last put-back left it, and a warp there did nothing: the arrow stayed
+    // on the off-screen display while the hand kept pushing. Over a second of pushing, where it
+    // just was went stale and it was put back inside the corner, where no hot corner fires.
+    const src = readFileSync(SOURCE, "utf8");
+    const keeper = src.slice(src.indexOf("func keepUserOffBackdrop()"), src.indexOf("var keeperTap"));
+    expect(keeper).toMatch(/CGWarpMouseCursorPosition\(p\)\s+CGWarpMouseCursorPosition\(back\)/);
+    expect(keeper).toContain("keeperLast = (back, now)");
+  });
 });

@@ -3252,7 +3252,14 @@ func keepUserOffBackdrop() -> Never {
             let back = putBack(p, last: fresh, screens: userDisplayBounds())
             // the event goes on from the user's screen, so no app sees the pointer there
             event.location = back
+            // macOS has the pointer where the last event left it, often `back` already (the step
+            // before was put back there too), and a warp to where it has it does nothing: the arrow
+            // stayed on this display, out of sight, while the hand kept pushing. A warp to where it
+            // really is first makes the one back a real move.
+            CGWarpMouseCursorPosition(p)
             CGWarpMouseCursorPosition(back)
+            // pushed on for over a second, it is still where it just was
+            keeperLast = (back, now)
             dbgLog("keeper: pointer \(Int(p.x)),\(Int(p.y)) put back at \(Int(back.x)),\(Int(back.y))")
             // a warp holds the pointer still for a moment; the user's mouse keeps moving it
             CGAssociateMouseAndMouseCursorPosition(1)
