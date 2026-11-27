@@ -3018,6 +3018,10 @@ textarea.dform-input {
 .decision.form .decision-opt.primary .decision-label {
   font-weight: var(--fw-medium);
 }
+/* on the accent fill the grey note disappears: it takes the button's ink, set apart by size and weight */
+.decision.form .decision-opt.primary .decision-note {
+  color: inherit;
+}
 .decision.form .decision-own {
   flex: 1 1 100%;
   border: 0;
