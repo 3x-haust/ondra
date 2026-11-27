@@ -6,27 +6,29 @@
 //!   - host: other Macs connect in. Only Macs the user allowed get in; one is allowed with a
 //!     one-time code from the link Ondra copies, and 허용 pressed on this Mac.
 //!   - client: it dials a host ("dial") and carries the window's lines to it.
+//! A connection goes both ways: a host that lets this Mac in is let in here too (the user added
+//! it), and says so in its hello ("both"), so the host dials back.
 //!
 //! The app drives it over stdin/stdout, one JSON object per line:
-//!   in:  {"cmd":"host","on"} {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
+//!   in:  {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
 //!        {"cmd":"send","conn","data"} {"cmd":"revoke","id"} {"cmd":"drop","id"} {"cmd":"devices"}
-//!        {"cmd":"dial","peer","name","pair"?,"bye"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
+//!        {"cmd":"dial","peer","name","them"?,"pair"?,"bye"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
 //!   out: {"ev":"ready","id"} {"ev":"devices","list"} {"ev":"pair","conn","device"}
-//!        {"ev":"open","conn","device"} {"ev":"msg","conn","data"} {"ev":"close","conn"} {"ev":"bye","device"}
+//!        {"ev":"open","conn","device":{id,name,both}} {"ev":"msg","conn","data"} {"ev":"close","conn"} {"ev":"bye","device"}
 //!        {"ev":"peer","peer","state":"connecting|waiting|ok|denied|closed|bye","reason"?,"bye"?}
 //!        {"ev":"peer-msg","peer","data"}
 //! It exits when stdin closes (the app quit).
 //!
-//! Between Macs, the first lines: the one dialing says {"t":"hello","name","pair"?,"bye"?}; the host
+//! Between Macs, the first lines: the one dialing says {"t":"hello","name","pair"?,"bye"?,"both"?}; the host
 //! answers {"t":"waiting"} {"t":"ok"} {"t":"denied","reason":"off|unknown|refused"} or, to a bye,
 //! {"t":"bye"} (it forgot that Mac). A host ends a live connection with a reason the other side
-//! reads: "revoked" (removed there), "dropped" (cut for now) or "off" (hosting turned off).
+//! reads: "revoked" (removed there) or "dropped" (cut for now); older hosts also say "off".
 //! A field or answer a peer doesn't know is ignored, so an older Mac keeps working.
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -70,8 +72,6 @@ struct Shared {
     approvals: Mutex<HashMap<u64, oneshot::Sender<bool>>>,
     conns: Mutex<HashMap<u64, (String, mpsc::UnboundedSender<String>, Connection)>>,
     next: AtomicU64,
-    /** other Macs may come in (the user turned it on) */
-    hosting: AtomicBool,
     out: mpsc::UnboundedSender<Value>,
     /// hosts this Mac dialed: what to send them
     peers: Mutex<HashMap<String, (mpsc::UnboundedSender<String>, Connection)>>,
@@ -93,6 +93,20 @@ impl Shared {
             let _ = std::fs::rename(tmp, path);
         }
         self.emit(json!({ "ev": "devices", "list": list }));
+    }
+    /// let in a Mac that let this one in (kept as it is when it already may)
+    async fn trust(&self, id: &str, name: &str) {
+        let added = {
+            let mut list = self.devices.lock().await;
+            let added = !list.iter().any(|d| d.id == id);
+            if added {
+                list.push(Device { id: id.into(), name: name.into(), added_at: now(), last_seen: now() });
+            }
+            added
+        };
+        if added {
+            self.save_devices().await;
+        }
     }
 }
 
@@ -187,6 +201,8 @@ struct Hello {
     pair: String,
     /// it removed this Mac on its side: forget it here too
     bye: bool,
+    /// it lets this Mac in once let in there: this one dials back (older Macs don't)
+    both: bool,
 }
 
 fn parse_hello(v: &Value) -> Hello {
@@ -194,6 +210,7 @@ fn parse_hello(v: &Value) -> Hello {
         name: v.get("name").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect(),
         pair: v.get("pair").and_then(Value::as_str).unwrap_or("").to_string(),
         bye: v.get("bye").and_then(Value::as_bool).unwrap_or(false),
+        both: v.get("both").and_then(Value::as_bool).unwrap_or(false),
     }
 }
 
@@ -249,13 +266,7 @@ async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
         let _ = tokio::time::timeout(Duration::from_secs(10), conn.closed()).await;
         return Ok(());
     }
-    if !s.hosting.load(Ordering::Relaxed) {
-        send.write_all(b"{\"t\":\"denied\",\"reason\":\"off\"}\n").await?;
-        send.finish()?;
-        conn.closed().await;
-        return Ok(());
-    }
-    let name = hello.name;
+    let (name, both) = (hello.name, hello.both);
     let id = s.next.fetch_add(1, Ordering::Relaxed);
     let known = s.devices.lock().await.iter().any(|d| d.id == peer);
     if !known {
@@ -299,7 +310,7 @@ async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
 
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
     s.conns.lock().await.insert(id, (peer.clone(), tx, conn.clone()));
-    s.emit(json!({ "ev": "open", "conn": id, "device": { "id": peer, "name": name } }));
+    s.emit(json!({ "ev": "open", "conn": id, "device": { "id": peer, "name": name, "both": both } }));
     let writer = tokio::spawn(async move {
         while let Some(line) = rx.recv().await {
             if send.write_all(line.as_bytes()).await.is_err() || send.write_all(b"\n").await.is_err() {
@@ -335,7 +346,8 @@ fn peer_ev(peer: &str, state: &str, reason: Option<Value>, bye: bool) -> Value {
 
 /// Connect to a host Mac and carry lines both ways until either side ends. A goodbye dial
 /// (`"bye": true` in the hello) ends after the host's answer.
-async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Result<()> {
+/// A host that lets this Mac in is let in here before the app hears it (`them`: its name here).
+async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value, them: String) -> Result<()> {
     let id: iroh::EndpointId = peer.parse().map_err(|e| anyhow!("{e}"))?;
     let bye = hello.get("bye").and_then(Value::as_bool).unwrap_or(false);
     if let Some((_, old)) = s.peers.lock().await.remove(&peer) {
@@ -358,7 +370,11 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Resul
                 conn.close(0u32.into(), b"bye");
                 return Ok(());
             }
-            Some("ok") => break,
+            // before anything else: that host dials back as soon as it has said ok
+            Some("ok") => {
+                s.trust(&peer, &them).await;
+                break;
+            }
             // it forgot this Mac, as asked
             Some("bye") => {
                 s.emit(peer_ev(&peer, "bye", None, bye));
@@ -409,6 +425,15 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Resul
     Ok(())
 }
 
+/// What this Mac says first when it dials: a goodbye, or a connection both ways.
+fn hello_for(name: Value, pair: Value, bye: bool) -> Value {
+    if bye {
+        json!({ "t": "hello", "name": name, "pair": pair, "bye": true })
+    } else {
+        json!({ "t": "hello", "name": name, "pair": pair, "both": true })
+    }
+}
+
 async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R, buf: &mut Vec<u8>) -> Result<Option<Value>> {
     buf.clear();
     let mut limited = r.take(MAX_LINE as u64);
@@ -448,7 +473,6 @@ async fn main() -> Result<()> {
         approvals: Mutex::new(HashMap::new()),
         conns: Mutex::new(HashMap::new()),
         next: AtomicU64::new(1),
-        hosting: AtomicBool::new(false),
         out,
         peers: Mutex::new(HashMap::new()),
     });
@@ -479,16 +503,6 @@ async fn main() -> Result<()> {
                 *s.pairing.lock().await = (!code.is_empty()).then(|| (code, Instant::now() + Duration::from_secs(ttl)));
             }
             "unpair" => *s.pairing.lock().await = None,
-            "host" => {
-                let on = cmd.get("on").and_then(Value::as_bool).unwrap_or(false);
-                s.hosting.store(on, Ordering::Relaxed);
-                if !on {
-                    *s.pairing.lock().await = None;
-                    for (_, (_, _, c)) in s.conns.lock().await.iter() {
-                        c.close(2u32.into(), OFF);
-                    }
-                }
-            }
             "approve" => {
                 if let Some(tx) = s.approvals.lock().await.remove(&conn_id) {
                     let _ = tx.send(cmd.get("ok").and_then(Value::as_bool).unwrap_or(false));
@@ -524,13 +538,11 @@ async fn main() -> Result<()> {
             "dial" => {
                 let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("").trim().to_string();
                 let bye = cmd.get("bye").and_then(Value::as_bool).unwrap_or(false);
-                let mut hello = json!({ "t": "hello", "name": cmd.get("name").cloned().unwrap_or(json!("Mac")), "pair": cmd.get("pair").cloned().unwrap_or(Value::Null) });
-                if bye {
-                    hello["bye"] = json!(true);
-                }
+                let them = cmd.get("them").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect();
+                let hello = hello_for(cmd.get("name").cloned().unwrap_or(json!("Mac")), cmd.get("pair").cloned().unwrap_or(Value::Null), bye);
                 let (s, ep) = (s.clone(), router.endpoint().clone());
                 tokio::spawn(async move {
-                    if let Err(e) = dial(s.clone(), ep, peer.clone(), hello).await {
+                    if let Err(e) = dial(s.clone(), ep, peer.clone(), hello, them).await {
                         s.emit(peer_ev(&peer, "closed", Some(json!(format!("{e:#}"))), bye));
                     }
                 });
@@ -605,10 +617,14 @@ mod tests {
     #[test]
     fn hello_reads_bye_and_defaults() {
         let h = parse_hello(&json!({ "t": "hello", "name": "Air", "pair": null, "bye": true }));
-        assert_eq!(h, Hello { name: "Air".into(), pair: "".into(), bye: true });
-        // an older Mac's hello: no bye
+        assert_eq!(h, Hello { name: "Air".into(), pair: "".into(), bye: true, both: false });
+        // an older Mac's hello: no bye, one way only
         let h = parse_hello(&json!({ "t": "hello", "pair": "abc" }));
-        assert_eq!(h, Hello { name: "Mac".into(), pair: "abc".into(), bye: false });
+        assert_eq!(h, Hello { name: "Mac".into(), pair: "abc".into(), bye: false, both: false });
+        // this Mac's own hello reads back as it means
+        assert!(parse_hello(&hello_for(json!("Air"), json!("abc"), false)).both);
+        let h = parse_hello(&hello_for(json!("Air"), Value::Null, true));
+        assert!(h.bye && !h.both);
         assert_eq!(parse_hello(&json!({ "name": "x".repeat(200) })).name.chars().count(), 60);
     }
 
@@ -625,6 +641,32 @@ mod tests {
     fn goodbye_dial_events_say_so() {
         assert_eq!(peer_ev("p", "ok", None, false), json!({ "ev": "peer", "peer": "p", "state": "ok" }));
         assert_eq!(peer_ev("p", "denied", Some(json!("off")), true), json!({ "ev": "peer", "peer": "p", "state": "denied", "reason": "off", "bye": true }));
+    }
+
+    #[tokio::test]
+    async fn a_host_that_lets_this_mac_in_is_let_in_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let (out, mut rx) = mpsc::unbounded_channel();
+        let s = Shared {
+            dir: dir.path().into(),
+            devices: Mutex::new(vec![dev("b")]),
+            pairing: Mutex::new(None),
+            approvals: Mutex::new(HashMap::new()),
+            conns: Mutex::new(HashMap::new()),
+            next: AtomicU64::new(1),
+            out,
+            peers: Mutex::new(HashMap::new()),
+        };
+        s.trust("a", "Studio").await;
+        s.trust("a", "Other").await;
+        s.trust("b", "Renamed").await;
+        let list = s.devices.lock().await.clone();
+        assert_eq!(list.iter().map(|d| (d.id.as_str(), d.name.as_str())).collect::<Vec<_>>(), [("b", "b"), ("a", "Studio")]);
+        // saved and told once, only when it changed
+        let saved: Vec<Device> = serde_json::from_slice(&std::fs::read(dir.path().join("devices.json")).unwrap()).unwrap();
+        assert_eq!(saved.len(), 2);
+        assert!(rx.try_recv().is_ok());
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
