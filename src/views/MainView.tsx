@@ -6,12 +6,12 @@ import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
-import { inSpace, kept } from "../state/viewState";
+import { inSpace, kept, peek, put } from "../state/viewState";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, decide, finishTask, NO_ACCOUNT } from "../engine/tasks";
-import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createResource, createRoot, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
@@ -26,6 +26,7 @@ import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, hoverOn, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
+import { farOf, messagesIn } from "../state/shared";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import type { Command } from "../ui/Composer";
@@ -741,7 +742,7 @@ export function MainView() {
     );
   });
   const key = () => chatKey(state.space, project()?.id);
-  const msgs = () => state.captain.filter((m) => inChat(m, key()));
+  const msgs = () => messagesIn(state.space).filter((m) => inChat(m, key()));
   // the account main runs on: the space's pick, or the routed one (same rule as new jobs)
   const account = () => chooseAccount(state.space, project()?.name ?? "");
   const started = (m: CaptainMessage) =>
@@ -753,7 +754,8 @@ export function MainView() {
   // for work picked for another device outside a project, or when main has no account here to run on
   // (a workspace only that device has).
   const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
-  const raw = () => (project() && mainHere() ? undefined : computer());
+  // (a device that shares its chats: this is its own main's chat, and what's typed goes to it)
+  const raw = () => (farOf(state.space) || (project() && mainHere()) ? undefined : computer());
   /** the question the input answers: the first card in the dock (the one its number keys answer), as in a job's thread */
   const answering = () => ((d) => (d && !d.ui && !d.form?.length ? d : undefined))(asks()[0]);
   const sendMain = (text: string, picked?: string[]) => {
@@ -1086,25 +1088,16 @@ const reqState = (t: Task): ReqState =>
  * going, waiting on the user, or finished in the last few minutes are listed.
  */
 // the request board stays open or closed as the user left it, in each space (across views and restarts)
-const BOARD_KEY = "ondra.reqBoardOpen";
-const [boards, setBoards] = createSignal<Record<string, boolean>>((() => {
-  try {
-    const v = JSON.parse(localStorage.getItem(BOARD_KEY) ?? "{}");
-    return typeof v === "object" && v ? v : {};
-  } catch {
-    return {};
-  }
-})());
-const boardOpen = () => !!boards()[state.space];
-const setBoardOpen = (v: boolean) => {
-  const next = { ...boards(), [state.space]: v };
-  setBoards(next);
-  try {
-    localStorage.setItem(BOARD_KEY, JSON.stringify(next));
-  } catch {
-    /* private mode */
-  }
-};
+const boardOpen = () => !!peek(inSpace(state.space, "reqBoard"));
+const setBoardOpen = (v: boolean) => put(inSpace(state.space, "reqBoard"), v, { initial: false });
+// open or closed as an older version kept it (on this device only): carried over once
+try {
+  const old = JSON.parse(localStorage.getItem("ondra.reqBoardOpen") ?? "null") as Record<string, boolean> | null;
+  if (old && typeof old === "object") for (const [space, v] of Object.entries(old)) v === true && put(inSpace(space, "reqBoard"), true, { quiet: true });
+  localStorage.removeItem("ondra.reqBoardOpen");
+} catch {
+  /* private mode */
+}
 
 function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessage) => Task[]; onJump: (id: string) => void }) {
   const open = boardOpen;

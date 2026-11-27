@@ -650,6 +650,7 @@ export default {
   "두 번 말한 규칙은 자동 검사로": "Turn rules said twice into checks",
   "내 컴퓨터에만 두는 자동 검사가 아직 없어요": "No checks kept on this Mac yet",
   "검사 설정을 바꾸지 못했어요": "Couldn't change the check",
+  "{name}의 설정을 바꾸지 못했어요": "Couldn't change {name}'s setting",
   "프로젝트 규칙을 두 번 말하면, 작업이 린트·테스트 같은 자동 검사로 만들어요": "When you say a project rule twice, a job makes it an automatic check, like a lint rule or a test",
   "펫": "Pet",
   "화면에 펫 띄우기": "Show a pet on screen",

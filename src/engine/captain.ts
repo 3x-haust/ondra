@@ -37,6 +37,8 @@ import { canUseTools, isDirect } from "./connections";
 import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
+import { mirror } from "../state/mirror";
+import { clearFar, editFar, farMessage, farOf, sayFar, stopFar } from "../state/shared";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
 import { isUseCall } from "./describe";
 import { absoluteFolder, folderKey, instructionFolders, leaf, slashes } from "./captainPaths";
@@ -147,7 +149,16 @@ function keptSent(space: string): SentHeader | undefined {
 
 /** what main reasons while it answers, per chat; cleared when the next answer starts */
 const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
-export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
+export const mainThought = (key: string) => {
+  // another device's chat: what its main thinks comes with the reply
+  if (farOf(sp(key))) return [...(farChat(key) ?? [])].reverse().find((m) => m.pending)?.thought ?? "";
+  return thoughtsAll()[key] ?? "";
+};
+/** another device's chat, by its key here */
+const farChat = (key: string) => {
+  const host = farOf(sp(key));
+  return host ? mirror.hosts[host]?.chat?.filter((m) => inChat(m, key)) : undefined;
+};
 /** a line of main's reasoning that is one of its steps ("\0step:파일 읽음 · a.md") */
 export const STEP_MARK = "\u0000step:";
 /** the answer main is writing, per chat, shown (with its board drawing) before it is done */
@@ -156,7 +167,7 @@ const [draftsAll, setDraftsAll] = createSignal<Record<string, { id: string; text
 const answering = new Map<string, string>();
 /** for tests: main is answering this message (a job's end) */
 export const mainAnswering = (space: string, replyId: string) => answering.set(space, replyId);
-export const mainDraft = (key: string, replyId: string) => (draftsAll()[key]?.id === replyId ? draftsAll()[key].text : "");
+export const mainDraft = (key: string, replyId: string) => (farOf(sp(key)) ? (farChat(key)?.find((m) => m.id === replyId)?.draft ?? "") : draftsAll()[key]?.id === replyId ? draftsAll()[key].text : "");
 function setDraft(key: string, text: string) {
   const id = answering.get(key) ?? "";
   const was = draftsAll()[key];
@@ -168,14 +179,18 @@ function addThought(key: string, delta: string) {
 }
 
 /** Send a request. Returns the id of the reply message to watch (empty if nothing was sent). */
-export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string; discord?: CaptainMessage["discord"] } = {}): string {
+export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string; discord?: CaptainMessage["discord"]; ids?: { me?: string; reply?: string } } = {}): string {
   const t = text.trim();
   if (!t) return "";
   track("message_sent", { where: "main" });
   const project = opts.project || undefined;
+  // another device's workspace that shares its chats: said to its main, there
+  const host = farOf(spaceId);
+  if (host) return sayFar(host, t, spaceId, project);
   const space = chatKey(spaceId, project);
-  const me: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t, ...(opts.discord ? { discord: opts.discord } : {}) };
-  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
+  // `ids`: typed on another device, which shows the lines under these already
+  const me: CaptainMessage = { id: opts.ids?.me ?? uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t, ...(opts.discord ? { discord: opts.discord } : {}) };
+  const reply: CaptainMessage = { id: opts.ids?.reply ?? uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
   setState("captain", (list) => trimChats([...list, me, reply]));
   followUps.set(space, 0);
   // `note`: for the model only (the chat shows the user's words)
@@ -226,6 +241,8 @@ function jobEnded(t: Task) {
   if (!t.agent) keepJobResult(t, undefined, batch);
   // the chat's space: the job's own, or the one that handed it to this space or device
   const home = from.space ?? t.space;
+  // a chat of another device's workspace kept here from before: that device's own main carries on there
+  if (farOf(home)) return;
   const space = chatKey(home, from.project);
   const handed = from.project ? requestsOf(space).find((q) => batch.some((x) => q.jobs.has(x.id)))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
@@ -563,6 +580,7 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
  */
 const warmedAt = new Map<string, number>();
 export async function warmMain(spaceId: SpaceId, project?: string, force = false): Promise<{ warmed: boolean; cacheWrite?: number; skipped?: string; error?: string }> {
+  if (farOf(spaceId)) return { warmed: false, skipped: "another device" };
   const space = chatKey(spaceId, project);
   if (busy.has(space)) return { warmed: false, skipped: "busy" };
   if (!force && Date.now() - (warmedAt.get(space) ?? 0) < 3 * 60_000) return { warmed: false, skipped: "recent" };
@@ -962,6 +980,8 @@ async function clearSession(space: string) {
  * (old session files pruned), then the cache is warmed for the first message.
  */
 export async function resetMain(spaceId: SpaceId, project?: string) {
+  const host = farOf(spaceId);
+  if (host) return void (await clearFar(host, spaceId, project));
   const space = chatKey(spaceId, project);
   const agent = agentOf(space);
   clearExtensionUi(`main:${space}`);
@@ -1563,6 +1583,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
  * is sent. Jobs it already started keep running.
  */
 export async function editMain(messageId: string, text: string) {
+  const far = farMessage(messageId);
+  if (far) return void (await editFar(far.host, messageId, text));
   const m = state.captain.find((x) => x.id === messageId);
   const space = m ? chatKey(m.space, m.project) : "";
   if (!m || m.from !== "me") return;
@@ -1591,6 +1613,8 @@ export async function editMain(messageId: string, text: string) {
 
 /** Stop main's current reply. */
 export async function stopMain(space: string) {
+  const host = farOf(sp(space));
+  if (host) return void (await stopFar(host, sp(space), pj(space)));
   clearExtensionUi(`main:${space}`);
   const agent = agentOf(space);
   if (!isAlive(agent)) return;

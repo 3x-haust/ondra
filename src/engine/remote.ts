@@ -3,8 +3,12 @@
 // live copy of those jobs (engine/hosts.ts); this side sends what changed and does what it
 // asks, as if the user had done it here.
 //
-//   them → here  {t:"projects"} {t:"watch",projects} {t:"call",seq,fn,args}
-//   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
+//   them → here  {t:"projects"} {t:"watch",projects,sessions?,same?} {t:"call",seq,fn,args}
+//   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"decisions",list}
+//                {t:"chat",msgs,gone?,asks?,all?} {t:"ui",set,all?} {t:"settings",settings} {t:"ret",seq,value|error}
+// A device that asks for `same` (and may use every workspace here) also gets this device's main and
+// project chats, its screen state in its workspaces and its app settings, and may act on them
+// (state/shared.ts): a workspace is then the same on both.
 // Files, folders and terminals of those jobs ("far.*" calls, {t:"pty…"}) are engine/farHost.ts.
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
@@ -17,9 +21,14 @@ import { createEffect, createMemo, createRoot, createSignal, on } from "solid-js
 import { produce, unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
-import { onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { AGENT_CHAT, onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { applyUi, sharedUi, uiSpace } from "../state/shared";
+import { viewState } from "../state/viewState";
+import { onDraft } from "../state/drafts";
+import { sharedSettings, setShared } from "./appSettings";
+import * as captain from "./captain";
 import { permissionOf } from "../state/persist";
-import type { Decision, Task } from "../state/types";
+import type { CaptainMessage, Decision, SpaceId, Task } from "../state/types";
 import type { FarAsk, HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
 import { toast } from "../state/ui";
@@ -68,6 +77,13 @@ interface Conn {
   info?: string;
   /** the questions of its jobs as last sent */
   decisions?: string;
+  /** it wants the chats, screen state and settings too (state/shared.ts) */
+  same?: boolean;
+  /** each chat message as last sent; main's questions; each screen value; the settings */
+  chatSent?: Map<string, string>;
+  asksSent?: string;
+  uiSent?: Map<string, string>;
+  settingsSent?: string;
 }
 const conns = new Map<number, Conn>();
 const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
@@ -77,9 +93,14 @@ const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "
 const dirty = new Set<string>();
 let dirtyAll = false;
 let projectsDirty = false;
+/** the chats, screen state or settings changed */
+let sharedDirty = false;
+viewState.onPut((k) => k.startsWith("sp:") && ((sharedDirty = true), soon()));
+onDraft(() => ((sharedDirty = true), soon()));
 onWrite((args) => {
   if (!conns.size) return;
   if (args[0] === "projects") projectsDirty = true;
+  if (args[0] === "captain" || args[0] === "decisions" || args[0] === "canvas" || args[0] === "settings") sharedDirty = true;
   if (args[0] !== "tasks") return soon();
   const sel = args[1];
   if (args.length < 3) dirtyAll = true;
@@ -141,10 +162,129 @@ function flush() {
     c.all = false;
     sendDecisions(conn, c);
   }
+  // main still answering: its words come in without a store write
+  const answering = sharedDirty || state.captain.some((m) => m.pending);
+  for (const [conn, c] of conns) if (answering || !c.chatSent) sendShared(conn, c);
+  sharedDirty = false;
   dirty.clear();
   dirtyAll = false;
   projectsDirty = false;
 }
+
+/** a device that sees this one's chats, screen state and settings: it asked, and it may use every workspace */
+const sharesWith = (c: Conn) => !!c.same && !spacesOf(c.device);
+/** a chat that goes to such a device: in this device's own workspaces, never the Discord agent's */
+const sharedChat = (space: string, project?: string) => project !== AGENT_CHAT && ownSpaces().some((s) => s.id === space);
+const chatOf = (key: string) => {
+  const [space, project] = key.split("~");
+  return { space: space as SpaceId, project: project || undefined };
+};
+
+/** what changed of this device's chats, screen state and settings since that device last heard */
+function sendShared(conn: number, c: Conn) {
+  if (!sharesWith(c)) return;
+  const paths = mirrorReplacer(engine.info.home);
+  const all = !c.chatSent;
+  const sent = (c.chatSent ??= new Map());
+  const msgs: unknown[] = [];
+  const seen = new Set<string>();
+  for (const m of state.captain) {
+    if (!sharedChat(m.space, m.project)) continue;
+    seen.add(m.id);
+    const key = captain.chatKey(m.space, m.project);
+    const draft = m.pending ? captain.mainDraft(key, m.id) : "";
+    const thought = m.pending ? captain.mainThought(key) : "";
+    const json = JSON.stringify({ ...unwrap(m), ...(draft ? { draft } : {}), ...(thought ? { thought } : {}) }, paths);
+    if (sent.get(m.id) === json) continue;
+    sent.set(m.id, json);
+    msgs.push(JSON.parse(json));
+  }
+  const gone = [...sent.keys()].filter((id) => !seen.has(id));
+  for (const id of gone) sent.delete(id);
+  const asks = state.decisions.filter((d) => d.taskId.startsWith("main:") && sharedChat(chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project));
+  const asksJson = JSON.stringify(asks);
+  const asksNew = asksJson !== c.asksSent;
+  c.asksSent = asksJson;
+  // in parts a message can carry (the first says it's all of them)
+  let part: unknown[] = [];
+  let size = 0;
+  let first = true;
+  const out = (last: boolean) => {
+    void send(conn, { t: "chat", msgs: part, ...(first && all ? { all: true } : {}), ...(last && gone.length ? { gone } : {}), ...(last && (asksNew || all) ? { asks } : {}) });
+    first = false;
+    part = [];
+    size = 0;
+  };
+  for (const m of msgs) {
+    part.push(m);
+    size += sent.get((m as CaptainMessage).id)?.length ?? 0;
+    if (size > 2 << 20) out(false);
+  }
+  if (part.length || gone.length || asksNew || all) out(true);
+
+  const ui = sharedUi();
+  const uiAll = !c.uiSent;
+  const uiSent = (c.uiSent ??= new Map());
+  const set: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(ui)) {
+    const json = JSON.stringify(v);
+    if (uiSent.get(k) === json) continue;
+    uiSent.set(k, json);
+    set[k] = v;
+  }
+  for (const k of [...uiSent.keys()]) if (!(k in ui)) (uiSent.delete(k), (set[k] = null));
+  if (uiAll || Object.keys(set).length) void send(conn, { t: "ui", set, ...(uiAll ? { all: true } : {}) });
+
+  const settings = sharedSettings();
+  const json = JSON.stringify(settings);
+  if (json !== c.settingsSent) (c.settingsSent = json), void send(conn, { t: "settings", settings });
+}
+
+/** a chat of this device's, as that device names it: one it may see */
+function sharedChatOf(c: Conn, o: unknown): { space: SpaceId; project?: string } {
+  const a = (o ?? {}) as { space?: unknown; project?: unknown };
+  const space = String(a.space ?? "") as SpaceId;
+  const project = typeof a.project === "string" && a.project ? a.project : undefined;
+  const p = project ? projectById(project) : undefined;
+  if (!sharesWith(c) || !sharedChat(space, project) || (project && (!p || p.host || p.space !== space))) throw new Error("그 채팅은 쓸 수 없어요");
+  return { space, project };
+}
+
+/** what a device that shares this one's chats and settings may do in them (as the user would here) */
+const SHARED_CALLS: Record<string, (c: Conn, args: unknown[]) => unknown> = {
+  say: (c, [o]) => {
+    const a = (o ?? {}) as { text?: unknown; me?: unknown; reply?: unknown };
+    const { space, project } = sharedChatOf(c, o);
+    if (typeof a.text !== "string" || !a.text.trim()) throw new Error("bad request");
+    const id = (x: unknown) => (typeof x === "string" && /^[\w-]{1,64}$/.test(x) && !state.captain.some((m) => m.id === x) ? x : undefined);
+    return captain.throwThought(a.text, space, { project, ids: { me: id(a.me), reply: id(a.reply) } });
+  },
+  mainStop: (c, [o]) => {
+    const { space, project } = sharedChatOf(c, o);
+    return captain.stopMain(captain.chatKey(space, project));
+  },
+  mainClear: (c, [o]) => {
+    const { space, project } = sharedChatOf(c, o);
+    return captain.resetMain(space, project);
+  },
+  mainEdit: (c, [id, text]) => {
+    const m = state.captain.find((x) => x.id === id);
+    if (!m || typeof text !== "string") throw new Error("bad request");
+    sharedChatOf(c, m);
+    return captain.editMain(m.id, text);
+  },
+  ui: (c, [key, value]) => {
+    if (!sharesWith(c) || typeof key !== "string" || !uiSpace(key)) throw new Error("bad request");
+    applyUi(key, value);
+    // that device has it already: not sent back over what is typed or dragged there now
+    c.uiSent?.set(key, JSON.stringify(sharedUi()[key] ?? null));
+    if (!(key in sharedUi())) c.uiSent?.delete(key);
+  },
+  setSetting: (c, [key, value]) => {
+    if (!sharesWith(c)) throw new Error("bad request");
+    return setShared(String(key), value);
+  },
+};
 
 /** the questions the jobs that device keeps wait on (its cards, "내 차례"), sent when they change.
  *  A Mac too old to know {t:"decisions"} passes it by. */
@@ -369,6 +509,8 @@ async function handle(conn: number, msg: Record<string, unknown>) {
     case "watch":
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);
       c.sessions = msg.sessions === true;
+      c.same = msg.same === true;
+      c.chatSent = c.uiSent = c.asksSent = c.settingsSent = undefined;
       c.all = true;
       soon();
       break;
@@ -393,7 +535,9 @@ async function handle(conn: number, msg: Record<string, unknown>) {
         else if (fn === "decide") {
           // a question of a job that device may reach
           const d = state.decisions.find((x: Decision) => x.id === args[0]);
-          if (!d || !mayReach(reach(c), taskById(d.taskId), taskById)) throw new Error("그 작업은 쓸 수 없어요");
+          // or one main asks in a chat it shares
+          const ask = d?.taskId.startsWith("main:") && sharesWith(c) && sharedChat(chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project);
+          if (!d || (!ask && !mayReach(reach(c), taskById(d.taskId), taskById))) throw new Error("그 작업은 쓸 수 없어요");
           value = await jobs.decide(String(args[0]), String(args[1]), args[2] && typeof args[2] === "object" ? (args[2] as FormValues) : undefined);
         } else if (fn === "handOn") {
           // both ends of the hand-over must be jobs it may reach
@@ -404,6 +548,8 @@ async function handle(conn: number, msg: Record<string, unknown>) {
           const f = farCall(peerOf(conn, c), fn);
           if (!f) throw new Error(`unknown: ${fn}`);
           value = await f(...args);
+        } else if (SHARED_CALLS[fn]) {
+          value = await SHARED_CALLS[fn](c, args);
         } else if (PROJECT_CALLS[fn]) {
           mayUseProject(c, projectOfArgs(args));
           value = await (PROJECT_CALLS[fn] as (...a: unknown[]) => unknown)(...args);

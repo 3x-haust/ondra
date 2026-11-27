@@ -63,7 +63,10 @@ export function createViewState(store: Storage | undefined, wait = 400) {
   const gone = (k: string) => {
     if (!live) return false;
     const m = /^(sp|t):([^/]+)\//.exec(k);
-    return !!m && !(m[1] === "sp" ? live.space(m[2]) : live.job(m[2]));
+    if (m && !(m[1] === "sp" ? live.space(m[2]) : live.job(m[2]))) return true;
+    // a job's fold in a workspace's sidebar goes with the job
+    const job = /\/fold\/t:(.+)$/.exec(k)?.[1];
+    return !!job && !live.job(job);
   };
   const prune = () => {
     for (const box of [vals, items])
@@ -95,6 +98,21 @@ export function createViewState(store: Storage | undefined, wait = 400) {
     timer = setTimeout(flush, wait);
   };
 
+  /** a value kept under `key` as it is now (undefined: none); reactive */
+  const peek = (key: string): unknown => (route?.owns(key) ? route.get(key) : cell(key)[0]());
+  /** keep `v` under `key` (undefined, or the value it starts with: nothing kept) */
+  function put(key: string, v: unknown, opts: { many?: boolean; initial?: unknown; quiet?: boolean } = {}) {
+    if (!opts.quiet && route?.owns(key)) return route.set(key, same(v, opts.initial) ? undefined : v);
+    const box = opts.many ? items : vals;
+    // back at the start, nothing needs keeping
+    if (v === undefined || same(v, opts.initial)) delete box[key];
+    else if (opts.many) touch(items, key, v, ITEMS);
+    else vals[key] = v;
+    cell(key)[1](() => box[key]);
+    save();
+    if (!opts.many) for (const f of heard) f(key);
+  }
+
   /**
    * A value a view keeps across remounts, like a signal. `key` may change (the workspace
    * switched): the value read is then that key's. `initial` is what it is until set.
@@ -102,23 +120,22 @@ export function createViewState(store: Storage | undefined, wait = 400) {
    */
   function kept<T>(key: string | (() => string), initial: T, opts: { many?: boolean } = {}): [get: () => T, set: (v: T | ((prev: T) => T)) => void] {
     const k = typeof key === "function" ? key : () => key;
-    const box = opts.many ? items : vals;
     const get = () => {
-      const v = cell(k())[0]();
+      const v = peek(k());
       return v === undefined ? initial : (v as T);
     };
-    const set = (next: T | ((prev: T) => T)) => {
-      const name = k();
-      const v = typeof next === "function" ? (next as (p: T) => T)(get()) : next;
-      // back at the start, nothing needs keeping
-      if (same(v, initial)) delete box[name];
-      else if (opts.many) touch(items, name, v, ITEMS);
-      else vals[name] = v;
-      cell(name)[1](() => box[name]);
-      save();
-    };
+    const set = (next: T | ((prev: T) => T)) => put(k(), typeof next === "function" ? (next as (p: T) => T)(get()) : next, { many: opts.many, initial });
     return [get, set];
   }
+
+  /** keys kept somewhere else (another device's workspace, state/shared.ts): read and set there */
+  let route: { owns(key: string): boolean; get(key: string): unknown; set(key: string, v: unknown): void } | undefined;
+  const setRoute = (r: typeof route) => void (route = r);
+  /** told of each single value set here (not per message or row) */
+  const heard = new Set<(key: string) => void>();
+  const onPut = (f: (key: string) => void) => void heard.add(f);
+  /** the single values kept here whose key starts with `prefix` */
+  const entries = (prefix: string): [string, unknown][] => Object.entries(vals).filter(([k]) => k.startsWith(prefix));
 
   const spot = (key: string): Spot | undefined => spots[key];
   const keepSpot = (key: string, s: Spot) => {
@@ -135,7 +152,7 @@ export function createViewState(store: Storage | undefined, wait = 400) {
     save();
   };
 
-  return { kept, spot, keepSpot, setLive, flush };
+  return { kept, peek, put, entries, setRoute, onPut, spot, keepSpot, setLive, flush };
 }
 
 const storage = (() => {
@@ -146,7 +163,7 @@ const storage = (() => {
   }
 })();
 export const viewState = createViewState(storage);
-export const { kept, spot, keepSpot, setLive } = viewState;
+export const { kept, peek, put, spot, keepSpot, setLive } = viewState;
 // a quit right after a scroll still keeps it
 if (typeof window !== "undefined") for (const e of ["pagehide", "beforeunload"]) window.addEventListener(e, () => viewState.flush());
 

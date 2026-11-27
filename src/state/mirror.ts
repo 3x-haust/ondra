@@ -3,7 +3,7 @@
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
 import type { Limit } from "../lib/native";
-import type { Decision, Project, SpaceId, Task } from "./types";
+import type { CaptainMessage, Decision, Project, SpaceId, Task } from "./types";
 
 /** "off": disconnected here for now (연결 끊기) */
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
@@ -22,7 +22,20 @@ export interface HostMirror {
   info?: HostInfo;
   /** the questions those jobs wait on, as that device has them (a Mac too old to send them: none) */
   decisions?: Decision[];
+  /** its main and project chats in its workspaces, as they show here (a device that doesn't share
+   *  them: none, and its workspace tabs keep this device's own main) */
+  chat?: FarMessage[];
+  /** the questions its main asks in those chats (taskId "main:<chat key here>") */
+  asks?: Decision[];
+  /** its screen state in its workspaces, keyed as there: "sp:<space>/…" (viewState), "pos:<space>:<node>"
+   *  (canvas cards), "main:<chat key>" (unsent text) */
+  ui?: Record<string, unknown>;
+  /** its app settings the settings page offers (engine/appSettings.ts SHARED_SETTINGS) */
+  settings?: Record<string, unknown>;
 }
+
+/** a message of another device's chat: while main is still answering, what it has written and thought so far */
+export type FarMessage = CaptainMessage & { draft?: string; thought?: string };
 
 export interface HostInfo {
   /** that device's Ondra version */
@@ -101,7 +114,7 @@ export function mirroredTasks(): Task[] {
 /** every question another device's jobs wait on */
 export function mirroredDecisions(): Decision[] {
   const out: Decision[] = [];
-  for (const h of Object.values(mirror.hosts)) out.push(...(h.decisions ?? []));
+  for (const h of Object.values(mirror.hosts)) out.push(...(h.decisions ?? []), ...(h.asks ?? []));
   return out;
 }
 export const mirroredDecision = (id: string) => mirroredDecisions().find((d) => d.id === id);
@@ -159,4 +172,33 @@ export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: 
   // just now: it's trying again; later: since when
   if (at && Date.now() - at < 60_000) return s === "connecting" ? t("연결이 끊겨서 다시 연결하는 중") : t("연결이 끊겼어요");
   return at ? t("{ago}부터 연결 안 됨", { ago: ago(at) }) : t("연결 안 됨");
+}
+
+// ───────── another device's chats and screen state, as they show here (state/shared.ts)
+
+/** a message of that device's chat as it shows here: in its workspace's tab, its project's id here */
+export function chatHere(host: string, m: FarMessage): FarMessage {
+  return { ...m, space: hostSpaceId(host, m.space), ...(m.project ? { project: remoteProjectId(host, m.project) } : {}), ...(m.up ? { up: remoteProjectId(host, m.up) } : {}) };
+}
+
+/** a question main asks there ("main:<space>~<project>"), as it shows in that chat here */
+export function askHere(host: string, d: Decision): Decision {
+  const [space, project] = d.taskId.slice(5).split("~");
+  return { ...d, taskId: `main:${hostSpaceId(host, space)}${project ? `~${remoteProjectId(host, project)}` : ""}` };
+}
+
+/** a key or value of this device's for that device's workspace, in that device's own ids */
+export const toThere = (host: string, s: string) => s.split(`h:${host}:`).join("").split(`r:${host}:`).join("");
+export function deepThere(host: string, v: unknown): unknown {
+  if (typeof v === "string") return toThere(host, v);
+  if (Array.isArray(v)) return v.map((x) => deepThere(host, x));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepThere(host, x)]));
+  return v;
+}
+/** a value of that device's: what names one of its projects names it as here */
+export function deepHere(host: string, v: unknown): unknown {
+  if (typeof v === "string") return mirror.hosts[host]?.projects.some((p) => p.id === v) ? remoteProjectId(host, v) : v;
+  if (Array.isArray(v)) return v.map((x) => deepHere(host, x));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepHere(host, x)]));
+  return v;
 }

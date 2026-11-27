@@ -2,6 +2,7 @@
 // top, coloured by what it needs. Subagents hang off their job on a dotted twig.
 // Lives in the right panel's Flow tab.
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { messagesIn } from "../state/shared";
 import { kidsOf as childrenOf, state, taskById, tasksShown } from "../state/store";
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, hoverOn, view } from "../state/ui";
@@ -183,7 +184,7 @@ export function Flow() {
       <button class="g-main" data-shortcut="main" onClick={() => goMain()} title={withHint(tr("메인"), "main")} style={{ "--trunk": `${TRUNK}px` }}>
         <span class="g-main-node" style={{ left: `${TRUNK - 5}px` }} />
         <span class="g-name">{tr("메인")}</span>
-        <Show when={state.captain.some((m) => m.space === state.space && m.pending)} fallback={<kbd class="g-kbd">{shortcutLabel("main")}</kbd>}>
+        <Show when={messagesIn(state.space).some((m) => m.pending)} fallback={<kbd class="g-kbd">{shortcutLabel("main")}</kbd>}>
           <span class="tk-run" />
         </Show>
       </button>

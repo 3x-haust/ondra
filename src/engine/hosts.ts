@@ -13,7 +13,7 @@
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { hostOfTask, hostSpaceId, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, splitSpaceId, type FarAsk, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
+import { askHere, chatHere, hostOfTask, hostSpaceId, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, splitSpaceId, type FarAsk, type FarMessage, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
 import { accountsIn, projectsIn, setState, spacesOf, state, tasksIn } from "../state/store";
 import { switchSpace } from "../state/workspace";
 import type { Decision, Entry, Space, Task } from "../state/types";
@@ -206,18 +206,52 @@ export function markFarRead(id: string) {
 
 /** answer another device's question there; its card goes now and comes back if that device can't take it */
 export async function farDecide(d: Decision, optionId: string, values?: FormValues) {
-  const host = Object.keys(mirror.hosts).find((h) => mirror.hosts[h].decisions?.some((x) => x.id === d.id));
+  // a job's question, or one its main asks in its chat
+  const host = Object.keys(mirror.hosts).find((h) => [...(mirror.hosts[h].decisions ?? []), ...(mirror.hosts[h].asks ?? [])].some((x) => x.id === d.id));
   if (!host) return;
-  setMirror("hosts", host, "decisions", (l) => (l ?? []).filter((x) => x.id !== d.id));
+  const list = mirror.hosts[host].asks?.some((x) => x.id === d.id) ? "asks" : "decisions";
+  setMirror("hosts", host, list, (l) => (l ?? []).filter((x) => x.id !== d.id));
   const ok = await viaHost(host, "decide", values ? [d.id, optionId, values] : [d.id, optionId]).then(() => true, () => false);
-  if (!ok && mirror.hosts[host] && !mirror.hosts[host].decisions?.some((x) => x.id === d.id)) setMirror("hosts", host, "decisions", (l) => [...(l ?? []), d]);
+  if (!ok && mirror.hosts[host] && !mirror.hosts[host][list]?.some((x) => x.id === d.id)) setMirror("hosts", host, list, (l) => [...(l ?? []), d]);
+}
+
+/** that device's chats (main's and its projects') in its workspaces: what changed, or all of them */
+function applyChat(host: string, d: Record<string, unknown>) {
+  if (!mirror.hosts[host]) return;
+  const msgs = (Array.isArray(d.msgs) ? (d.msgs as FarMessage[]) : []).map((m) => chatHere(host, m));
+  const gone = new Set(Array.isArray(d.gone) ? d.gone.map(String) : []);
+  setMirror("hosts", host, "chat", (was) => {
+    const at = new Map((d.all ? [] : (was ?? [])).filter((m) => !gone.has(m.id)).map((m) => [m.id, m]));
+    // one typed here and not yet seen there stays (it's on its way)
+    if (d.all) for (const m of was ?? []) if (m.from === "me" && Date.now() - m.at < 10_000 && !gone.has(m.id)) at.set(m.id, m);
+    for (const m of msgs) at.set(m.id, m);
+    return [...at.values()].sort((a, b) => a.at - b.at);
+  });
+  if (Array.isArray(d.asks)) setMirror("hosts", host, "asks", (d.asks as Decision[]).map((x) => askHere(host, x)));
+  // its workspace tabs show its own chats from now on, also while it is away
+  if (!hostOf(host)?.same) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, same: true } : x)));
+}
+
+/** that device's screen state in its workspaces: what changed, or all of it */
+function applyUi(host: string, d: Record<string, unknown>) {
+  if (!mirror.hosts[host] || !d.set || typeof d.set !== "object") return;
+  const set = d.set as Record<string, unknown>;
+  setMirror("hosts", host, "ui", (was) => {
+    const next = { ...(d.all ? {} : (was ?? {})) };
+    for (const [k, v] of Object.entries(set)) {
+      if (v === null) delete next[k];
+      else next[k] = v;
+    }
+    return next;
+  });
 }
 
 /** what this Mac wants from that one: the jobs of its projects added here, and the work done in its
  *  workspaces (a device too old to know `sessions` sends only the first) */
 function watch(host: string) {
   const projects = (state.settings.hostProjects ?? []).filter((l) => l.host === host).map((l) => l.id);
-  void sendTo(host, { t: "watch", projects, sessions: true }).catch(() => {});
+  // `same`: its chats, screen state and settings too (an older Ondra passes it by)
+  void sendTo(host, { t: "watch", projects, sessions: true, same: true }).catch(() => {});
 }
 
 async function dial(host: string) {
@@ -384,6 +418,15 @@ export function onPeer(ev: Record<string, unknown>) {
       break;
     case "decisions":
       applyDecisions(host, Array.isArray(d.list) ? (d.list as Decision[]) : []);
+      break;
+    case "chat":
+      applyChat(host, d);
+      break;
+    case "ui":
+      applyUi(host, d);
+      break;
+    case "settings":
+      if (mirror.hosts[host] && d.settings && typeof d.settings === "object") setMirror("hosts", host, "settings", d.settings as Record<string, unknown>);
       break;
     case "ret": {
       const p = pending.get(Number(d.seq));

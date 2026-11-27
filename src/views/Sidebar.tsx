@@ -1,18 +1,19 @@
 // The left side: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { routineOf } from "../engine/routines";
+import { messagesIn } from "../state/shared";
 import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
 import { MacBar } from "../ui/MacBar";
 import { createEffect, createMemo, createRoot, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { inSpace, peek, put } from "../state/viewState";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
 import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, deviceSpaces, spaceById, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId, splitSpaceId } from "../state/mirror";
-import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath, revealLabel } from "../lib/native";
 import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
@@ -451,29 +452,23 @@ function rowKeys(e: KeyboardEvent) {
   }
 }
 
-// what's folded in the sidebar (sections, and each project's jobs), kept per machine
-const FOLD_KEY = "ondra.sidebar.fold";
-const [folds, setFolds] = createSignal<Record<string, boolean>>((() => {
-  try {
-    return JSON.parse(localStorage.getItem(FOLD_KEY) ?? "{}");
-  } catch {
-    return {};
+// what's folded in the sidebar (sections, and each project's jobs), per workspace: the way it was left,
+// on every device that shows that workspace (state/shared.ts)
+const fold = (k: string): boolean | undefined => peek(inSpace(state.space, `fold/${k}`)) as boolean | undefined;
+const setFold = (k: string, v: boolean) => put(inSpace(state.space, `fold/${k}`), v);
+// folds kept by an older version (on this device only) carry over once
+try {
+  const old = JSON.parse(localStorage.getItem("ondra.sidebar.fold") ?? "null") as Record<string, boolean> | null;
+  if (old) {
+    for (const [k, v] of Object.entries(old)) {
+      const m = /^([^:]+|h:[0-9a-f]{64}:[^:]+):(.+)$/.exec(k);
+      if (m && typeof v === "boolean" && peek(inSpace(m[1], `fold/${m[2]}`)) === undefined) put(inSpace(m[1], `fold/${m[2]}`), v, { quiet: true });
+    }
+    localStorage.removeItem("ondra.sidebar.fold");
   }
-})());
-// per space: each space's sidebar stays folded the way it was left
-const fold = (k: string): boolean | undefined => folds()[`${state.space}:${k}`] ?? folds()[k];
-const setFold = (k: string, v: boolean) => {
-  const next = { ...folds(), [`${state.space}:${k}`]: v };
-  // a job's fold goes with the job
-  for (const key of Object.keys(next)) {
-    const job = key.match(/:t:(.+)$/)?.[1];
-    if (job && !taskById(job)) delete next[key];
-  }
-  setFolds(next);
-  try {
-    localStorage.setItem(FOLD_KEY, JSON.stringify(next));
-  } catch {}
-};
+} catch {
+  /* storage is a convenience */
+}
 
 /** A section title you can click to fold what's under it. */
 function Head(props: { id: string; label: string; count?: number; on?: boolean; children?: any }) {
@@ -624,7 +619,7 @@ export function Sidebar() {
   const looseDone = createMemo(() => roots().filter((t) => isOld(t) && !filed(t)));
   const needs = createMemo(() => every().filter(needsYou).length);
   const boardLive = () => every().filter((t) => t.status === "running").length;
-  const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
+  const mainBusy = () => messagesIn(state.space).some((m) => !m.project && m.pending);
   // the agent: on, or something of it here; this device's only, not in a connected device's workspace
   const agentShown = () => !splitSpaceId(state.space) && (!!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space));
   // its jobs going now, counted as a project row counts its own (top-level jobs only)
@@ -767,7 +762,7 @@ export function Sidebar() {
             }
           >
             {(p) => {
-              const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
+              const busy = () => messagesIn(state.space).some((m) => m.project === p.id && m.pending);
               // top-level tasks only, like every running count (a subagent is part of its task)
               const live = () => tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.agent && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
@@ -791,7 +786,7 @@ export function Sidebar() {
                       e.preventDefault();
                       openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);
                     }}
-                    title={p.host ? `${p.hostName} · ${hostState(p.host)} · ${p.folder}` : p.folder}
+                    title={p.folder}
                   >
                     <span
                       class="sb-proj-ic"
@@ -805,7 +800,7 @@ export function Sidebar() {
                       <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
-                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}<Show when={p.hostName}><span class="sb-host"><i class={`cn-dot is-${mirror.hosts[p.host!]?.status ?? "connecting"}`} aria-hidden="true" />{p.hostName}</span></Show></span>}>
+                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}</span>}>
                       <input
                         class="sb-rename"
                         value={p.name}

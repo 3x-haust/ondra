@@ -1656,19 +1656,6 @@
   font-size: var(--fs-xs);
 }
 
-/* a project of another device (Settings › 연결): the Mac's name after its own, quieter */
-.sb-host {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: var(--s-6);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
-}
-.sb-host .cn-dot {
-  width: 6px;
-  height: 6px;
-}
 .sb-proj.away .sb-title {
   color: var(--ink-3);
 }

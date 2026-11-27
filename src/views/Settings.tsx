@@ -1,6 +1,8 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { effortFor, setModelEffort } from "../engine/models";
-import { ring, soundOn, soundVolume } from "../engine/sound";
+import { ring } from "../engine/sound";
+import { SETTINGS, type SharedSetting } from "../engine/appSettings";
+import { farSettings, setFarSetting } from "../state/shared";
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { LimitCards } from "../ui/LimitBars";
@@ -118,13 +120,13 @@ export function EmptyState(props: { icon: string; title: string; desc?: string; 
 }
 
 /** 테마 as three small windows to pick from */
-function ThemePick() {
-  const cur = () => state.settings.theme ?? "system";
+function ThemePick(props: { value: string; set: (v: "system" | "light" | "dark") => void }) {
+  const cur = () => props.value;
   return (
     <div class="theme-pick" role="radiogroup" aria-label={t("테마")}>
       <For each={[["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as const}>
         {([v, l]) => (
-          <button class="theme-opt" classList={{ on: cur() === v }} role="radio" aria-checked={cur() === v} onClick={() => setState("settings", "theme", v)}>
+          <button class="theme-opt" classList={{ on: cur() === v }} role="radio" aria-checked={cur() === v} onClick={() => props.set(v)}>
             <span class={`theme-win ${v}`} aria-hidden="true">
               <i class="tw-side" />
               <i class="tw-line" />
@@ -182,15 +184,28 @@ function LocalChecks() {
 const modelAccounts = () =>
   state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
 
+/** the device whose settings 일반 shows: this one (undefined) or a connected one that shares them */
+const [settingsOf, setSettingsOf] = createSignal<string>();
+/** the connected devices that share their settings */
+const sharingDevices = () => Object.keys(mirror.hosts).filter((h) => mirror.hosts[h].status === "ok" && !!mirror.hosts[h].settings);
+
 // ───────────────── general
 function General() {
+  // this device's settings, or the picked device's (changed there)
+  const far = () => (settingsOf() && sharingDevices().includes(settingsOf()!) ? settingsOf() : undefined);
+  const cfg = <T,>(k: SharedSetting): T => (far() ? farSettings(far()!)?.[k] : SETTINGS[k].get()) as T;
+  const setCfg = (k: SharedSetting, v: unknown) => {
+    const host = far();
+    if (host) return void setFarSetting(host, k, v).catch(() => toast(t("{name}의 설정을 바꾸지 못했어요", { name: hostName(host) }), "bad"));
+    void SETTINGS[k].set(v as never);
+  };
   // a quiet "저장됨" for a moment after the instructions change
   const [saved, setSaved] = createSignal(false);
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(savedTimer));
   const saveInstructions = (v: string) => {
-    if (v === state.settings.instructions) return;
-    setState("settings", "instructions", v);
+    if (v === cfg("instructions")) return;
+    setCfg("instructions", v);
     setSaved(true);
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => setSaved(false), 2000);
@@ -198,11 +213,23 @@ function General() {
   return (
     <>
       <PageHead tab="general" />
+      {/* another connected device's settings, seen and changed from here */}
+      <Show when={sharingDevices().length}>
+        <div class="set-group">
+          <Row title={t("기기")}>
+            <div class="seg">
+              <button classList={{ on: !far() }} onClick={() => setSettingsOf(undefined)}>{t("이 기기")}</button>
+              <For each={sharingDevices()}>{(h) => <button classList={{ on: far() === h }} onClick={() => setSettingsOf(h)}>{hostName(h)}</button>}</For>
+            </div>
+          </Row>
+        </div>
+      </Show>
       <GroupTitle title={t("화면")} />
       <div class="set-group">
         <Row title={t("테마")}>
-          <ThemePick />
+          <ThemePick value={cfg("theme")} set={(v) => setCfg("theme", v)} />
         </Row>
+        <Show when={!far()}>
         <Row title={t("화면 크기")} desc={t("{a} 크게 · {b} 작게", { a: shortcutHint("zoomIn"), b: shortcutHint("zoomOut") })}>
           <div class="seg">
             <For each={ZOOMS}>
@@ -210,18 +237,19 @@ function General() {
             </For>
           </div>
         </Row>
+        </Show>
         <Row title={t("언어")}>
           <div class="seg">
             <For each={[["system", "시스템"], ["ko", "한국어"], ["en", "English"]] as const}>
-              {([v, l]) => <button classList={{ on: (state.settings.language ?? "system") === v }} onClick={() => setState("settings", "language", v)}>{v === "system" ? t(l) : l}</button>}
+              {([v, l]) => <button classList={{ on: cfg("language") === v }} onClick={() => setCfg("language", v)}>{v === "system" ? t(l) : l}</button>}
             </For>
           </div>
         </Row>
         {/* web links: the panel's browser (signed in once, shared with the jobs) or the Mac's own */}
         <Row title={t("링크 열기")} desc={onWindows() ? t("Ctrl 클릭하면 기본 브라우저에서 열려요") : t("⌘ 클릭하면 기본 브라우저에서 열려요")}>
           <div class="seg">
-            <button classList={{ on: (state.settings.links ?? "inside") === "inside" }} onClick={() => setState("settings", "links", "inside")}>{t("{name} 안에서", { name: appName() })}</button>
-            <button classList={{ on: state.settings.links === "outside" }} onClick={() => setState("settings", "links", "outside")}>{t("기본 브라우저")}</button>
+            <button classList={{ on: cfg("links") === "inside" }} onClick={() => setCfg("links", "inside")}>{t("{name} 안에서", { name: appName() })}</button>
+            <button classList={{ on: cfg("links") === "outside" }} onClick={() => setCfg("links", "outside")}>{t("기본 브라우저")}</button>
           </div>
         </Row>
       </div>
@@ -229,7 +257,7 @@ function General() {
       {/* what every new task starts with: the same model and permission the composer shows (one store) */}
       <GroupTitle title={t("새 작업")} />
       <div class="set-group">
-        <For each={modelAccounts()}>
+        <For each={far() ? [] : modelAccounts()}>
           {(a) => (
             <Row title={modelAccounts().length > 1 ? `${t("기본 모델")} · ${accountName(a, true)}` : t("기본 모델")}>
               <ModelPicker
@@ -242,10 +270,10 @@ function General() {
             </Row>
           )}
         </For>
-        <Row title={t("기본 권한")} desc={t(PERMISSIONS.find((p) => p.id === (state.settings.permission ?? "auto"))?.desc ?? "")}>
+        <Row title={t("기본 권한")} desc={t(PERMISSIONS.find((p) => p.id === cfg("permission"))?.desc ?? "")}>
           <div class="seg">
             <For each={PERMISSIONS}>
-              {(p) => <button classList={{ on: (state.settings.permission ?? "auto") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
+              {(p) => <button classList={{ on: cfg("permission") === p.id }} title={t(p.desc)} onClick={() => setCfg("permission", p.id)}>{t(p.label)}</button>}
             </For>
           </div>
         </Row>
@@ -256,41 +284,41 @@ function General() {
       <GroupTitle title={t("작업 폴더와 GitHub")} />
       <div class="set-group">
         <Row title={t("작업마다 새 워크트리")} desc={t("작업끼리 파일이 섞이지 않게 따로 폴더를 만들어요")}>
-          <Switch_ label={t("작업마다 새 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
+          <Switch_ label={t("작업마다 새 워크트리")} on={cfg<boolean>("isolate")} set={(v) => setCfg("isolate", v)} />
         </Row>
         <Row title={t("GitHub 푸시·PR 허용")} desc={t("끄면 읽기만 해요")}>
-          <Switch_ label={t("GitHub 푸시·PR 허용")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
+          <Switch_ label={t("GitHub 푸시·PR 허용")} on={cfg<boolean>("githubWrite")} set={(v) => setCfg("githubWrite", v)} />
         </Row>
         <Row title={t("확인된 버그 수정은 바로 병합")} desc={t("화면이 바뀌지 않는 버그·성능 수정은 다 확인되면 묻지 않고 병합해요. 메모리에 다르게 적혀 있으면 그걸 따라요")}>
-          <Switch_ label={t("확인된 버그 수정은 바로 병합")} on={state.settings.autoMergeFixes !== false} set={(v) => setState("settings", "autoMergeFixes", v)} />
+          <Switch_ label={t("확인된 버그 수정은 바로 병합")} on={cfg<boolean>("autoMergeFixes")} set={(v) => setCfg("autoMergeFixes", v)} />
         </Row>
       </div>
 
       <GroupTitle title={t("확인과 메모리")} />
       <div class="set-group">
         <Row title={t("끝내기 전에 앱 직접 실행해 보기")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
-          <Switch_ label={t("끝내기 전에 앱 직접 실행해 보기")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
+          <Switch_ label={t("끝내기 전에 앱 직접 실행해 보기")} on={cfg<boolean>("appCheck")} set={(v) => setCfg("appCheck", v)} />
         </Row>
         <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
-          <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
+          <Switch_ label={t("메모리 자동 저장")} on={cfg<boolean>("learn")} set={(v) => setCfg("learn", v)} />
         </Row>
         <Row title={t("두 번 말한 규칙은 자동 검사로")} desc={t("프로젝트 규칙을 두 번 말하면, 작업이 린트·테스트 같은 자동 검사로 만들어요")}>
-          <Switch_ label={t("두 번 말한 규칙은 자동 검사로")} on={state.settings.ruleChecks !== false} set={(v) => setState("settings", "ruleChecks", v)} />
+          <Switch_ label={t("두 번 말한 규칙은 자동 검사로")} on={cfg<boolean>("ruleChecks")} set={(v) => setCfg("ruleChecks", v)} />
         </Row>
         <Row title={t("스킬 고치기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
-          <Switch_ label={t("스킬 고치기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
+          <Switch_ label={t("스킬 고치기 제안")} on={cfg<boolean>("skillReflect")} set={(v) => setCfg("skillReflect", v)} />
         </Row>
       </div>
 
       <GroupTitle title={t("알림과 미리보기")} />
       <div class="set-group">
         <Row title={t("작업 브라우저 작게 띄우기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
-          <Switch_ label={t("작업 브라우저 작게 띄우기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
+          <Switch_ label={t("작업 브라우저 작게 띄우기")} on={cfg<boolean>("browserPip")} set={(v) => setCfg("browserPip", v)} />
         </Row>
         <Row title={t("알림 소리")} desc={t("작업이 끝나거나 답이 필요하면 소리를 내요")}>
-          <Switch_ label={t("알림 소리")} on={soundOn()} set={(v) => (setState("settings", "jobSound", v), v && ring("done", { test: true }))} />
+          <Switch_ label={t("알림 소리")} on={cfg<boolean>("jobSound")} set={(v) => (setCfg("jobSound", v), v && !far() && ring("done", { test: true }))} />
         </Row>
-        <Show when={soundOn()}>
+        <Show when={cfg<boolean>("jobSound")}>
           <Row title={t("소리 크기")}>
             <div class="set-volume">
               <input
@@ -299,19 +327,20 @@ function General() {
                 max={100}
                 step={5}
                 aria-label={t("소리 크기")}
-                value={Math.round(soundVolume() * 100)}
-                onInput={(e) => setState("settings", "jobSoundVolume", Number(e.currentTarget.value) / 100)}
-                onChange={() => ring("done", { test: true })}
+                value={cfg<number>("jobSoundVolume")}
+                onInput={(e) => !far() && setCfg("jobSoundVolume", Number(e.currentTarget.value))}
+                onChange={(e) => (far() ? setCfg("jobSoundVolume", Number(e.currentTarget.value)) : ring("done", { test: true }))}
               />
-              <span class="set-volume-n">{Math.round(soundVolume() * 100)}%</span>
+              <span class="set-volume-n">{cfg<number>("jobSoundVolume")}%</span>
             </div>
           </Row>
         </Show>
       </div>
 
-      <LocalChecks />
-
-      <ReviewSettings />
+      <Show when={!far()}>
+        <LocalChecks />
+        <ReviewSettings />
+      </Show>
 
       <GroupTitle title={t("공통 지침")}>
         <span class="set-saved" classList={{ on: saved() }} aria-hidden={!saved()}>{t("저장됨")}</span>
@@ -323,12 +352,13 @@ function General() {
             rows={6}
             aria-label={t("공통 지침")}
             placeholder={t("모든 작업에 적용할 지침")}
-            value={state.settings.instructions}
+            value={cfg<string>("instructions")}
             onChange={(e) => saveInstructions(e.currentTarget.value)}
           />
         </div>
       </div>
 
+      <Show when={!far()}>
       <GroupTitle title={t("정보|about")} />
       <div class="set-group">
         <UpdateRow />
@@ -343,6 +373,7 @@ function General() {
           </Row>
         </Show>
       </div>
+      </Show>
     </>
   );
 }

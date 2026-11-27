@@ -5,11 +5,12 @@
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
 import { awaitsMerge } from "../state/needs";
+import { canvasPos, messagesIn, movedCards, setCanvasPos } from "../state/shared";
 import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
-import { decisionFor, projectsShown, queueWith, setState, spaceById, kidsOf, state, taskById, tasksShown } from "../state/store";
+import { decisionFor, projectsShown, queueWith, spaceById, kidsOf, state, taskById, tasksShown } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask } from "../state/ui";
 import { decide, resumeTask, startTask, tell } from "../engine/tasks";
@@ -195,9 +196,8 @@ function layout(space: string, open: string[], k = untrack(sizeAt), two = untrac
     tops[c] += l.next;
   }
   // where the user put things wins
-  const moved = state.canvas ?? {};
   for (const n of nodes) {
-    const m = moved[`${space}:${n.id}`];
+    const m = canvasPos(space, n.id);
     if (m) (n.x = m.x), (n.y = m.y);
   }
   return { nodes, edges };
@@ -719,7 +719,7 @@ function ProjCard(props: { n: Node; space: string }) {
     return n;
   });
   const count = (k: string) => counts()[k] ?? 0;
-  const busy = () => p().id !== "_" && state.captain.some((m) => m.space === props.space && m.project === p().id && m.pending);
+  const busy = () => p().id !== "_" && messagesIn(props.space).some((m) => m.project === p().id && m.pending);
   return (
     <>
       <div class="cv-head">
@@ -766,7 +766,7 @@ function MoreCard(props: { n: Node }) {
 }
 
 function MainCard() {
-  const busy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
+  const busy = () => messagesIn(state.space).some((m) => !m.project && m.pending);
   return (
     <>
       <div class="cv-head">
@@ -1476,7 +1476,7 @@ export function Canvas() {
       const d = drag();
       // a card the person put somewhere stays where they put it: the camera doesn't chase it
       if (moved && d) dropped = true;
-      if (moved && d) setState("canvas", (c) => ({ ...(c ?? {}), [`${space()}:${n.id}`]: { x: Math.round(d.x), y: Math.round(d.y) } }));
+      if (moved && d) setCanvasPos(space(), n.id, { x: Math.round(d.x), y: Math.round(d.y) });
       setDrag(null);
       if (moved) return;
       if (n.kind === "main") goMain();
@@ -1497,9 +1497,7 @@ export function Canvas() {
     before = undefined;
     snapRanks(space());
     const from = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
-    const prefix = `${space()}:`;
-    // a store merges objects, so a filtered copy would keep the old keys: drop each one
-    for (const k of Object.keys(state.canvas ?? {})) if (k.startsWith(prefix)) setState("canvas", k, undefined!);
+    for (const id of movedCards(space())) setCanvasPos(space(), id, undefined);
     const to = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const moved = Object.keys(to).some((id) => from[id] && (from[id].x !== to[id].x || from[id].y !== to[id].y));
     // put back in line and framed as when opened: readable, what needs the person in view
@@ -1751,7 +1749,7 @@ export function Canvas() {
         </Show>
         <span class="spacer" data-tauri-drag-region />
         {/* cards were dragged out of line: one press puts them back */}
-        <Show when={mode() === "canvas" && Object.keys(state.canvas ?? {}).some((k) => k.startsWith(`${space()}:`))}>
+        <Show when={mode() === "canvas" && movedCards(space()).length > 0}>
           <button class="btn sm ghost cv-retidy" onClick={resetLayout}>
             <Icon name="tidy" size={14} />
             {t("다시 정렬")}
