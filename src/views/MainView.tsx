@@ -26,7 +26,7 @@ import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, hoverOn, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
-import { farOf, messagesIn } from "../state/shared";
+import { messagesIn } from "../state/shared";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import type { Command } from "../ui/Composer";
@@ -749,13 +749,6 @@ export function MainView() {
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   // where it runs (the run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
-  // another device's project has its own chat here, as this Mac's do: main (here) routes, follows up and
-  // asks, and the jobs it starts go to that device. What's typed goes there as a job as it was typed only
-  // for work picked for another device outside a project, or when main has no account here to run on
-  // (a workspace only that device has).
-  const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
-  // (a device that shares its chats: this is its own main's chat, and what's typed goes to it)
-  const raw = () => (farOf(state.space) || (project() && mainHere()) ? undefined : computer());
   /** the question the input answers: the first card in the dock (the one its number keys answer), as in a job's thread */
   const answering = () => ((d) => (d && !d.ui && !d.form?.length ? d : undefined))(asks()[0]);
   const sendMain = (text: string, picked?: string[]) => {
@@ -765,11 +758,9 @@ export function MainView() {
       void rememberPickedFiles("task", d.taskId, picked);
       return void decide(d.id, text.trim());
     }
-    const p = project();
-    const at = raw();
-    // on another device: what's typed is a job there (its own Ondra takes it from there)
-    if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
-    const reply = throwThought(text, state.space, { project: p?.id });
+    // always to a main, never a job as typed: another device's workspace goes to that device's main when
+    // it shares its chats, else main here routes it and its jobs go to that device (throwThought)
+    const reply = throwThought(text, state.space, { project: project()?.id });
     void rememberPickedFiles("main", reply, picked);
   };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
@@ -849,21 +840,13 @@ export function MainView() {
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}
-      status={
-        <Show
-          when={raw()}
-          // main's own account (here); a project of another device names that device
-          fallback={<StatusLine accountId={account()} space={state.space} agent={`captain:${key()}`} />}
-        >
-          <HostStatus place={raw()!} />
-        </Show>
-      }
+      status={<StatusLine accountId={account()} space={state.space} agent={`captain:${key()}`} />}
       plus={plusFor({ main: true })}
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "auto"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<Show when={raw()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
+      right={<AccountModel accountId={account()} up={!big} rest="low" />}
     />
   );
 
