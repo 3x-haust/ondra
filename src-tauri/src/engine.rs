@@ -420,8 +420,17 @@ fn slim(mut ev: Value) -> Value {
                     }
                 }
             }
+            // details can be large: only what src/engine/tasks.ts reads goes on (a background
+            // command's id, a computer step's label and screen)
             if let Some(r) = ev.get_mut("result").and_then(Value::as_object_mut) {
-                r.remove("details");
+                let kept: serde_json::Map<String, Value> = r
+                    .remove("details")
+                    .and_then(|d| d.as_object().cloned())
+                    .map(|d| d.into_iter().filter(|(k, v)| matches!(k.as_str(), "background" | "label" | "screen") && v.is_string()).collect())
+                    .unwrap_or_default();
+                if !kept.is_empty() {
+                    r.insert("details".into(), Value::Object(kept));
+                }
             }
         }
         _ => {}
