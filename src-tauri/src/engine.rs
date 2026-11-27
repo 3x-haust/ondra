@@ -727,6 +727,12 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_end_keeps_the_details_the_app_reads_and_drops_the_rest() {
+        let ev = json!({ "type": "tool_execution_end", "toolCallId": "t1", "result": { "content": [{ "type": "text", "text": "Started in the background as bg_1." }], "details": { "background": "bg_1", "label": "보내기", "screen": "Inbox", "output": "x".repeat(10_000) } } });
+        assert_eq!(slim(ev).pointer("/result/details"), Some(&json!({ "background": "bg_1", "label": "보내기", "screen": "Inbox" })));
+    }
+
+    #[test]
     fn reads_ps_lines() {
         let r = parse_ps("  412     1 /usr/bin/find . -name *.html").unwrap();
         assert_eq!((r.pid, r.ppid, r.command.as_str()), (412, 1, "/usr/bin/find . -name *.html"));
