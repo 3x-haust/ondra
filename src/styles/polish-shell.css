@@ -905,8 +905,13 @@
   gap: var(--s-6);
   font-size: var(--fs-sm);
 }
-.ctray .composer-status .status-line .st-acc {
+/* the pull to the left sits on the line's own item: on the button inside .picker it would make the
+   picker (sized by the button) narrower than the button's 100% cap, and the name would end in … */
+.ctray .composer-status .status-line > .st-acc,
+.ctray .composer-status .status-line > .picker {
   margin-left: calc(-1 * var(--s-4));
+}
+.ctray .composer-status .status-line .st-acc {
   color: var(--ink-2);
 }
 .ctray .composer-status .status-line .st-acc .st-acc-name {
