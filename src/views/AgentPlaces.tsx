@@ -46,7 +46,8 @@ const thisName = () => state.settings.thisMac?.name || t("이 기기");
 
 /**
  * A place (none, or a workspace of this device or a connected one, by device) and the account its
- * chat runs on: in that workspace when it is this device's, else in the one its chat lives in.
+ * chat runs on: in that workspace when it is this device's, else in the one its chat lives in (a
+ * place on another device runs its work on that device's accounts: none to pick here).
  */
 function Where(props: { space: SpaceId | undefined; account: string | undefined; home: SpaceId; set: (p: { space?: SpaceId; account?: string }) => void }) {
   return (
@@ -61,10 +62,12 @@ function Where(props: { space: SpaceId | undefined; account: string | undefined;
           )}
         </For>
       </select>
+      <Show when={!state.spaces.find((x) => x.id === props.space)?.host}>
       <select class="select" aria-label={t("AI 계정")} value={props.account ?? "auto"} onChange={(e) => props.set({ space: props.space, account: e.currentTarget.value === "auto" ? undefined : e.currentTarget.value })}>
         <option value="auto">{t("자동")}</option>
         <For each={state.accounts.filter((x) => x.space === props.home)}>{(x) => <option value={x.id}>{accountName(x, true)}</option>}</For>
       </select>
+      </Show>
     </div>
   );
 }

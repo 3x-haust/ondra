@@ -1511,7 +1511,7 @@
   gap: var(--s-6);
 }
 .settings-inner .ag-where .select {
-  width: 104px;
+  width: 150px;
 }
 .settings-inner .ag-where .select + .select {
   width: 140px;
