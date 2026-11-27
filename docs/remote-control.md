@@ -10,6 +10,12 @@ A connected computer's projects show in this app's sidebar. Jobs in those projec
 
 The two devices reconnect on their own, with no new link needed. Older versions connected one way only (and had a **다른 기기에서 이 기기 쓰기** switch); such a connection becomes two-way by itself once both computers run this version.
 
+## The Mac bar
+
+The foot of the sidebar shows this device and each connected one.
+
+Each connected device's mark shows its link: a filled green dot when connected, an amber ring that pulses while it connects or waits to be allowed, a red ring when it isn't connected, and a grey ring after **연결 끊기** here (`linkTone` in `src/state/mirror.ts`). Hovering the mark says the same in words.
+
 ## Hiding a project
 
 A project of another device can't be deleted from here (it is that device's), but its menu in the sidebar has **목록에서 숨기기**. It and its jobs leave the list here and stay off it when that device sends its projects again. Settings › 연결 lists the hidden ones under the Mac, each with **다시 보이기**. The hidden set is kept per Mac (`settings.hosts[].hidden`).

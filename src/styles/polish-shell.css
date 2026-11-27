@@ -2046,34 +2046,64 @@
   filter: none;
   opacity: 1;
 }
-.app .sidebar .mbar-mac.away .mbar-dot {
+/* another device's link: filled when connected, a ring when not, in its color: green connected,
+   amber trying (it pulses), red not connected, grey disconnected here on purpose. A dot mark is
+   colored itself; an icon or emoji gets the dot on its corner. The tooltip says it in words. */
+.app .sidebar .mbar-mac[data-link="ok"] {
+  --link: var(--ok-ink);
+}
+.app .sidebar .mbar-mac[data-link="trying"] {
+  --link: var(--warn-ink);
+}
+.app .sidebar .mbar-mac[data-link="down"] {
+  --link: var(--bad-ink);
+}
+.app .sidebar .mbar-mac[data-link="off"] {
+  --link: var(--ink-4);
+}
+.app .sidebar .mbar-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.app .sidebar .mbar-mac[data-link] .mbar-dot,
+.app .sidebar .mbar-link {
+  background: var(--link);
+  opacity: 1;
+}
+.app .sidebar .mbar-link {
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.app .sidebar .mbar-mac.away :is(.mbar-dot, .mbar-link) {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px currentColor;
+  box-shadow: inset 0 0 0 1.75px var(--link);
 }
 .app .sidebar .mbar-mac.away :is(.mbar-ic, .mbar-emoji) {
   opacity: 0.4;
 }
-/* an icon or emoji has no dot to hollow: the ring sits on its corner instead */
-.app .sidebar .mbar-mac.away:has(.mbar-ic, .mbar-emoji)::after {
-  content: "";
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px currentColor;
+@media (prefers-reduced-motion: no-preference) {
+  .app .sidebar .mbar-mac[data-link="trying"] :is(.mbar-dot, .mbar-link) {
+    animation: mbar-trying 1.4s ease-in-out infinite;
+  }
+}
+@keyframes mbar-trying {
+  50% {
+    opacity: 0.35;
+  }
 }
 /* the device shown but not connected: its pill goes grey, not its color (its name says which) */
-.app .sidebar .mbar-mac.on.away::after {
-  display: none;
-}
 .app .sidebar .mbar-mac.on.away {
   background: var(--hover);
   color: var(--ink-3);
 }
-.app .sidebar .mbar-mac.off:not(.on) {
-  opacity: 0.45;
+/* a device with no workspaces here yet: its mark fades, not its link */
+.app .sidebar .mbar-mac.off:not(.on) :is(.mbar-ic, .mbar-emoji) {
+  opacity: 0.3;
 }
 
 /* ── the cards that change one Mac: name, emoji or icon, color ── */

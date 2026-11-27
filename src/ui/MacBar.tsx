@@ -14,7 +14,7 @@ import {
 } from "lucide-solid";
 import { decisionsIn, setState, spacesOf, state } from "../state/store";
 import { switchSpace } from "../state/workspace";
-import { linkWord, mirror } from "../state/mirror";
+import { linkTone, linkWord, mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
 import { askRemoveDevice, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
@@ -58,7 +58,8 @@ export function macs(): Mac[] {
 /** another Mac is added: picking where new work runs means something */
 export const otherMacs = () => (state.settings.hosts ?? []).length > 0;
 
-const statusOf = (m: Mac) => (m.local ? "ok" : (mirror.hosts[m.id]?.status ?? "connecting"));
+/** how its link is: this Mac always "ok" */
+const toneOf = (m: Mac) => (m.local ? "ok" : linkTone(mirror.hosts[m.id]));
 /** the device whose workspace is open */
 const current = () => state.spaces.find((s) => s.id === state.space)?.host ?? LOCAL;
 /** a device's workspaces here (another device's come once it has connected) */
@@ -490,7 +491,13 @@ export function MacBar() {
                 <button
                   class="mbar-mac"
                   style={tintVars(m())}
-                  classList={{ on: current() === id, ctx: ctxFor() === `mac:${id}` || open()?.id === id, off: !tabsOf(m()).length, away: statusOf(m()) !== "ok" }}
+                  data-link={m().local ? undefined : toneOf(m())}
+                  classList={{
+                    on: current() === id,
+                    ctx: ctxFor() === `mac:${id}` || open()?.id === id,
+                    off: !tabsOf(m()).length,
+                    away: toneOf(m()) !== "ok",
+                  }}
                   aria-pressed={current() === id}
                   aria-label={m().local ? m().name : `${m().name}, ${t(linkWord(mirror.hosts[id]))}`}
                   title={[m().name, m().local ? "" : hostState(id), i() < 9 ? shortcutHint(`mac${i() + 1}` as ShortcutId) : ""].filter(Boolean).join(" · ")}
@@ -501,7 +508,11 @@ export function MacBar() {
                     openMenuAt(`mac:${id}`, () => macMenu(m(), at), e);
                   }}
                 >
-                  <MacMark mac={m()} />
+                  <span class="mbar-mark">
+                    <MacMark mac={m()} />
+                    {/* another device's link, on the corner of its icon or emoji (a dot mark is colored itself) */}
+                    <Show when={!m().local && (m().emoji || (m().icon && MAC_ICONS[m().icon!]))}><i class="mbar-link" aria-hidden="true" /></Show>
+                  </span>
                   {/* a question waits in one of its workspaces (the tabs show only the open device's) */}
                   <Show when={current() !== id && tabsOf(m()).some((s) => decisionsIn(s.id).length)}><i class="space-alert" /></Show>
                   {/* the one picked opens into a pill with its name */}
