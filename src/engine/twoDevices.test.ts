@@ -75,6 +75,13 @@ async function device(id: string, name: string, other: string, otherName: string
   vi.resetModules();
   vi.doMock("../lib/native", async (orig) => ({ ...(await orig<object>()), ...net(id) }));
   vi.doMock("../ui/AccountPicker", () => ({ accountName: (a: { id: string }) => a.id, service: (p: string) => p }));
+  // a settings tab as this device writes it (the real one reads the settings pages' UI helpers):
+  // its own routines, in the language asked for
+  vi.doMock("../views/farPages", async () => {
+    const { state } = await import("../state/store");
+    const { inLang, t } = await import("../i18n");
+    return { farPage: async (tab: string, l: "ko" | "en") => inLang(l, () => ({ groups: [{ title: `${tab} · ${t("모든 작업")}`, rows: (state.routines ?? []).map((r) => ({ title: r.title })) }] })) };
+  });
   const d: Device = { id, name, hear: () => {}, inbound: new Map(), m: undefined as never };
   devices.set(id, d);
   d.m = await load();
@@ -232,6 +239,14 @@ describe("another device's app settings", () => {
     expect(a.m.store.state.settings.agent?.name).not.toBe("도리");
   });
 
+  it("A asks for a tab of B's settings and gets B's own, in A's language", async () => {
+    b.m.store.setState("routines", [{ id: "r1", space: "home", title: "아침 PR 정리" }] as never);
+    a.m.store.setState("routines", [{ id: "r2", space: "home", title: "A의 루틴" }] as never);
+    expect(await a.m.hosts.askHost(B, "settingsPage", ["routines", "en"])).toEqual({ groups: [{ title: "routines · All jobs", rows: [{ title: "아침 PR 정리" }] }] });
+    b.m.store.setState("routines", [] as never);
+    a.m.store.setState("routines", [] as never);
+  });
+
   it("only what the settings page offers can be changed from afar", async () => {
     await expect(a.m.shared.setFarSetting(B, "hosts", [])).rejects.toThrow();
     await expect(a.m.shared.setFarSetting(B, "agent.on", true)).rejects.toThrow();
@@ -244,6 +259,7 @@ describe("a device kept to some workspaces", () => {
     b.m.remote.setDeviceSpaces(A, ["home"]);
     await expect(a.m.hosts.viaHost(B, "say", [{ space: "home", text: "몰래", me: "x1", reply: "x2" }])).rejects.toThrow();
     await expect(a.m.hosts.viaHost(B, "setSetting", ["theme", "dark"])).rejects.toThrow();
+    await expect(a.m.hosts.askHost(B, "settingsPage", ["routines", "ko"])).rejects.toThrow("bad request");
     expect(b.m.store.state.captain.some((m) => m.text === "몰래")).toBe(false);
     b.m.remote.setDeviceSpaces(A, undefined);
   });
