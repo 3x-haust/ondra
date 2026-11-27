@@ -373,6 +373,12 @@ const SHARED_CALLS: Record<string, (c: Conn, args: unknown[]) => unknown> = {
     if (!sharesWith(c)) throw new Error("bad request");
     return setShared(String(key), value);
   },
+  // a tab of this device's settings for that device's Settings (views/farPages.ts), in its language;
+  // loaded when asked, as it reads the settings pages' helpers
+  settingsPage: async (c, [tab, l]) => {
+    if (!sharesWith(c) || typeof tab !== "string") throw new Error("bad request");
+    return (await import("../views/farPages")).farPage(tab, l === "en" ? "en" : "ko");
+  },
   // 잊기 in that device's 에이전트 tab: one of the agent's own notes here
   agentForget: (c, [id]) => {
     if (!showsAgent(c) || typeof id !== "string" || !state.agentNotes?.some((n) => n.id === id)) throw new Error("bad request");

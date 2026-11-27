@@ -38,7 +38,7 @@ interface Group {
   rows: Row[];
 }
 
-function groupsOf(c: EngineContext): Group[] {
+export function groupsOf(c: EngineContext): Group[] {
   const groups = new Map<string, Group>();
   const add = (g: string, row: Row, hint?: string) => {
     if (!groups.has(g)) groups.set(g, { title: g, hint, rows: [] });
@@ -64,6 +64,12 @@ function groupsOf(c: EngineContext): Group[] {
   });
 }
 
+/** whether jobs get it: an optional tool when switched on, an MCP tool unless switched off, the rest always */
+export const toolOn = (r: Row) => {
+  const extra = state.settings.extraTools ?? [];
+  return r.optional ? extra.includes(r.name) : r.mcp ? !isOff(r.name, extra) : true;
+};
+
 export function ToolsTab() {
   const [force, setForce] = createSignal(0);
   const [data] = createResource(() => ({ n: force() }), ({ n }) => loadWorkerTools(n > 0));
@@ -78,9 +84,6 @@ export function ToolsTab() {
       .map((g) => ({ ...g, rows: g.rows.filter((r) => !k || `${r.name} ${r.line} ${r.full} ${r.source}`.toLowerCase().includes(k)) }))
       .filter((g) => g.rows.length);
   });
-  // the tools turned on here, on top of what every job gets
-  const extra = () => state.settings.extraTools ?? [];
-  const isOn = (r: Row) => (r.optional ? extra().includes(r.name) : r.mcp ? !isOff(r.name, extra()) : true);
   // an optional tool is listed by name when on; an MCP tool by "-name" when off
   const turn = (r: Row, on: boolean) => {
     const entry = r.mcp ? `-${r.name}` : r.name;
@@ -122,7 +125,7 @@ export function ToolsTab() {
                 <div class="set-group tl-group">
                   <For each={g.rows}>
                     {(r) => (
-                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key, still: r.tool }}>
+                      <div class="tl-row" classList={{ off: !toolOn(r), open: open() === r.key, still: r.tool }}>
                         {/* a tool's row does nothing on a click; a skill's opens to its whole description */}
                         <div class="tl-head" onClick={() => !r.tool && toggle(r.key)}>
                           <Show when={!r.tool} fallback={<span class="tl-open"><span class="tl-name">{r.name}</span></span>}>
@@ -140,11 +143,11 @@ export function ToolsTab() {
                             <Show when={r.tool && (r.optional || r.mcp)}>
                               <button
                                 class="switch"
-                                classList={{ on: isOn(r) }}
+                                classList={{ on: toolOn(r) }}
                                 role="switch"
-                                aria-checked={isOn(r)}
+                                aria-checked={toolOn(r)}
                                 aria-label={r.name}
-                                onClick={(e) => (e.stopPropagation(), turn(r, !isOn(r)))}
+                                onClick={(e) => (e.stopPropagation(), turn(r, !toolOn(r)))}
                               >
                                 <i />
                               </button>
