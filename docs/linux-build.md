@@ -2,7 +2,7 @@
 
 ## Get the x64 packages from CI
 
-The [Linux packages workflow](../.github/workflows/linux.yml) runs on pull requests or manually from **Actions → Linux packages → Run workflow** (once the workflow is on the default branch). It builds on a clean GitHub-hosted Ubuntu 22.04 VM, so the packages run on distributions with glibc 2.35 or newer.
+The [Linux packages workflow](../.github/workflows/linux.yml) builds on pushes to `main`, for releases, or manually from **Actions → Linux packages → Run workflow** (once the workflow is on the default branch). A pull request only runs `cargo check` of the app and its helpers for this system (the `check` job); to build and test the packages for a branch, run the workflow on it. It builds on a clean GitHub-hosted Ubuntu 22.04 VM, so the packages run on distributions with glibc 2.35 or newer.
 
 After the run succeeds, download **Ondra-linux-x64** from the run's **Artifacts** section. It holds a `.deb` (Debian, Ubuntu and their derivatives) and an `.rpm` (Fedora, openSUSE, RHEL). The **Verify the installed package** log prints their SHA-256. The artifact is kept for seven days. These are unsigned test packages, not a GitHub Release, and Linux builds don't update themselves.
 
