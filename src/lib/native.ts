@@ -333,7 +333,6 @@ export const toolStatus = () =>
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen" | "microphone" | "speech") => call<void>("open_privacy_settings", { pane });
 export const remoteStart = () => call<void>("remote_start");
-export const remoteStop = () => call<void>("remote_stop");
 export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
 export const remoteHostName = () => call<string>("remote_host_name", undefined, "Mac");
 export const remoteAwake = (on: boolean) => call<void>("remote_awake", { on });

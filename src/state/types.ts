@@ -776,9 +776,7 @@ export interface Settings {
   permission: Permission;
   /** where links open: the app's own browser (missing = inside) or the system's default one */
   links?: "inside" | "outside";
-  /** other Macs may use this one (Settings › 연결): the ones the user allowed get in */
-  remote?: boolean;
-  /** while others may work on this Mac, it doesn't sleep (on power) */
+  /** while connected to other devices, this one doesn't sleep (a Mac: on power) */
   remoteAwake?: boolean;
   /** other Macs this one works on, and the projects of theirs added here. `hidden`: its projects
    *  taken off the list here (kept off when it sends them again); `off`: disconnected for now */

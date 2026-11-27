@@ -7,6 +7,9 @@
 // Two ways to stop: 연결 끊기 (disconnect for now: kept, not dialed until 다시 연결) and 제거
 // (remove: everything of that device goes from here, and that device is told to forget this one; when it
 // can't be reached it's told the next time it can, see `leaving`).
+//
+// A connection goes both ways: a device this one connects to lets it in (the helper does it), and
+// a device that comes in here is connected to as well (dialBack).
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
@@ -221,7 +224,27 @@ async function dial(host: string) {
   const h = hostOf(host);
   if (!h || h.off) return;
   status(host, "connecting");
-  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
+  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), them: h.name, ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
+}
+
+/** that device came in here and lets this one in too: this one uses it as well (added now when it isn't yet) */
+export function dialBack(id: string, name: string) {
+  // removed here and not told yet (an older Ondra kept it let in): it stays removed
+  if (leavingOf(id)) return;
+  const h = hostOf(id);
+  if (!h) {
+    setState("settings", "hosts", (l) => [...(l ?? []), { id, name }]);
+    return void dial(id);
+  }
+  const s = mirror.hosts[id]?.status;
+  if (h.off || s === "ok" || s === "connecting" || s === "waiting") return;
+  // it can be reached now: no need to wait for the next try
+  reconnect(id);
+}
+
+/** that device removed this one (its goodbye came): it goes from here too, with nothing to tell it */
+export function forgotBy(id: string) {
+  if (hostOf(id)) forgetHost(id);
 }
 
 function again(host: string) {
@@ -283,6 +306,8 @@ function denied(host: string, reason: string) {
     return again(host);
   }
   const name = hostName(host);
+  // removed there (not a link that ran out): it isn't let in here either
+  const removed = (reason === "unknown" || reason === "revoked") && !hostOf(host)?.pair;
   const why =
     reason === "refused" ? t("{name}에서 연결을 거절했어요", { name })
     : reason === "unknown" && hostOf(host)?.pair ? t("연결 링크가 만료됐거나 이미 쓰였어요")
@@ -291,6 +316,7 @@ function denied(host: string, reason: string) {
   if (!why) return status(host, "denied", reason);
   forgetHost(host);
   toast(why, "info", undefined, { stay: true });
+  if (removed) peerKinds.get("@removed")?.(host, { name });
 }
 
 /** the helper's word about the Macs this one dialed */
@@ -503,13 +529,11 @@ export function hiddenProjects(host: string): { id: string; name: string }[] {
 }
 
 let helper = false;
-/** the helper runs while this Mac works on others or lets others in */
+/** the helper runs while this Mac is connected to others, or is about to be */
 export async function startHosts() {
-  if (!helper) {
-    await remoteStart();
-    helper = true;
-  }
-  await remoteCmd({ cmd: "host", on: !!state.settings.remote }).catch(() => {});
+  if (helper) return;
+  await remoteStart();
+  helper = true;
 }
 export const helperGone = () => void (helper = false);
 

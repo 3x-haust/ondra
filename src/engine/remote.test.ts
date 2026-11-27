@@ -9,20 +9,21 @@ import { mirror, setMirror } from "../state/mirror";
 // the helper, as engine/remote.ts hears it: events in, commands out
 let hear: (ev: Record<string, unknown>) => void = () => {};
 const sent: Record<string, unknown>[] = [];
+const forgot: string[] = [];
 vi.mock("../lib/native", async (orig) => ({
   ...(await orig<object>()),
   inTauri: true,
   onRemote: async (fn: typeof hear) => ((hear = fn), () => {}),
   remoteCmd: async (cmd: Record<string, unknown>) => void sent.push(cmd),
   remoteStart: async () => {},
-  remoteStop: async () => {},
   remoteAwake: async () => {},
   remoteDevices: async () => [],
+  remoteForget: async (id: string) => (forgot.push(id), []),
   remoteHostName: async () => "Test Mac",
 }));
 // a picker (UI): only its names are used here
 vi.mock("../ui/AccountPicker", () => ({ accountName: (a: { id: string }) => a.id, service: (p: string) => p }));
-const { initRemote, setDeviceSpaces } = await import("./remote");
+const { initRemote, removeDevice, setDeviceSpaces } = await import("./remote");
 
 const DEV = "d".repeat(64);
 const job = (id: string, extra: Partial<Task> = {}): Task => ({
@@ -149,5 +150,57 @@ describe("calls from a Mac allowed in", () => {
   });
   it("never reach a project shown here from a third Mac", async () => {
     expect((await call("create", [{ id: "n2", title: "n", ask: "do", project: `r:${"c".repeat(64)}:app` }]))?.error).toBeTruthy();
+  });
+});
+
+describe("a connection goes both ways", () => {
+  const PC = "e".repeat(64);
+  const allowed = () => hear({ ev: "devices", list: [{ id: PC, name: "PC", addedAt: 1, lastSeen: 1 }] });
+  beforeEach(() => {
+    forgot.length = 0;
+    hear({ ev: "devices", list: [] });
+  });
+
+  it("a device that comes in and lets this one in too is used from here as well", async () => {
+    hear({ ev: "open", conn: 2, device: { id: PC, name: "PC", both: true } });
+    expect(state.settings.hosts).toEqual([{ id: PC, name: "PC" }]);
+    await vi.waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ cmd: "dial", peer: PC, them: "PC" })));
+    hear({ ev: "close", conn: 2 });
+  });
+  it("an older Ondra coming in (one way only) isn't dialed", () => {
+    // the one in beforeEach says nothing of both
+    expect(state.settings.hosts ?? []).toEqual([]);
+  });
+  it("a device removed here and not told yet stays removed when it comes in", () => {
+    setState("settings", "leaving", [{ id: PC, name: "PC", at: Date.now() }]);
+    hear({ ev: "open", conn: 2, device: { id: PC, name: "PC", both: true } });
+    expect(state.settings.hosts ?? []).toEqual([]);
+    hear({ ev: "close", conn: 2 });
+  });
+  it("its goodbye takes it out of both lists", () => {
+    setState("settings", "hosts", [{ id: PC, name: "PC" }]);
+    hear({ ev: "bye", device: { id: PC, name: "PC" } });
+    expect(state.settings.hosts).toEqual([]);
+    expect(state.settings.leaving ?? []).toEqual([]);
+  });
+  it("제거 here goes both ways: not used, not let in, and it is told", async () => {
+    setState("settings", "hosts", [{ id: PC, name: "PC" }]);
+    allowed();
+    await removeDevice(PC);
+    expect(state.settings.hosts).toEqual([]);
+    expect(forgot).toEqual([PC]);
+    expect(state.settings.leaving?.map((l) => l.id)).toEqual([PC]);
+  });
+  it("cut off as removed there: not let in here either; a link that ran out is no removal", async () => {
+    setState("settings", "hosts", [{ id: PC, name: "PC" }]);
+    allowed();
+    onPeer({ ev: "peer", peer: PC, state: "denied", reason: "revoked" });
+    await vi.waitFor(() => expect(forgot).toEqual([PC]));
+    forgot.length = 0;
+    setState("settings", "hosts", [{ id: PC, name: "PC", pair: "abc" }]);
+    onPeer({ ev: "peer", peer: PC, state: "denied", reason: "unknown" });
+    await flush();
+    expect(state.settings.hosts).toEqual([]);
+    expect(forgot).toEqual([]);
   });
 });

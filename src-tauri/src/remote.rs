@@ -1,5 +1,5 @@
 //! Remote control: runs the `ondra-remote` helper (Ondra's own private network, see
-//! remote/host) while this Mac works on others or lets them in, passes its events to the
+//! remote/host) while this Mac is connected to other devices, passes its events to the
 //! window as "remote" and the window's commands to it.
 use std::{
     io::{BufRead, BufReader, Write},
@@ -45,17 +45,6 @@ pub fn remote_start(app: AppHandle) -> Result<(), String> {
         let _ = app.emit("remote", serde_json::json!({ "ev": "stopped" }));
     });
     *slot = Some(Running { child, stdin });
-    Ok(())
-}
-
-/// Stop it: every phone is cut off until it's on again.
-#[tauri::command]
-pub fn remote_stop() -> Result<(), String> {
-    if let Some(mut r) = HELPER.lock().map_err(|e| e.to_string())?.take() {
-        drop(r.stdin);
-        let _ = r.child.kill();
-        let _ = r.child.wait();
-    }
     Ok(())
 }
 

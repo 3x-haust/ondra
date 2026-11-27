@@ -11,7 +11,7 @@ vi.mock("../lib/native", async (orig) => ({
   remoteStart: async () => {},
   remoteHostName: async () => "Test Mac",
 }));
-const { hideHostProject, onPeer, removeHost, showHostProject, connectHosts, disconnectHost, reconnect } = await import("./hosts");
+const { dialBack, hideHostProject, onPeer, removeHost, showHostProject, connectHosts, disconnectHost, reconnect } = await import("./hosts");
 
 const A = "a".repeat(64);
 const B = "b".repeat(64);
@@ -177,6 +177,31 @@ describe("disconnecting for now", () => {
     peer("closed", "dropped");
     expect(mirror.hosts[A].status).toBe("lost");
     expect(mirror.hosts[A].reason).toBe("dropped");
+  });
+});
+
+describe("a device that came in here (both ways)", () => {
+  const dials = () => sent.filter((c) => c.cmd === "dial" && c.peer === A);
+  it("connected already: left as it is", async () => {
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    expect(dials()).toEqual([]);
+  });
+  it("lost here: dialed again now, without waiting for the next try", async () => {
+    peer("closed", "timed out");
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    await flush();
+    expect(dials()).toHaveLength(1);
+  });
+  it("disconnected here for now: stays disconnected", async () => {
+    disconnectHost(A);
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    expect(dials()).toEqual([]);
   });
 });
 

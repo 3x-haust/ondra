@@ -524,7 +524,6 @@ pub fn run() {
             tools::open_privacy_settings,
             tools::permission_guide,
             remote::remote_start,
-            remote::remote_stop,
             remote::remote_cmd,
             remote::remote_host_name,
             remote::remote_awake,

@@ -1,4 +1,4 @@
-// Letting other Macs work on this one (Settings › 연결 › 이 기기): a Mac the user allowed
+// Letting other Macs work on this one (Settings › 연결): a Mac the user allowed
 // adds this Mac's projects to its sidebar and runs jobs in them here. Its Ondra keeps a
 // live copy of those jobs (engine/hosts.ts); this side sends what changed and does what it
 // asks, as if the user had done it here.
@@ -15,7 +15,7 @@
 import type { FormValues } from "./form";
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
+import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
 import { onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import { permissionOf } from "../state/persist";
@@ -29,7 +29,7 @@ import { modelsNow, refreshModels } from "./modelList";
 import { connectionOf, connModelLabel, effortLevels } from "./connections";
 import { effortFor } from "./models";
 import * as jobs from "./tasks";
-import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hosts";
+import { connectHosts, dialBack, forgotBy, helperGone, onPeer, onPeerKind, removeHost, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 import { moveCancel, moveImport, movePut } from "./spaceMove";
@@ -427,9 +427,22 @@ async function handle(conn: number, msg: Record<string, unknown>) {
 
 // ───────── letting Macs in
 
-/** a link another device can add this one with, good for ten minutes and one Mac */
+/** the helper is needed: a device this one uses, one let in here, or one still to be told it was removed */
+const needsHelper = () => wantsHelper() || remote().devices.length > 0;
+
+/** this Mac's id on the network, starting the helper for it when it isn't running (undefined: not reachable yet) */
+async function ownId(): Promise<string | undefined> {
+  await startHosts();
+  for (const end = Date.now() + 25_000; !remote().id && Date.now() < end; ) await new Promise((r) => setTimeout(r, 250));
+  return remote().id;
+}
+
+/** start getting this Mac reachable (기기 추가 opened), so its link is ready when asked for */
+export const getReady = () => void startHosts().catch(() => {});
+
+/** a link another device can connect with (both ways, once allowed here), good for ten minutes and one device */
 export async function connectLink(): Promise<string | undefined> {
-  const id = remote().id;
+  const id = await ownId();
   if (!id) return undefined;
   const code = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   await remoteCmd({ cmd: "pair", code, ttl: 600 });
@@ -450,24 +463,32 @@ export function dropDevice(id: string) {
   remoteCmd({ cmd: "drop", id }).catch((e) => toast(t("연결을 끊지 못했어요: {error}", { error: String(e) }), "bad"));
 }
 
-/** 제거 (this side): that device may no longer come in. Works with the helper running or not. */
-export async function forgetDevice(id: string) {
-  const name = deviceName(id);
+/** that device may no longer come in. Works with the helper running or not. */
+async function forgetDevice(id: string): Promise<boolean> {
+  if (!remote().devices.some((d) => d.id === id)) return true;
   try {
     const list = await remoteForget(id);
     if (list) setRemote((r) => ({ ...r, devices: list }));
+    return true;
   } catch (e) {
     toast(t("제거하지 못했어요: {error}", { error: String(e) }), "bad");
-    return;
+    return false;
   }
-  forgotten(id, name, t("{name}을(를) 제거했어요", { name }));
+}
+
+/** 제거: the connection goes both ways. This one stops using that device (and it is told to forget this
+ *  one), and it may no longer come in. */
+export async function removeDevice(id: string) {
+  const name = state.settings.hosts?.find((h) => h.id === id)?.name ?? deviceName(id);
+  if (state.settings.hosts?.some((h) => h.id === id)) removeHost(id);
+  if (await forgetDevice(id)) forgotten(id, name, t("{name}을(를) 제거했어요", { name }));
 }
 
 /** a Mac is gone from the list (removed here, or it removed this one): its grants go, its jobs are named */
-function forgotten(id: string, name: string, said: string) {
+function forgotten(id: string, name: string, said?: string) {
   if (state.settings.deviceSpaces?.[id]) setDeviceSpaces(id, undefined);
   const left = jobsFrom(state.tasks, id);
-  if (!left.length) return void toast(said);
+  if (!left.length) return void (said && toast(said));
   // they keep running: the user decides
   toast(t("{name}에서 시킨 작업 {n}개는 계속 돌아요", { name, n: left.length }), "info", { label: t("정리|jobs"), run: () => askStopJobs(id, name) }, { stay: true });
 }
@@ -512,23 +533,9 @@ export function setDeviceSpaces(id: string, spaces: string[] | undefined) {
   soon();
 }
 
-/** keep this Mac awake while others may work on it (and only then) */
+/** keep this Mac awake while it is connected to other devices (and only then) */
 export function keepAwake() {
-  void remoteAwake(!!state.settings.remote && !!state.settings.remoteAwake).catch(() => {});
-}
-
-export async function setRemoteOn(on: boolean) {
-  setState("settings", "remote", on);
-  keepAwake();
-  if (on) await startHosts();
-  else {
-    await remoteCmd({ cmd: "host", on: false }).catch(() => {});
-    setRemote((r) => ({ ...r, live: {}, asks: [], pair: undefined }));
-    if (!wantsHelper()) {
-      await remoteStop();
-      helperGone();
-    }
-  }
+  void remoteAwake(!!state.settings.remoteAwake && needsHelper()).catch(() => {});
 }
 
 let started = false;
@@ -544,14 +551,18 @@ export function initRemote() {
         break;
       case "devices":
         setRemote((r) => ({ ...r, devices: (ev.list as RemoteDevice[]) ?? [] }));
+        keepAwake();
         break;
       case "pair":
         setRemote((r) => ({ ...r, asks: [...r.asks, { conn: Number(ev.conn), device: ev.device as PairAsk["device"] }] }));
         break;
       case "open": {
         const conn = Number(ev.conn);
-        conns.set(conn, { device: String((ev.device as { id?: string })?.id ?? ""), watch: new Set(), sent: new Map(), all: true });
-        setRemote((r) => ({ ...r, live: { ...r.live, [conn]: ev.device as { id: string; name: string } } }));
+        const d = ev.device as { id: string; name: string; both?: boolean };
+        conns.set(conn, { device: d.id, watch: new Set(), sent: new Map(), all: true });
+        setRemote((r) => ({ ...r, live: { ...r.live, [conn]: { id: d.id, name: d.name } } }));
+        // it lets this Mac in too (an older Ondra doesn't): this one uses it as well
+        if (d.both) dialBack(d.id, d.name || "Mac");
         break;
       }
       case "close": {
@@ -571,7 +582,9 @@ export function initRemote() {
       case "bye": {
         // that device removed this one on its side: it's gone from the list here too (the helper did it)
         const d = ev.device as { id?: string; name?: string } | undefined;
-        if (d?.id) forgotten(d.id, d.name || "Mac", t("{name}에서 이 기기 연결을 제거했어요", { name: d.name || "Mac" }));
+        if (!d?.id) break;
+        forgotBy(d.id);
+        forgotten(d.id, d.name || "Mac", t("{name}에서 이 기기 연결을 제거했어요", { name: d.name || "Mac" }));
         break;
       }
       case "peer":
@@ -584,7 +597,7 @@ export function initRemote() {
         conns.clear();
         setRemote((r) => ({ ...r, id: undefined, live: {}, asks: [] }));
         // it went away on its own while still wanted: bring it back
-        if (state.settings.remote || wantsHelper()) setTimeout(() => void startHosts().then(connectHosts), 2000);
+        if (needsHelper()) setTimeout(() => void startHosts().then(connectHosts), 2000);
         break;
     }
   });
@@ -594,8 +607,16 @@ export function initRemote() {
   setInterval(() => {
     for (const [conn, c] of conns) sendInfo(conn, c);
   }, 20_000);
-  // the Macs allowed in show (and can be removed) even while the helper isn't running
-  void remoteDevices().then((list) => setRemote((r) => (r.devices.length ? r : { ...r, devices: list }))).catch(() => {});
-  if (state.settings.remote) void startHosts();
+  // that device removed this one and said so by cutting it off (its goodbye may not come): not let in either
+  onPeerKind("@removed", (id, d) => void forgetDevice(id).then((ok) => ok && forgotten(id, String(d.name))));
+  // the Macs allowed in show (and can be removed) even while the helper isn't running; any of them
+  // may come in, so the helper runs
+  void remoteDevices()
+    .then((list) => {
+      setRemote((r) => (r.devices.length ? r : { ...r, devices: list }));
+      keepAwake();
+      if (list.length) void startHosts();
+    })
+    .catch(() => {});
   void connectHosts();
 }
