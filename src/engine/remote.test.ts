@@ -5,6 +5,7 @@ import type { Task } from "../state/types";
 import { engine } from "./rpc";
 import { onPeer } from "./hosts";
 import { mirror, setMirror } from "../state/mirror";
+import { seeChannels } from "./discordPeople";
 
 // the helper, as engine/remote.ts hears it: events in, commands out
 let hear: (ev: Record<string, unknown>) => void = () => {};
@@ -179,6 +180,16 @@ describe("this device's Discord agent, for a device that shows it", () => {
     expect(ofKind("chat").flatMap((d) => (d.msgs as { id: string }[]).map((m) => m.id))).toEqual(["m-main", "m-agent"]);
     expect(ofKind("patch").flatMap((d) => (d.tasks as { id: string }[]).map((x) => x.id))).toContain("agentJob");
     expect(ofKind("decisions").flatMap((d) => (d.list as { id: string }[]).map((x) => x.id))).toEqual(["d-agent"]);
+  });
+  it("sends its settings for that device's settings page, never what it keeps for itself", async () => {
+    seeChannels([{ id: "c1", name: "orbit", kind: "text" }]);
+    setState("settings", "agent", { on: true, name: "도리", ownerId: "42", voice: "짧게", others: false, channels: ["c1", "c9"], places: [{ channel: "c1", label: "#orbit · 서버", space: "work" }], scoutAt: 5, suggested: ["x"], pins: [] });
+    watchWith({ agent: true });
+    await vi.waitFor(() => expect(ofKind("agent")).toHaveLength(1));
+    expect((ofKind("agent")[0].agent as { settings: unknown }).settings).toEqual({
+      token: false, ownerId: "42", voice: "짧게", others: false, space: "home",
+      places: [{ channel: "c1", label: "#orbit · 서버", space: "work" }], channels: ["c1", "c9"], rooms: { c1: "#orbit" },
+    });
   });
   it("its chat is seen there, never written to", async () => {
     watchWith({ agent: true });

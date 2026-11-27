@@ -42,7 +42,7 @@ import {
 } from "../lib/native";
 import { RemoteSettings } from "./RemoteSettings";
 import { PetSettings } from "./PetSettings";
-import { AgentSettings } from "./AgentSettings";
+import { AgentPage } from "./FarAgentSettings";
 import { ReviewSettings } from "./ReviewSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now } from "../ui/bits";
@@ -184,15 +184,37 @@ function LocalChecks() {
 const modelAccounts = () =>
   state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
 
-/** the device whose settings 일반 shows: this one (undefined) or a connected one that shares them */
+/** the device whose settings 일반 and 에이전트 show: this one (undefined) or a connected one that shares them */
 const [settingsOf, setSettingsOf] = createSignal<string>();
+export { setSettingsOf };
+/** the device picked among `devices` a page offers, if it is one of them (else this device) */
+export const farPicked = (devices: string[]) => {
+  const h = settingsOf();
+  return h && devices.includes(h) ? h : undefined;
+};
+/** a page's 기기 row: this device or one of the connected `devices` (none: no row) */
+export function DevicePick(props: { devices: string[] }) {
+  const far = () => farPicked(props.devices);
+  return (
+    <Show when={props.devices.length}>
+      <div class="set-group">
+        <Row title={t("기기")}>
+          <div class="seg">
+            <button classList={{ on: !far() }} onClick={() => setSettingsOf(undefined)}>{t("이 기기")}</button>
+            <For each={props.devices}>{(h) => <button classList={{ on: far() === h }} onClick={() => setSettingsOf(h)}>{hostName(h)}</button>}</For>
+          </div>
+        </Row>
+      </div>
+    </Show>
+  );
+}
 /** the connected devices that share their settings */
 const sharingDevices = () => Object.keys(mirror.hosts).filter((h) => mirror.hosts[h].status === "ok" && !!mirror.hosts[h].settings);
 
 // ───────────────── general
 function General() {
   // this device's settings, or the picked device's (changed there)
-  const far = () => (settingsOf() && sharingDevices().includes(settingsOf()!) ? settingsOf() : undefined);
+  const far = () => farPicked(sharingDevices());
   const cfg = <T,>(k: SharedSetting): T => (far() ? farSettings(far()!)?.[k] : SETTINGS[k].get()) as T;
   const setCfg = (k: SharedSetting, v: unknown) => {
     const host = far();
@@ -214,16 +236,7 @@ function General() {
     <>
       <PageHead tab="general" />
       {/* another connected device's settings, seen and changed from here */}
-      <Show when={sharingDevices().length}>
-        <div class="set-group">
-          <Row title={t("기기")}>
-            <div class="seg">
-              <button classList={{ on: !far() }} onClick={() => setSettingsOf(undefined)}>{t("이 기기")}</button>
-              <For each={sharingDevices()}>{(h) => <button classList={{ on: far() === h }} onClick={() => setSettingsOf(h)}>{hostName(h)}</button>}</For>
-            </div>
-          </Row>
-        </div>
-      </Show>
+      <DevicePick devices={sharingDevices()} />
       <GroupTitle title={t("화면")} />
       <div class="set-group">
         <Row title={t("테마")}>
@@ -1425,7 +1438,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "services"}><ServicesSettings /></Match>
             <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "pet"}><PetSettings /></Match>
-            <Match when={settingsTab() === "agent"}><AgentSettings /></Match>
+            <Match when={settingsTab() === "agent"}><AgentPage /></Match>
             <Match when={settingsTab() === "skills"}><SkillsTab /></Match>
             <Match when={settingsTab() === "hooks"}><HooksTab /></Match>
             <Match when={settingsTab() === "tools"}><Permissions /></Match>

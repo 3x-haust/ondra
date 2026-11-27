@@ -1609,3 +1609,12 @@
 .sp-sheet .sp-cmd { display: flex; flex-direction: column; gap: var(--s-4); min-width: 0; }
 .sp-sheet .sp-cmd .input { max-width: 200px; font-family: var(--font-mono, ui-monospace, monospace); }
 .sp-sheet .sp-cmd .set-note { overflow-wrap: anywhere; }
+
+/* settings › 에이전트 with a connected device picked: seen, changed there */
+.settings-inner .ag-far-note {
+  margin: 0 0 var(--s-8);
+}
+.settings-inner .ag-voice {
+  margin: 0;
+  white-space: pre-wrap;
+}

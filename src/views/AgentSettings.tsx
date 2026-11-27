@@ -6,7 +6,8 @@ import { state } from "../state/store";
 import { toast } from "../state/ui";
 import { DEFAULT_VOICE, onAgentStatus, setAgent, startAgent, stopAgent, type AgentStatus } from "../engine/discord";
 import { Logo } from "../ui/Logos";
-import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
+import { DevicePick, GroupTitle, PageHead, Row, Switch_ } from "./Settings";
+import { agentDevices } from "./FarAgentSettings";
 import { TalkRooms, useRooms, WorkPlaces } from "./AgentPlaces";
 import { t } from "../i18n";
 
@@ -50,6 +51,7 @@ export function AgentSettings() {
   return (
     <>
       <PageHead tab="agent" />
+      <DevicePick devices={agentDevices()} />
       <GroupTitle title={t("디스코드")} />
       <div class="set-group prov-list">
         {/* who it is and whether it's on: one row, like an account */}

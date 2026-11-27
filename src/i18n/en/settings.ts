@@ -704,6 +704,8 @@ export default {
   "키체인에 있어요": "In the keychain",
   "봇 토큰을 넣으면 켤 수 있어요": "Add the bot token to turn it on",
   "봇을 만든 계정": "The bot's creator",
+  "{name}에서 바꿀 수 있어요": "Changed on {name}",
+  "기본 말투예요": "The default voice",
   "비우면 부르는 곳 어디서나": "Empty: wherever it's called",
   "봇이 대화하고 일할 때 쓰는 계정이에요. 자동이면 이 워크스페이스에서 고른 대로 해요": "The account the bot talks and works on. Auto follows this workspace's choice",
   "다른 사람과 대화": "Talk with others",

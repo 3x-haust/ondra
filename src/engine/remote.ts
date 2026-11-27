@@ -10,7 +10,7 @@
 // project chats, its screen state in its workspaces and its app settings, and may act on them
 // (state/shared.ts): a workspace is then the same on both. One that asks for `agent` as well sees this
 // device's Discord agent in its 에이전트 tab: its chat (not written to from there), its work and
-// questions, its memory, ways and routines.
+// questions, its memory, ways and routines, and its Settings › 에이전트 (seen, not changed from there).
 // Files, folders and terminals of those jobs ("far.*" calls, {t:"pty…"}) are engine/farHost.ts.
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
@@ -21,7 +21,7 @@
 import type { FormValues } from "./form";
 import { createEffect, createMemo, createRoot, createSignal, on } from "solid-js";
 import { produce, unwrap } from "solid-js/store";
-import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
+import { discordTokenHas, ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
 import { isAgentChat, onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import { applyUi, sharedUi, uiSpace } from "../state/shared";
@@ -31,7 +31,8 @@ import { sharedSettings, setShared } from "./appSettings";
 import * as captain from "./captain";
 import { permissionOf } from "../state/persist";
 import type { CaptainMessage, Decision, SpaceId, Task } from "../state/types";
-import type { FarAgent, FarAsk, HostInfo } from "../state/mirror";
+import type { FarAgent, FarAgentSettings, FarAsk, HostInfo } from "../state/mirror";
+import { roomName } from "./discordPeople";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
@@ -263,11 +264,12 @@ function sendShared(conn: number, c: Conn) {
   if (agentJson !== c.agentSent) (c.agentSent = agentJson), void send(conn, { t: "agent", agent });
 }
 
-/** the agent's ways (agent/AGENT.md) as last read: a file, read now and then */
+/** the agent's ways (agent/AGENT.md) and whether a bot token is kept, as last read: read now and then */
 let ways = "";
+let token = false;
 async function readAgentWays() {
-  const now = await readWays().catch(() => ways);
-  if (now !== ways) (ways = now), (sharedDirty = true), soon();
+  const [now, has] = await Promise.all([readWays().catch(() => ways), discordTokenHas().catch(() => token)]);
+  if (now !== ways || has !== token) (ways = now), (token = has), (sharedDirty = true), soon();
 }
 
 /** this device's Discord agent as another device's 에이전트 tab shows it */
@@ -281,6 +283,31 @@ function agentNow(): FarAgent {
     notes: state.agentNotes ?? [],
     ways,
     routines: (state.routines ?? []).filter((r) => r.agent && !r.draft && ownChat(r.space)),
+    settings: agentSettingsNow(),
+  };
+}
+
+/** its Settings › 에이전트 as that device's settings page shows it: whether a token is kept, never the token */
+function agentSettingsNow(): FarAgentSettings {
+  const a = state.settings.agent;
+  const own = ownSpaces();
+  const places = a?.places ?? [];
+  const channels = a?.channels ?? [];
+  const rooms: Record<string, string> = {};
+  for (const id of [...places.map((p) => p.channel), ...channels]) {
+    const name = roomName(id);
+    if (name) rooms[id] = `#${name}`;
+  }
+  return {
+    token,
+    ...(a?.ownerId ? { ownerId: a.ownerId } : {}),
+    ...(a?.voice ? { voice: a.voice } : {}),
+    others: a?.others !== false,
+    space: a?.space && own.some((s) => s.id === a.space) ? a.space : own[0]?.id,
+    ...(a?.account ? { account: a.account } : {}),
+    places: places.map((p) => ({ channel: p.channel, ...(p.label ? { label: p.label } : {}), ...(p.space ? { space: p.space } : {}), ...(p.account ? { account: p.account } : {}) })),
+    channels,
+    rooms,
   };
 }
 
