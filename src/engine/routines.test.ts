@@ -154,6 +154,22 @@ describe("routine runs", () => {
     expect(routineById(r.id)!.lastStatus).toBe("nothing");
   });
 
+  it("a run that said NOTHING in its last message, with a plain done summary, is put away too", () => {
+    const r = make();
+    const id = runRoutine(r.id, { manual: true })!;
+    // what a run writes: the marker in its last message, the done block's summary in its own words
+    setState("tasks", (x) => x.id === id, {
+      status: "done",
+      summary: "꺼진 루틴이라 아무것도 안 했어요",
+      entries: [{ id: "e1", at: 1, kind: "text", text: `${NOTHING} 꺼진 루틴\n\n\`\`\`blocks\n{"type":"done","summary":"꺼진 루틴이라 아무것도 안 했어요"}\n\`\`\`` }],
+    });
+    const t = taskById(id)!;
+    expect(saidNothing(t)).toBe(true);
+    expect(quietRun(t)).toBe(true);
+    settleRun(t);
+    expect(taskById(id)!.archived).toBe(true);
+  });
+
   it("an event routine looks at the repo and runs for what is new", async () => {
     const r = make({ when: { kind: "event", event: "issue" } });
     const spy = vi.spyOn(native, "ghWatch").mockResolvedValueOnce("[]").mockResolvedValueOnce(JSON.stringify([{ number: 7, title: "로그인 버그", createdAt: new Date(Date.now() + 1000).toISOString(), url: "https://x/7" }]));
