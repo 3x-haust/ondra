@@ -103,5 +103,5 @@ shouldn't (when it was last checked, what is broken right now). No memory
 tool → put the same lines in the report. Keep run notes in
 `$APP_ARTIFACTS_DIR/check/upkeep-<date>.md`; don't commit them.
 
-Adapted from pstack's maintain-verification-skill (MIT, Lauren Tan); see
-the app-check skill's NOTICE.md.
+Adapted from pstack's maintain-verification-skill (MIT, Lauren Tan); its
+license is in the app's third-party notices.

@@ -2,6 +2,8 @@
 // most others ask for their notice to travel with every copy, binaries included):
 //   • the app: its web view's npm packages and its Rust crates, and ondra-remote's crates
 //     → src-tauri/resources/notices/THIRD_PARTY_NOTICES.txt (shipped in the app)
+//   • the skills the app ships: the works their methods or text come from, kept in
+//     notices/skills/<skill>/ (not in the skill, which agents read) → the app's notices too
 //   • the engine: the pi coding agent it is built from and the npm packages compiled into it
 //     → <engine component>/LICENSE and THIRD_PARTY_NOTICES.txt
 // Each package's own license files are copied as they are; packages with the same text are listed
@@ -126,18 +128,25 @@ export function noticesText(title, sections) {
       groups.set(key, g);
     }
     for (const g of groups.values()) {
-      for (const p of g.pkgs) lines.push(`${p.name} ${p.version} (${p.license})${p.source ? ` — ${p.source}` : ""}`);
+      for (const p of g.pkgs) lines.push(`${p.name}${p.version ? ` ${p.version}` : ""} (${p.license})${p.source ? ` — ${p.source}` : ""}`);
       lines.push("");
       for (const t of g.texts) lines.push(`----- ${t.file} -----`, t.text, "");
       lines.push("-".repeat(78), "");
     }
     if (bare.length) {
       lines.push("Packages without a license file of their own (license as declared; text at the source):", "");
-      for (const p of bare) lines.push(`${p.name} ${p.version} (${p.license})${p.source ? ` — ${p.source}` : ""}`);
+      for (const p of bare) lines.push(`${p.name}${p.version ? ` ${p.version}` : ""} (${p.license})${p.source ? ` — ${p.source}` : ""}`);
       lines.push("");
     }
   }
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+/** The skills' sources: each folder of notices/skills is one skill, its files as they are. */
+export function skillSources(dir = join(root, "notices", "skills")) {
+  return readdirSync(dir)
+    .filter((s) => statSync(join(dir, s)).isDirectory())
+    .map((s) => ({ name: `skills/${s}`, version: "", license: "sources named below", dir: join(dir, s) }));
 }
 
 /** The app's notices: web view, the app's crates, ondra-remote's crates; on Windows and Linux
@@ -147,6 +156,7 @@ export function writeAppNotices(outDir = join(root, "src-tauri", "resources", "n
     { heading: "Ondra app: web view (npm)", pkgs: appNpm() },
     { heading: "Ondra app: native (Rust crates)", pkgs: cargoCrates(join(root, "src-tauri", "Cargo.toml")) },
     { heading: "ondra-remote (Rust crates)", pkgs: cargoCrates(join(root, "remote", "host", "Cargo.toml")) },
+    { heading: "Ondra skills: the works they draw on", pkgs: skillSources() },
     ...(dictate
       ? [
           { heading: "ondra-dictate (Rust crates)", pkgs: cargoCrates(join(root, "dictate", "Cargo.toml")) },
