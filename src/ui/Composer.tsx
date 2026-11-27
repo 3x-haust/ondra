@@ -10,6 +10,7 @@ import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
 import { clipboardFiles, fileSrc, fsRead, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
+import { draftFromAfar, draftOf, hasDraft, setDraft } from "../state/drafts";
 import { focusId, previewFile, toast } from "../state/ui";
 import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
@@ -104,14 +105,12 @@ export interface Command {
 
 type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "file"; items: string[]; q: string; at: number };
 
-/** what was typed in each chat, so switching chats (company / personal, projects, jobs) keeps each its own */
-const drafts = new Map<string, { text: string; files: string[]; nums?: [string, number][] }>();
 /** something unsent is kept for this input */
-export const hasDraft = (key: string) => drafts.has(key);
+export { hasDraft };
 /** words put into a chat's input from elsewhere (Settings › 펫 → "/skill:pet-maker …"), part of them picked to type over */
 const [filled, setFilled] = createSignal<{ key: string; text: string; pick: [number, number] } | null>(null);
 export function fillDraft(key: string, text: string, pick: [number, number] = [text.length, text.length]) {
-  drafts.set(key, { text, files: [] });
+  setDraft(key, { text, files: [] });
   setFilled({ key, text, pick });
 }
 
@@ -207,7 +206,7 @@ export function Composer(props: {
       (key) => {
         // words still being heard were meant for the chat that was here
         cancelDictation(voice);
-        const d = (key !== undefined && drafts.get(key)) || { text: "", files: [] };
+        const d = (key !== undefined && draftOf(key)) || { text: "", files: [] };
         setText(d.text);
         setFiles(d.files);
         setNums(new Map(d.nums ?? d.files.filter(isImage).map((f, i) => [f, i + 1] as [string, number])));
@@ -232,9 +231,21 @@ export function Composer(props: {
     const f = files();
     const key = untrack(() => props.draftKey);
     if (key === undefined) return;
-    if (t || f.length) drafts.set(key, { text: t, files: f, nums: [...nums()] });
-    else drafts.delete(key);
+    setDraft(key, { text: t, files: f, nums: [...nums()] });
   });
+  // the same chat typed in on another device: its words show here while this input isn't being typed in
+  createEffect(
+    on(
+      () => (props.draftKey === undefined ? undefined : draftFromAfar(props.draftKey)),
+      (words) => {
+        if (words === undefined || !el || document.activeElement === el || words === untrack(text)) return;
+        setText(words);
+        el.value = words;
+        queueMicrotask(grow);
+      },
+      { defer: true },
+    ),
+  );
 
   /** a pasted-text card back into the box, as the text it was, where the cursor is */
   const unpaste = async (path: string) => {
@@ -539,7 +550,7 @@ export function Composer(props: {
     setNums(new Map());
     el.value = "";
     const key = props.draftKey;
-    if (key !== undefined) drafts.delete(key);
+    if (key !== undefined) setDraft(key, "");
     // the copies on another device keep the numbers of the files they were made from
     const hand = (paths: string[]) => (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, paths, (p) => n0.get(f[paths.indexOf(p)])), props.upload ? undefined : f);
     queueMicrotask(grow);

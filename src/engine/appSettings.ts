@@ -53,9 +53,11 @@ export const SETTINGS: Record<string, Entry> = {
   autoMergeFixes: { where: "일반 › 작업 폴더와 GitHub › 확인된 버그 수정은 바로 병합", kind: { type: "bool" }, missing: true, get: () => state.settings.autoMergeFixes !== false, set: (v: boolean) => setState("settings", "autoMergeFixes", v) },
   ruleChecks: { where: "일반 › 확인과 메모리 › 두 번 말한 규칙은 자동 검사로", kind: { type: "bool" }, missing: true, get: () => state.settings.ruleChecks !== false, set: (v: boolean) => setState("settings", "ruleChecks", v) },
   watchPullRequests: { where: "not on the page (asked for: PR 리뷰 자동 대응): new reviews, comments, failed checks and conflicts on a job's pull request go back to that job", kind: { type: "bool" }, get: () => !!state.settings.watchPullRequests, set: (v: boolean) => setState("settings", "watchPullRequests", v) },
-  githubWrite: { where: "일반 › 작업 폴더와 GitHub › GitHub 푸시·PR 허용", kind: { type: "bool" }, get: () => !!state.settings.githubWrite, set: (v: boolean) => setState("settings", "githubWrite", v) },
+  githubWrite: { where: "일반 › 작업 폴더와 GitHub › GitHub 푸시·PR 허용", kind: { type: "bool" }, missing: true, get: () => state.settings.githubWrite !== false, set: (v: boolean) => setState("settings", "githubWrite", v) },
   browserPip: { where: "일반 › 알림과 미리보기 › 작업 브라우저 작게 띄우기", kind: { type: "bool" }, missing: true, get: () => state.settings.browserPip !== false, set: (v: boolean) => setState("settings", "browserPip", v) },
   jobSound: { where: "일반 › 알림과 미리보기 › 알림 소리", kind: { type: "bool" }, missing: true, get: () => state.settings.jobSound !== false, set: (v: boolean) => setState("settings", "jobSound", v) },
+  jobSoundVolume: { where: "일반 › 알림과 미리보기 › 소리 크기 (percent)", kind: { type: "int", min: 5, max: 100 }, missing: 50, get: () => Math.round(Math.min(1, Math.max(0, state.settings.jobSoundVolume ?? 0.5)) * 100), set: (v: number) => setState("settings", "jobSoundVolume", v / 100) },
+  instructions: { where: "일반 › 공통 지침 (applies to every job)", kind: { type: "text", max: 20_000 }, missing: "", get: () => state.settings.instructions ?? "", set: (v: string) => setState("settings", "instructions", v) },
   remoteAwake: {
     where: "연결 › 잠자기 방지 (while connected to other devices)",
     kind: { type: "bool" },
@@ -74,6 +76,20 @@ export const SETTINGS: Record<string, Entry> = {
   "agent.channels": { where: "에이전트 › 대화할 채널 (channel ids; empty = wherever it's called)", kind: { type: "list", max: 20 }, get: () => agent().channels ?? [], set: (v: string[]) => setAgent({ channels: v }) },
   "agent.voice": { where: "에이전트 › 말투와 성격 (empty = the default voice)", kind: { type: "text", max: 4000 }, get: () => agent().voice ?? "", set: (v: string) => setAgent({ voice: v }) },
 };
+
+/** the settings of 일반 another connected device may see and change here (Settings › 일반 with that device picked) */
+export const SHARED_SETTINGS = ["theme", "language", "links", "permission", "isolate", "githubWrite", "autoMergeFixes", "appCheck", "learn", "ruleChecks", "skillReflect", "browserPip", "jobSound", "jobSoundVolume", "instructions"] as const;
+export type SharedSetting = (typeof SHARED_SETTINGS)[number];
+/** their values now */
+export const sharedSettings = (): Record<string, unknown> => Object.fromEntries(SHARED_SETTINGS.map((k) => [k, SETTINGS[k].get()]));
+/** one changed from another device: checked as the agent's are; the value it has now */
+export async function setShared(key: string, v: unknown): Promise<unknown> {
+  if (!(SHARED_SETTINGS as readonly string[]).includes(key)) throw new Error(`no setting ${key}`);
+  const c = checked(key, v);
+  if (!c.ok) throw new Error(c.why);
+  await SETTINGS[key].set(c.value as never);
+  return SETTINGS[key].get();
+}
 
 /** the workspace ids, for agent.space */
 const spaceIds = () => ownSpaces().map((s) => s.id);

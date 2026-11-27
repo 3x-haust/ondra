@@ -6,7 +6,7 @@ A connected computer's projects show in this app's sidebar. Jobs in those projec
 
 1. On either computer, open Settings › 연결, press **기기 추가**, then **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
 2. On the other computer, open Settings › 연결, press **기기 추가** and paste the link. The computer that made the link then asks **허용 / 거절**.
-3. Once allowed, each computer's projects appear automatically in the other's sidebar, in a workspace tab of the same name, with that computer's name beside them. A project added there later shows up too, and one removed there disappears.
+3. Once allowed, each computer's projects appear automatically in the other's sidebar, in a workspace tab of the same name. A project added there later shows up too, and one removed there disappears.
 
 The two devices reconnect on their own, with no new link needed. Older versions connected one way only (and had a **다른 기기에서 이 기기 쓰기** switch); such a connection becomes two-way by itself once both computers run this version.
 
@@ -42,6 +42,16 @@ The Mac doing the work checks every call (`src/engine/remoteRules.ts`):
 - **Older versions.** A field or answer a peer doesn't know is ignored. An older host doesn't know a goodbye: it lets the Mac in instead, which then hangs up and tells its user to remove it on that device too. An older client hears a "cut for now" as a plain disconnect and dials again. An older Mac doesn't say `both`, so it is only dialed back once it is updated.
 - **The side doing the work** is `src/engine/remote.ts`. It sends the jobs of the projects the other Mac keeps: first each whole job, then only what changed (a job's fields, and its entries from the first one that differs). It does what the other Mac asks with the same functions the window uses: create, tell, stop, merge, queue edits and so on.
 - **The side looking on** is `src/engine/hosts.ts` and `src/state/mirror.ts`. Those jobs are held in memory and never written to this Mac's state.json. `taskById`, `projectById`, `projectsShown` and `tasksShown` include them, so the sidebar and the job view work unchanged. The engine's own loops (scheduler, PR watching and so on) read `state.tasks`, which doesn't include them. An action on another device's job is sent there; see `far()` at the top of each action in `tasks.ts`.
+
+## The same workspace on both
+
+A workspace belongs to the computer that has it. Its tab on another computer shows that computer's own copy of what you see and change there, live (`src/state/shared.ts`):
+
+- **Chats.** Main's chat and each project's chat are that computer's: what was typed there shows here, and what is typed here goes to its main, which answers there. Stop, clear, edit, ask again and main's question cards act there too (`say`, `mainStop`, `mainClear`, `mainEdit`, `decide`). The Discord agent's chat stays on its computer.
+- **Screen state.** What is folded in the sidebar, the request board open or closed, the canvas's cards where they were dragged, the views' choices kept per workspace (`viewState` keys `sp:<space>/…`, not the canvas camera) and the text typed in a main chat and not sent yet. A change on either computer shows on the other a moment later (`ui`).
+- **Settings.** Settings › 일반 has a **기기** row when a connected computer shares its settings: pick it to see and change its settings there (`setSetting`, the list in `SHARED_SETTINGS` of `src/engine/appSettings.ts`). Zoom, default models, local checks, review models and updates stay per computer.
+
+A device asks for this with `same: true` in its `watch`; the host then sends `{t:"chat"}`, `{t:"ui"}` and `{t:"settings"}` (first all of it, then what changed, and never back what that device just changed). Only a device that may use every workspace gets them: main can hand work to any workspace, and the settings are the whole app's. Each id is the host's own; the client puts them in the workspace tab (`h:<host>:<space>`) and back. A device that once shared keeps its tabs on its own chats while it is away (`settings.hosts[].same`). An older Ondra on either side leaves things as before: its tabs keep this computer's own main.
 
 ## Files, terminals and memory of those jobs
 
