@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import permissions, { focusSteal, foreignData, githubWrite, hostComputerUse, judgePrompt, modeOf, quietCommand, readVerdict, systemInput } from "./permissions";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import permissions, { focusSteal, foreignData, githubWrite, hostComputerUse, judgePrompt, modeOf, quietCommand, readVerdict, systemInput, worktreeMergeDelete } from "./permissions";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -198,6 +198,34 @@ describe("GitHub writes switched off", () => {
     expect(await run("0")).toMatchObject({ block: true });
     vi.unstubAllEnvs();
     expect(await run(undefined)).toBeUndefined();
+  });
+});
+
+describe("gh pr merge --delete-branch in a worktree", () => {
+  const root = mkdtempSync(join(tmpdir(), "wt-"));
+  const worktree = join(root, "job");
+  const plain = join(root, "repo");
+  mkdirSync(join(worktree, "src"), { recursive: true });
+  mkdirSync(join(plain, ".git"), { recursive: true });
+  writeFileSync(join(worktree, ".git"), `gitdir: ${plain}/.git/worktrees/job\n`);
+
+  it.each(["gh pr merge 38 --squash --delete-branch", "cd x && gh pr merge 38 -d --merge", "gh pr merge --delete-branch=true"])("blocks %s in a worktree", (command) => {
+    expect(worktreeMergeDelete(command, worktree)).toBe(true);
+    expect(worktreeMergeDelete(command, join(worktree, "src"))).toBe(true);
+    expect(worktreeMergeDelete(command, plain)).toBe(false);
+  });
+
+  it.each(["gh pr merge 38 --squash", "git push origin --delete task/x", "gh pr view 38 --json headRefName"])("lets %s through", (command) => {
+    expect(worktreeMergeDelete(command, worktree)).toBe(false);
+  });
+
+  it("names the fix in every mode", async () => {
+    vi.stubEnv("ONDRA_PERMISSION", "full");
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
+    const out = await handlers.get("tool_call")!({ toolName: "bash", input: { command: "gh pr merge 38 --squash --delete-branch" } }, { cwd: worktree, hasUI: true, ui: { select: vi.fn() } });
+    expect(out).toMatchObject({ block: true, reason: expect.stringContaining("git push origin --delete") });
+    vi.unstubAllEnvs();
   });
 });
 
