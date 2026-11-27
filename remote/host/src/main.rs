@@ -6,13 +6,13 @@
 //!   - host: other Macs connect in. Only Macs the user allowed get in; one is allowed with a
 //!     one-time code from the link Ondra copies, and 허용 pressed on this Mac.
 //!   - client: it dials a host ("dial") and carries the window's lines to it.
-//! A connection goes both ways: a host that lets this Mac in is let in here too (the user added
-//! it), and says so in its hello ("both"), so the host dials back.
+//! A connection goes both ways: a dial the user made here ("trust") lets the host in here too once it
+//! lets this Mac in, and says so in its hello ("both"), so the host dials back.
 //!
 //! The app drives it over stdin/stdout, one JSON object per line:
 //!   in:  {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
 //!        {"cmd":"send","conn","data"} {"cmd":"revoke","id"} {"cmd":"drop","id"} {"cmd":"devices"}
-//!        {"cmd":"dial","peer","name","them"?,"pair"?,"bye"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
+//!        {"cmd":"dial","peer","name","them"?,"trust"?,"pair"?,"bye"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
 //!   out: {"ev":"ready","id"} {"ev":"devices","list"} {"ev":"pair","conn","device"}
 //!        {"ev":"open","conn","device":{id,name,both}} {"ev":"msg","conn","data"} {"ev":"close","conn"} {"ev":"bye","device"}
 //!        {"ev":"peer","peer","state":"connecting|waiting|ok|denied|closed|bye","reason"?,"bye"?}
@@ -75,6 +75,8 @@ struct Shared {
     out: mpsc::UnboundedSender<Value>,
     /// hosts this Mac dialed: what to send them
     peers: Mutex<HashMap<String, (mpsc::UnboundedSender<String>, Connection)>>,
+    /// the dial still wanted for each Mac (a hangup or a newer dial makes an older one give up)
+    dialing: Mutex<HashMap<String, u64>>,
 }
 
 fn now() -> u64 {
@@ -346,8 +348,9 @@ fn peer_ev(peer: &str, state: &str, reason: Option<Value>, bye: bool) -> Value {
 
 /// Connect to a host Mac and carry lines both ways until either side ends. A goodbye dial
 /// (`"bye": true` in the hello) ends after the host's answer.
-/// A host that lets this Mac in is let in here before the app hears it (`them`: its name here).
-async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value, them: String) -> Result<()> {
+/// A host that lets this Mac in is let in here (`trust`) before the app hears it (`them`: its name
+/// here), unless the dial was given up meanwhile (`gen` no longer the one wanted).
+async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value, them: String, trust: bool, gen: u64) -> Result<()> {
     let id: iroh::EndpointId = peer.parse().map_err(|e| anyhow!("{e}"))?;
     let bye = hello.get("bye").and_then(Value::as_bool).unwrap_or(false);
     if let Some((_, old)) = s.peers.lock().await.remove(&peer) {
@@ -372,7 +375,13 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value, them: St
             }
             // before anything else: that host dials back as soon as it has said ok
             Some("ok") => {
-                s.trust(&peer, &them).await;
+                if s.dialing.lock().await.get(&peer) != Some(&gen) {
+                    conn.close(0u32.into(), b"bye");
+                    return Ok(());
+                }
+                if trust {
+                    s.trust(&peer, &them).await;
+                }
                 break;
             }
             // it forgot this Mac, as asked
@@ -426,11 +435,13 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value, them: St
 }
 
 /// What this Mac says first when it dials: a goodbye, or a connection both ways.
-fn hello_for(name: Value, pair: Value, bye: bool) -> Value {
+fn hello_for(name: Value, pair: Value, bye: bool, trust: bool) -> Value {
     if bye {
         json!({ "t": "hello", "name": name, "pair": pair, "bye": true })
-    } else {
+    } else if trust {
         json!({ "t": "hello", "name": name, "pair": pair, "both": true })
+    } else {
+        json!({ "t": "hello", "name": name, "pair": pair })
     }
 }
 
@@ -475,6 +486,7 @@ async fn main() -> Result<()> {
         next: AtomicU64::new(1),
         out,
         peers: Mutex::new(HashMap::new()),
+        dialing: Mutex::new(HashMap::new()),
     });
 
     let key = load_key(&dir)?;
@@ -539,10 +551,15 @@ async fn main() -> Result<()> {
                 let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("").trim().to_string();
                 let bye = cmd.get("bye").and_then(Value::as_bool).unwrap_or(false);
                 let them = cmd.get("them").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect();
-                let hello = hello_for(cmd.get("name").cloned().unwrap_or(json!("Mac")), cmd.get("pair").cloned().unwrap_or(Value::Null), bye);
+                let trust = !bye && cmd.get("trust").and_then(Value::as_bool).unwrap_or(false);
+                let hello = hello_for(cmd.get("name").cloned().unwrap_or(json!("Mac")), cmd.get("pair").cloned().unwrap_or(Value::Null), bye, trust);
+                let gen = s.next.fetch_add(1, Ordering::Relaxed);
+                if !bye {
+                    s.dialing.lock().await.insert(peer.clone(), gen);
+                }
                 let (s, ep) = (s.clone(), router.endpoint().clone());
                 tokio::spawn(async move {
-                    if let Err(e) = dial(s.clone(), ep, peer.clone(), hello, them).await {
+                    if let Err(e) = dial(s.clone(), ep, peer.clone(), hello, them, trust, gen).await {
                         s.emit(peer_ev(&peer, "closed", Some(json!(format!("{e:#}"))), bye));
                     }
                 });
@@ -555,6 +572,7 @@ async fn main() -> Result<()> {
             }
             "hangup" => {
                 let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("");
+                s.dialing.lock().await.remove(peer);
                 if let Some((_, c)) = s.peers.lock().await.remove(peer) {
                     c.close(0u32.into(), b"bye");
                 }
@@ -622,8 +640,10 @@ mod tests {
         let h = parse_hello(&json!({ "t": "hello", "pair": "abc" }));
         assert_eq!(h, Hello { name: "Mac".into(), pair: "abc".into(), bye: false, both: false });
         // this Mac's own hello reads back as it means
-        assert!(parse_hello(&hello_for(json!("Air"), json!("abc"), false)).both);
-        let h = parse_hello(&hello_for(json!("Air"), Value::Null, true));
+        assert!(parse_hello(&hello_for(json!("Air"), json!("abc"), false, true)).both);
+        // a dial the user didn't make here (an agent's) lets nobody in: one way
+        assert!(!parse_hello(&hello_for(json!("Air"), json!("abc"), false, false)).both);
+        let h = parse_hello(&hello_for(json!("Air"), Value::Null, true, true));
         assert!(h.bye && !h.both);
         assert_eq!(parse_hello(&json!({ "name": "x".repeat(200) })).name.chars().count(), 60);
     }
@@ -656,6 +676,7 @@ mod tests {
             next: AtomicU64::new(1),
             out,
             peers: Mutex::new(HashMap::new()),
+            dialing: Mutex::new(HashMap::new()),
         };
         s.trust("a", "Studio").await;
         s.trust("a", "Other").await;
