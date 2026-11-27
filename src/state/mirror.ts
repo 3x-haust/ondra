@@ -3,7 +3,7 @@
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
 import type { Limit } from "../lib/native";
-import type { AgentNote, CaptainMessage, Decision, Project, Routine, SpaceId, Task } from "./types";
+import type { AgentNote, AgentPlace, CaptainMessage, Decision, Project, Routine, SpaceId, Task } from "./types";
 
 /** "off": disconnected here for now (연결 끊기) */
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
@@ -47,6 +47,25 @@ export interface FarAgent {
   ways: string;
   /** its routines (ids and workspaces as there) */
   routines: Routine[];
+  /** its Settings › 에이전트, seen here (a device too old to send them: none) */
+  settings?: FarAgentSettings;
+}
+
+/** another device's agent settings (engine/remote.ts agentSettingsNow): workspace and account ids as there */
+export interface FarAgentSettings {
+  /** a bot token is kept there (the token itself never leaves it) */
+  token: boolean;
+  ownerId?: string;
+  voice?: string;
+  others: boolean;
+  /** where work goes from every channel not set apart */
+  space?: string;
+  account?: string;
+  places: AgentPlace[];
+  /** the channels it talks with others in; none = wherever it is called */
+  channels: string[];
+  /** the names its bot knows for those channels: id → "#name" */
+  rooms: Record<string, string>;
 }
 
 /** a message of another device's chat: while main is still answering, what it has written and thought so far */
