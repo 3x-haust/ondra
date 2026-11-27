@@ -85,6 +85,8 @@ fn dir_for(data: &Path, kind: &str) -> Result<PathBuf, String> {
         "upload" => Ok(data.join("attachments").join("remote")),
         // a page of another Mac with the files it uses, laid out as there (so its relative links work)
         "site" => Ok(data.join("remote").join("sites")),
+        // a workspace moving in from another Mac, kept apart until it is all here (moves_in)
+        "move" => Ok(data.join("remote").join("moves")),
         _ => Err("unknown".into()),
     }
 }
@@ -184,6 +186,11 @@ pub async fn far_put(app: tauri::AppHandle, kind: String, name: String, offset: 
             }
             return put_at(&dir, &rel, offset, &data);
         }
+        if kind == "move" {
+            // <transfer>/<kind>/<name>/…: never a bare file at the top of a transfer
+            let rel = safe_rel(&name).filter(|r| r.components().count() >= 3).ok_or("이름이 잘못됐어요")?;
+            return put_at(&dir, &rel, offset, &data);
+        }
         if offset == 0 && kind == "cache" {
             prune(&dir);
         }
@@ -191,6 +198,52 @@ pub async fn far_put(app: tauri::AppHandle, kind: String, name: String, offset: 
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The app folders a moved workspace's files go into (under the data folder, by the same name).
+const MOVE_KINDS: &[&str] = &["sessions", "artifacts", "skills", "accounts", "spaces"];
+
+#[derive(serde::Deserialize)]
+pub struct MoveItem {
+    kind: String,
+    from: String,
+    to: String,
+}
+
+/// Put what came in `<data>/remote/moves/<transfer>/<kind>/<from>` at `<data>/<kind>/<to>`, only
+/// where nothing is yet: this Mac's own files are never replaced. Whether each one went.
+fn moves_in(data: &Path, transfer: &str, items: &[MoveItem]) -> Vec<bool> {
+    let Some(t) = safe_name(transfer) else { return vec![false; items.len()] };
+    let stage = data.join("remote").join("moves").join(t);
+    items
+        .iter()
+        .map(|i| {
+            let (Some(from), Some(to)) = (safe_name(&i.from), safe_name(&i.to)) else { return false };
+            if !MOVE_KINDS.contains(&i.kind.as_str()) {
+                return false;
+            }
+            let src = stage.join(&i.kind).join(from);
+            let dst = data.join(&i.kind).join(to);
+            if !src.exists() || dst.exists() || std::fs::create_dir_all(data.join(&i.kind)).is_err() {
+                return false;
+            }
+            std::fs::rename(&src, &dst).is_ok()
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub async fn space_moves_in(app: tauri::AppHandle, transfer: String, items: Vec<MoveItem>) -> Vec<bool> {
+    let data = crate::engine::data_dir(&app);
+    tauri::async_runtime::spawn_blocking(move || moves_in(&data, &transfer, &items)).await.unwrap_or_default()
+}
+
+/// A transfer is over (moved in, or given up): what is left of it goes.
+#[tauri::command]
+pub fn space_move_clear(app: tauri::AppHandle, transfer: String) {
+    if let Some(t) = safe_name(&transfer) {
+        let _ = std::fs::remove_dir_all(crate::engine::data_dir(&app).join("remote").join("moves").join(t));
+    }
 }
 
 /// A file already cached from another Mac, if it is.
@@ -236,6 +289,25 @@ mod tests {
         }
         assert!(safe_name("NUL.log").is_none());
         assert!(safe_rel("host/C/site/img.png").is_some());
+    }
+
+    #[test]
+    fn moves_never_replace_what_is_here() {
+        let data = std::env::temp_dir().join(format!("farfs-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        let stage = data.join("remote/moves/x1");
+        std::fs::create_dir_all(stage.join("sessions/t1")).unwrap();
+        std::fs::create_dir_all(stage.join("sessions/t2")).unwrap();
+        std::fs::write(stage.join("sessions/t1/a.jsonl"), "new").unwrap();
+        std::fs::write(stage.join("sessions/t2/a.jsonl"), "new").unwrap();
+        std::fs::create_dir_all(data.join("sessions/t2")).unwrap();
+        std::fs::write(data.join("sessions/t2/a.jsonl"), "mine").unwrap();
+        let item = |kind: &str, from: &str, to: &str| MoveItem { kind: kind.into(), from: from.into(), to: to.into() };
+        let went = moves_in(&data, "x1", &[item("sessions", "t1", "t1"), item("sessions", "t2", "t2"), item("state", "t1", "t1"), item("sessions", "..", "t3")]);
+        assert_eq!(went, vec![true, false, false, false]);
+        assert_eq!(std::fs::read_to_string(data.join("sessions/t1/a.jsonl")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(data.join("sessions/t2/a.jsonl")).unwrap(), "mine");
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
