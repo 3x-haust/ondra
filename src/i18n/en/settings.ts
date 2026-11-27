@@ -473,7 +473,6 @@ export default {
   "기기|list": "Devices",
   "이 기기의 연결 링크": "This device's connection link",
   "연결할 기기의 기기 추가에 붙여 넣어요": "Paste it in Add device on the other device",
-  "준비하는 중…": "Getting ready…",
   "다른 기기의 연결 링크": "The other device's connection link",
   "한쪽에서 복사한 연결 링크를 다른 쪽에 붙여 넣어요. 링크를 만든 기기에서 허용하면 두 기기 모두 서로를 쓸 수 있어요.": "Copy the connection link on one device and paste it on the other. Once the device that made the link allows it, each device can use the other.",
   "다른 기기와 연결돼 있는 동안 이 PC가 잠들지 않아요": "This PC won't sleep while it's connected to other devices",

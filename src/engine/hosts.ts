@@ -224,7 +224,7 @@ async function dial(host: string) {
   const h = hostOf(host);
   if (!h || h.off) return;
   status(host, "connecting");
-  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), them: h.name, ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
+  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), them: h.name, trust: !h.oneWay, ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
 }
 
 /** that device came in here and lets this one in too: this one uses it as well (added now when it isn't yet) */
@@ -233,7 +233,7 @@ export function dialBack(id: string, name: string) {
   if (leavingOf(id)) return;
   const h = hostOf(id);
   if (!h) {
-    setState("settings", "hosts", (l) => [...(l ?? []), { id, name }]);
+    setState("settings", "hosts", (l) => [...(l ?? []), { id, name, back: true }]);
     return void dial(id);
   }
   const s = mirror.hosts[id]?.status;
@@ -246,6 +246,11 @@ export function dialBack(id: string, name: string) {
 export function forgotBy(id: string) {
   if (hostOf(id)) forgetHost(id);
 }
+
+/** the side letting devices in (remote.ts): whether a device is connected into this one now, and what it
+ *  does when a device used here turns out to have removed this one (not let in either) */
+const inSide = { cameIn: (_id: string) => false, removedThere: (_id: string, _name: string) => {} };
+export const fromInSide = (f: typeof inSide) => void Object.assign(inSide, f);
 
 function again(host: string) {
   const r = retry.get(host) ?? { n: 0 };
@@ -305,6 +310,15 @@ function denied(host: string, reason: string) {
     status(host, "denied", reason);
     return again(host);
   }
+  // added as it came in here: that device may not know this one yet (its "ok" on the way). While it is
+  // still connected here, try again; else it's let go quietly, nothing was ever connected to it
+  if (hostOf(host)?.back && (reason === "unknown" || reason === "revoked")) {
+    if (inSide.cameIn(host)) {
+      status(host, "connecting");
+      return again(host);
+    }
+    return forgetHost(host);
+  }
   const name = hostName(host);
   // removed there (not a link that ran out): it isn't let in here either
   const removed = (reason === "unknown" || reason === "revoked") && !hostOf(host)?.pair;
@@ -316,7 +330,7 @@ function denied(host: string, reason: string) {
   if (!why) return status(host, "denied", reason);
   forgetHost(host);
   toast(why, "info", undefined, { stay: true });
-  if (removed) peerKinds.get("@removed")?.(host, { name });
+  if (removed) inSide.removedThere(host, name);
 }
 
 /** the helper's word about the Macs this one dialed */
@@ -337,7 +351,7 @@ export function onPeer(ev: Record<string, unknown>) {
       if (hostOf(host)?.off) return void remoteCmd({ cmd: "hangup", peer: host }).catch(() => {});
       status(host, "ok");
       // the code did its job: from now on this Mac is known there
-      if (hostOf(host)?.pair) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, pair: undefined } : x)));
+      if (hostOf(host)?.pair || hostOf(host)?.back) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, pair: undefined, back: undefined } : x)));
       void sendTo(host, { t: "projects" }).catch(() => {});
       watch(host);
     } else if (s === "waiting") status(host, "waiting");
@@ -393,12 +407,13 @@ function parseLink(text: string): { id: string; code: string; name: string } | u
   return code ? { id: m[1].toLowerCase(), code, name: q.get("name") || "Mac" } : undefined;
 }
 
-/** add a Mac from its link: connects at once (that device asks its user to allow this one) */
-export async function addHost(text: string): Promise<boolean> {
+/** add a Mac from its link: connects at once (that device asks its user to allow this one). Pasted by the
+ *  user here, it goes both ways; added by an agent (`oneWay`), that device isn't let in here by it. */
+export async function addHost(text: string, oneWay = false): Promise<boolean> {
   const l = parseLink(text);
   if (!l) return false;
   const rest = (state.settings.hosts ?? []).filter((h) => h.id !== l.id);
-  setState("settings", "hosts", [...rest, { id: l.id, name: l.name, pair: l.code }]);
+  setState("settings", "hosts", [...rest, { id: l.id, name: l.name, pair: l.code, ...(oneWay ? { oneWay } : {}) }]);
   // removed before and added again: it isn't to be told goodbye anymore
   if (leavingOf(l.id)) byeDone(l.id);
   retry.delete(l.id);
@@ -473,8 +488,7 @@ function forgetHost(id: string) {
 }
 
 /** 제거: that device goes from here, and it is told to forget this one (now, or once it can be reached) */
-export function removeHost(id: string) {
-  const name = hostName(id);
+export function removeHost(id: string, name = hostName(id)) {
   forgetHost(id);
   setState("settings", "leaving", (l) => [...(l ?? []).filter((x) => x.id !== id), { id, name, at: Date.now() }]);
   byeRetry.delete(id);

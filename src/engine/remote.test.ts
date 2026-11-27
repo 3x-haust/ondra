@@ -18,7 +18,10 @@ vi.mock("../lib/native", async (orig) => ({
   remoteStart: async () => {},
   remoteAwake: async () => {},
   remoteDevices: async () => [],
-  remoteForget: async (id: string) => (forgot.push(id), []),
+  remoteForget: async (id: string) => {
+    if (id === "f".repeat(64)) throw new Error("disk full");
+    return forgot.push(id), [];
+  },
   remoteHostName: async () => "Test Mac",
 }));
 // a picker (UI): only its names are used here
@@ -163,8 +166,8 @@ describe("a connection goes both ways", () => {
 
   it("a device that comes in and lets this one in too is used from here as well", async () => {
     hear({ ev: "open", conn: 2, device: { id: PC, name: "PC", both: true } });
-    expect(state.settings.hosts).toEqual([{ id: PC, name: "PC" }]);
-    await vi.waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ cmd: "dial", peer: PC, them: "PC" })));
+    expect(state.settings.hosts).toEqual([{ id: PC, name: "PC", back: true }]);
+    await vi.waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ cmd: "dial", peer: PC, them: "PC", trust: true })));
     hear({ ev: "close", conn: 2 });
   });
   it("an older Ondra coming in (one way only) isn't dialed", () => {
@@ -190,6 +193,19 @@ describe("a connection goes both ways", () => {
     expect(state.settings.hosts).toEqual([]);
     expect(forgot).toEqual([PC]);
     expect(state.settings.leaving?.map((l) => l.id)).toEqual([PC]);
+  });
+  it("제거 of a device that only came in here: it is told too", async () => {
+    allowed();
+    expect(await removeDevice(PC)).toBe(true);
+    expect(forgot).toEqual([PC]);
+    expect(state.settings.leaving?.map((l) => l.id)).toEqual([PC]);
+  });
+  it("제거 that can't stop it coming in changes nothing, and says so", async () => {
+    const F = "f".repeat(64);
+    setState("settings", "hosts", [{ id: F, name: "PC" }]);
+    expect(await removeDevice(F)).toBe(false);
+    expect(state.settings.hosts).toEqual([{ id: F, name: "PC" }]);
+    expect(state.settings.leaving ?? []).toEqual([]);
   });
   it("cut off as removed there: not let in here either; a link that ran out is no removal", async () => {
     setState("settings", "hosts", [{ id: PC, name: "PC" }]);

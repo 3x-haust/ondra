@@ -164,9 +164,9 @@ function AddDevice() {
           <span class="muted cn-hint">{left() ? t("한 번만 쓸 수 있어요 · {t} 뒤 만료", { t: mmss() }) : t("연결할 기기의 기기 추가에 붙여 넣어요")}</span>
         </div>
         <div class="set-value">
-          <button class="btn sm" disabled={!remote().id} onClick={() => void copy()}>
+          <button class="btn sm" onClick={() => void copy()}>
             <Icon name="copy" size={13} />
-            {remote().id ? t("연결 링크 복사") : t("준비하는 중…")}
+            {t("연결 링크 복사")}
           </button>
         </div>
       </div>

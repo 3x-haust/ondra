@@ -779,8 +779,10 @@ export interface Settings {
   /** while connected to other devices, this one doesn't sleep (a Mac: on power) */
   remoteAwake?: boolean;
   /** other Macs this one works on, and the projects of theirs added here. `hidden`: its projects
-   *  taken off the list here (kept off when it sends them again); `off`: disconnected for now */
-  hosts?: { id: string; name: string; pair?: string; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean }[];
+   *  taken off the list here (kept off when it sends them again); `off`: disconnected for now; `oneWay`: added
+   *  by an agent, so it isn't let in here by that (letting a device in is the user's); `back`: added when it
+   *  came in here, not yet connected to */
+  hosts?: { id: string; name: string; pair?: string; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean; oneWay?: boolean; back?: boolean }[];
   /** Macs removed here that haven't heard it yet: told the next time they're reachable */
   leaving?: { id: string; name: string; at: number }[];
   /** the workspaces (ids) each Mac allowed in may use here; missing = all of them */

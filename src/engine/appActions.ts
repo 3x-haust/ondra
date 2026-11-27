@@ -80,11 +80,12 @@ export const ACTIONS: Record<string, Action> = {
   },
   "remote.add": {
     where: "설정 › 연결 › 기기 추가",
-    about: "Connect another device by its connect link: once its user allows it there, each device can use the other",
+    about:
+      "Use another device by its connect link: once its user allows it there, this Mac can use it. It goes one way: that device can't use this Mac by it (letting a device in is the user's: for both ways, remote.link here and the user allows it, or the user pastes the link in 설정 › 연결 › 기기 추가)",
     takes: { link: "the ondra://connect/… link from the other device" },
     run: async (a) => {
       const { addHost } = await hostsMod();
-      return (await addHost(str(a, "link"))) ? { added: true, then: "that device's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
+      return (await addHost(str(a, "link"), true)) ? { added: true, then: "that device's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
     },
   },
   "remote.remove": {
@@ -95,8 +96,7 @@ export const ACTIONS: Record<string, Action> = {
       const { remote, removeDevice } = await remoteMod();
       const id = str(a, "id");
       if (!(state.settings.hosts ?? []).some((h) => h.id === id) && !remote().devices.some((d) => d.id === id)) return fail(`no device ${id} connected`);
-      await removeDevice(id);
-      return { removed: id };
+      return (await removeDevice(id)) ? { removed: id } : fail(`couldn't remove ${id}: it may still come in`);
     },
   },
 
