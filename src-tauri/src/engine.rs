@@ -420,8 +420,17 @@ fn slim(mut ev: Value) -> Value {
                     }
                 }
             }
+            // details can be large: only what src/engine/tasks.ts reads goes on (a background
+            // command's id, a computer step's label and screen)
             if let Some(r) = ev.get_mut("result").and_then(Value::as_object_mut) {
-                r.remove("details");
+                let kept: serde_json::Map<String, Value> = r
+                    .remove("details")
+                    .and_then(|d| d.as_object().cloned())
+                    .map(|d| d.into_iter().filter(|(k, v)| matches!(k.as_str(), "background" | "label" | "screen") && v.is_string()).collect())
+                    .unwrap_or_default();
+                if !kept.is_empty() {
+                    r.insert("details".into(), Value::Object(kept));
+                }
             }
         }
         _ => {}
@@ -724,6 +733,12 @@ mod tests {
         assert_eq!(now, vec![200, 201]);
         assert_eq!(helpers, vec![300]);
         assert_eq!(theirs, vec![301]);
+    }
+
+    #[test]
+    fn a_tool_end_keeps_the_details_the_app_reads_and_drops_the_rest() {
+        let ev = json!({ "type": "tool_execution_end", "toolCallId": "t1", "result": { "content": [{ "type": "text", "text": "Started in the background as bg_1." }], "details": { "background": "bg_1", "label": "보내기", "screen": "Inbox", "output": "x".repeat(10_000) } } });
+        assert_eq!(slim(ev).pointer("/result/details"), Some(&json!({ "background": "bg_1", "label": "보내기", "screen": "Inbox" })));
     }
 
     #[test]

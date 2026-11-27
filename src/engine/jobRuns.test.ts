@@ -537,6 +537,33 @@ describe("a job waiting on its background commands", () => {
     expect((await proof())[0]).toMatchObject({ ok: false, check: "failed" });
   });
 
+  it("waits for a CI watch that ends (gh run watch, gh pr checks --watch) instead of asking whether it is done", async () => {
+    for (const cmd of ["gh run watch 45924579686 --exit-status --interval 30 > /dev/null 2>&1; echo \"exit=$?\"", "gh pr checks 905 --watch --fail-fast"]) {
+      setState(reconcile(freshState()));
+      await working([job()]);
+      status(1, 0, { cmds: [cmd] });
+      await ends("윈도우와 리눅스 빌드는 아직 GitHub에서 진행 중이에요. 기다리는 작업이 끝나면 알림이 와요.");
+      expect(task("job").status).toBe("running");
+      expect(task("job").now).toBe("백그라운드 명령 1개 기다리는 중");
+      expect(sent("prompt").filter((m) => m.includes("without a done block"))).toEqual([]);
+      expect(state.decisions).toEqual([]);
+      pauseTask("job");
+      vi.mocked(native.agentSend).mockClear();
+    }
+  });
+
+  it("says it waits on its own background work without turning to the user", async () => {
+    await working([job()]);
+    status(1, 0, { cmds: ["until curl -s https://api.example.com | grep -q new; do sleep 1; done"] });
+    await ends("API가 새 코드로 바뀌는 걸 기다리고 있어요.");
+    expect(task("job").status).toBe("running");
+    expect(task("job").now).toBe("백그라운드 명령 1개 기다리는 중");
+
+    status(0, 1);
+    await tick();
+    expect(sent("prompt")[1]).toContain("background command or monitor has news");
+  });
+
   it("doesn't wait for a server it left running", async () => {
     await working([job()]);
     status(1, 0, { cmds: ["pnpm dev"] });

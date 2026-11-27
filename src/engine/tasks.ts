@@ -501,8 +501,10 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
   }
 }
 
+// a CI watch (gh run watch, gh pr checks --watch) ends with the run it watches
 const keepsRunning = (cmd: string) =>
-  /(&\s*$|&\s*disown|\bnohup\b|--watch\b|\bwatch\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd);
+  /(&\s*$|&\s*disown|\bnohup\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd) ||
+  (/--watch\b|\bwatch\b/.test(cmd) && !/\bgh\s+(run\s+watch|pr\s+checks)\b/.test(cmd));
 
 /**
  * The run is over (done, failed, paused or stopped): its shells and the tool calls
@@ -2163,7 +2165,10 @@ async function settle(id: string, run: Run) {
   // Stopped without done / handoff / ask.
   // its last words wait on the user ("병합해 주세요", "알려주시면 이어갈게요"): it needs an answer, not "finished?"
   const said = lastWords(t);
-  const userTurn = !!said && waitsOnUser(said);
+  // background commands it waits for (a server left running is not one): their end wakes it
+  const waitFor = awaitedBackground(run.bg);
+  // with those running, "기다리고 있어요" is about them: only a request to the user is its turn
+  const userTurn = !!said && (waitFor ? asksUser(said) : waitsOnUser(said));
   // paused or stopped while the numbers above were fetched
   if (runs.get(id) !== run) return;
   // a background command ended, or a watch spoke, while no turn ran: it goes on with that now
@@ -2171,8 +2176,6 @@ async function settle(id: string, run: Run) {
     await wakeForBackground(id, run);
     return;
   }
-  // background commands it waits for (a server left running is not one): their end wakes it
-  const waitFor = awaitedBackground(run.bg);
   if (!userTurn && waitFor) {
     run.idle = true;
     updateTask(id, (x) => {
@@ -3713,8 +3716,10 @@ function lastWords(t: Task): string {
 }
 
 /** Words that hand the next step to the user: asking them to do or tell something, or waiting for them. */
-export const waitsOnUser = (text: string) =>
-  /기다릴게요|기다리고 있어요|기다리겠|알려\s?주시면|알려\s?주세요|해\s?주세요|해\s?주시면|주시면 이어|정해\s?주세요|골라\s?주세요|waiting for (you|your)|let me know|once you('ve| have)?\b/i.test(text.slice(-600));
+export const waitsOnUser = (text: string) => /기다릴게요|기다리고 있어요|기다리겠/.test(text.slice(-600)) || asksUser(text);
+/** Its last words ask the user for something (not only say it waits). */
+const asksUser = (text: string) =>
+  /알려\s?주시면|알려\s?주세요|해\s?주세요|해\s?주시면|주시면 이어|정해\s?주세요|골라\s?주세요|waiting for (you|your)|let me know|once you('ve| have)?\b/i.test(text.slice(-600));
 
 /** The first line of the job's last report to the user, if it wrote one. */
 export function lastReport(t: Task): string | undefined {
