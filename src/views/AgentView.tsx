@@ -15,6 +15,7 @@ import { messagesIn } from "../state/shared";
 import { farForgetNote, hostName } from "../engine/hosts";
 import { describeWhen } from "../engine/routineTime";
 import { setView } from "../state/ui";
+import { setSettingsOf } from "./Settings";
 import type { AgentNote, CaptainMessage } from "../state/types";
 import { UserMsg } from "../ui/MsgActions";
 import { Icon } from "../ui/Icon";
@@ -92,8 +93,9 @@ export function AgentView() {
           </For>
         </div>
         <span class="spacer" data-tauri-drag-region />
-        <Show when={!host()}>
-          <button class="icon-btn" title={t("에이전트 설정")} aria-label={t("에이전트 설정")} onClick={() => setView({ name: "settings", tab: "agent" })}>
+        {/* another device's agent: its settings, that device picked */}
+        <Show when={!host() || far()?.settings}>
+          <button class="icon-btn" title={t("에이전트 설정")} aria-label={t("에이전트 설정")} onClick={() => (setSettingsOf(host()), setView({ name: "settings", tab: "agent" }))}>
             <Icon name="gear" size={16} />
           </button>
         </Show>
