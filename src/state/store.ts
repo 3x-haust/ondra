@@ -319,7 +319,7 @@ export const isAgentChat = (key: string) => {
 export const agentWork = (t: Task | undefined): boolean => !!t && (!!t.agent || (!!t.parentId && !!taskById(t.parentId)?.agent));
 /** the questions of the agent's work, for the 에이전트 tab */
 const agentDecision = (d: Decision) => d.taskId.startsWith("main:") ? isAgentChat(d.taskId.slice(5)) : agentWork(taskById(d.taskId));
-export const agentDecisions = (space?: SpaceId): Decision[] => state.decisions.filter((d) => agentDecision(d) && (!space || (d.taskId.startsWith("main:") ? d.taskId.slice(5).split("~")[0] : taskById(d.taskId)?.space) === space));
+export const agentDecisions = (space?: SpaceId): Decision[] => [...state.decisions, ...mirroredDecisions()].filter((d) => agentDecision(d) && (!space || (d.taskId.startsWith("main:") ? d.taskId.slice(5).split("~")[0] : taskById(d.taskId)?.space) === space));
 /** Normalize separators only for drive paths: a backslash is a valid Mac filename character. */
 const projectPath = (d: string) => /^[A-Za-z]:[\\/]/.test(d) ? d.replace(/\\/g, "/") : d;
 const norm = (d: string) => projectPath(d).replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");

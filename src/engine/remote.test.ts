@@ -156,6 +156,55 @@ describe("calls from a Mac allowed in", () => {
   });
 });
 
+describe("this device's Discord agent, for a device that shows it", () => {
+  const sentData = () => sent.filter((c) => c.cmd === "send" && c.conn === 1).map((c) => c.data as Record<string, unknown>);
+  const ofKind = (t: string) => sentData().filter((d) => d.t === t);
+  const watchWith = (extra: Record<string, unknown>) => hear({ ev: "msg", conn: 1, data: { t: "watch", projects: [], sessions: true, same: true, ...extra } });
+  beforeEach(() => {
+    setState("settings", "agent", { on: true, name: "메타몽" });
+    setState("tasks", (l) => [...l, job("agentJob", { agent: {} })]);
+    setState("captain", [
+      { id: "m-main", at: 1, space: "home", from: "me", text: "main" },
+      { id: "m-agent", at: 2, space: "home", project: "@agent", from: "me", text: "민수: 안녕" },
+    ] as never);
+    setState("decisions", [{ id: "d-agent", taskId: "agentJob", at: 1, question: "?", options: [{ id: "a", label: "A" }], context: [], kind: "ask" }] as never);
+    setState("agentNotes", [{ id: "n1", kind: "lesson", text: "짧게 말해요", at: 1 }]);
+    sent.length = 0;
+  });
+
+  it("sends its chat, work, questions and memory", async () => {
+    watchWith({ agent: true });
+    await vi.waitFor(() => expect(ofKind("agent")).toHaveLength(1));
+    expect(ofKind("agent")[0].agent).toMatchObject({ name: "메타몽", on: true, notes: [{ id: "n1" }] });
+    expect(ofKind("chat").flatMap((d) => (d.msgs as { id: string }[]).map((m) => m.id))).toEqual(["m-main", "m-agent"]);
+    expect(ofKind("patch").flatMap((d) => (d.tasks as { id: string }[]).map((x) => x.id))).toContain("agentJob");
+    expect(ofKind("decisions").flatMap((d) => (d.list as { id: string }[]).map((x) => x.id))).toEqual(["d-agent"]);
+  });
+  it("its chat is seen there, never written to", async () => {
+    watchWith({ agent: true });
+    expect((await call("say", [{ space: "home", project: "@agent", text: "hi" }]))?.error).toBeTruthy();
+    expect(state.captain.map((m) => m.id)).toEqual(["m-main", "m-agent"]);
+  });
+  it("forgets one of its notes when told from there, only for a device that shows it", async () => {
+    watchWith({});
+    expect((await call("agentForget", ["n1"]))?.error).toBeTruthy();
+    expect(state.agentNotes?.map((n) => n.id)).toEqual(["n1"]);
+    watchWith({ agent: true });
+    expect((await call("agentForget", ["nope"]))?.error).toBeTruthy();
+    expect((await call("agentForget", ["n1"]))?.error).toBeUndefined();
+    expect(state.agentNotes).toEqual([]);
+  });
+  it("none of it to a device that doesn't show it (an older Ondra)", async () => {
+    watchWith({});
+    await vi.waitFor(() => expect(ofKind("chat").length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(ofKind("agent")).toEqual([]);
+    expect(ofKind("chat").flatMap((d) => (d.msgs as { id: string }[]).map((m) => m.id))).toEqual(["m-main"]);
+    expect(ofKind("patch").flatMap((d) => (d.tasks as { id: string }[]).map((x) => x.id))).not.toContain("agentJob");
+    expect(ofKind("decisions").flatMap((d) => d.list as unknown[])).toEqual([]);
+  });
+});
+
 describe("a connection goes both ways", () => {
   const PC = "e".repeat(64);
   const allowed = () => hear({ ev: "devices", list: [{ id: PC, name: "PC", addedAt: 1, lastSeen: 1 }] });

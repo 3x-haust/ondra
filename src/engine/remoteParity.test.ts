@@ -3,10 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { decisionFor, decisionsIn, freshState, queueWith, setState, state, taskById } from "../state/store";
-import { mirror, readAt, remoteProjectId, setMirror } from "../state/mirror";
+import { agentDecisions, allDecisions, decisionFor, decisionsIn, freshState, queueWith, setState, state, taskById } from "../state/store";
+import { hostSpaceId, mirror, readAt, remoteProjectId, setMirror } from "../state/mirror";
 import type { Decision, Task } from "../state/types";
-import { apply, onFarEnded, onPeer } from "./hosts";
+import { apply, farForgetNote, onFarEnded, onPeer } from "./hosts";
 import { create, decisionsFor, secretCalls } from "./remote";
 import { createTask, decide, duplicateTask, finishTask, markRead, pauseTask, setPriority, setTaskAccount, setWeight, togglePin } from "./tasks";
 
@@ -143,7 +143,7 @@ describe("its questions", () => {
     setState("projects", [{ id: "p1", space: "home", name: "p1", folder: "/repo/p1" }]);
     setState("tasks", [job({ id: "kept", project: "p1" }), job({ id: "asked", from: { device: "dev", space: "home" } }), job({ id: "other" })]);
     setState("decisions", [ask({ id: "d-kept", taskId: "kept" }), ask({ id: "d-asked", taskId: "asked" }), ask({ id: "d-other", taskId: "other" }), ask({ id: "d-main", taskId: "main:home" })]);
-    expect(decisionsFor("dev", new Set(["p1"])).map((d) => d.id)).toEqual(["d-kept", "d-asked"]);
+    expect(decisionsFor({ device: "dev", watch: new Set(["p1"]) }).map((d) => d.id)).toEqual(["d-kept", "d-asked"]);
   });
 });
 
@@ -209,5 +209,34 @@ describe("a project's secrets, asked from the Mac that added it", () => {
   it("refuse a project that device doesn't have", async () => {
     await expect(secretCalls.secretList("ghost")).rejects.toThrow();
     await expect(secretCalls.secretDelete({ project: remoteProjectId(HOST, "repo"), name: "X" })).rejects.toThrow();
+  });
+});
+
+describe("that device's Discord agent", () => {
+  const SPACE = hostSpaceId(HOST, "home");
+  it("its chat and questions stay the agent's here, out of 내 차례", () => {
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "chat", all: true, msgs: [{ id: "m1", at: 1, space: "home", project: "@agent", from: "me", text: "민수: 안녕" }], asks: [ask({ id: "dm", taskId: "main:home~@agent" })] } });
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "patch", tasks: [{ id: "aj", head: head({ id: "aj", agent: {} }), from: 0, entries: [], n: 0 }] } });
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "decisions", list: [ask({ id: "dj", taskId: "aj" })] } });
+    expect(mirror.hosts[HOST].chat?.map((m) => [m.space, m.project])).toEqual([[SPACE, "@agent"]]);
+    expect(agentDecisions(SPACE).map((d) => d.id).sort()).toEqual(["dj", "dm"]);
+    expect(allDecisions().map((d) => d.id)).toEqual([]);
+  });
+  it("what it is and remembers is kept as sent", () => {
+    const agent = { name: "메타몽", on: true, status: { state: "on" }, notes: [], ways: "멘션 안 해도 들어", routines: [] };
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "agent", agent } });
+    expect(mirror.hosts[HOST].agent).toEqual(agent);
+  });
+  it("잊기 on one of its notes goes to that device, and the note comes back if it can't", async () => {
+    const note = { id: "n1", kind: "lesson" as const, text: "짧게", at: 1 };
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "agent", agent: { name: "메타몽", on: true, status: { state: "on" }, notes: [note], ways: "", routines: [] } } });
+    const done = farForgetNote(HOST, "n1");
+    expect(mirror.hosts[HOST].agent?.notes).toEqual([]);
+    await Promise.resolve();
+    const c = calls().find((x) => x.fn === "agentForget")!;
+    expect(c.args).toEqual(["n1"]);
+    onPeer({ ev: "peer-msg", peer: HOST, data: { t: "ret", seq: c.seq, error: "unknown: agentForget" } });
+    await done;
+    expect(mirror.hosts[HOST].agent?.notes.map((n) => n.id)).toEqual(["n1"]);
   });
 });
