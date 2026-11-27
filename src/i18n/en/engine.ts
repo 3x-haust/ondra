@@ -206,6 +206,7 @@ export default {
   "컨텍스트 압축 중": "Compacting context",
   "재시도 {a}/{m}": "Retry {a}/{m}",
   "연결이 끊겼어요 · 다시 연결되면 이어서 해요": "Connection lost · resumes when it's back",
+  "{name}의 메인에 보낼 수 없어요 · 그 기기의 Ondra를 업데이트해 주세요": "Can't reach {name}'s main · update Ondra on that device",
   "모델 변경 → {m}": "Model changed → {m}",
   "모델 → {m}": "Model → {m}",
   "확인 필요 · {what}": "Still to check: {what}",

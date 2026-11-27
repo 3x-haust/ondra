@@ -37,7 +37,7 @@ import { canUseTools, isDirect } from "./connections";
 import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
-import { mirror } from "../state/mirror";
+import { mirror, splitSpaceId } from "../state/mirror";
 import { clearFar, editFar, farMessage, farOf, sayFar, stopFar } from "../state/shared";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
 import { isUseCall } from "./describe";
@@ -831,6 +831,10 @@ async function ensureCaptain(space: string) {
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
   // a simulation in a space this app has no account for (an empty dev app for evals) runs on any account
   const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "", isAgentChat(space) ? agentAccount(sp(space), agentChannel(space)) : undefined) ?? (worlds.has(space) ? state.accounts[0] : undefined);
+  // another device's workspace with no account here: only that device's main can answer, and it doesn't
+  // take this device's messages (an older Ondra, or one that lets this device use only some workspaces)
+  const far = splitSpaceId(sp(space))?.host;
+  if (!acc && far) throw new Error(tr("{name}의 메인에 보낼 수 없어요 · 그 기기의 Ondra를 업데이트해 주세요", { name: state.settings.hosts?.find((h) => h.id === far)?.name ?? tr("기기") }));
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   const ui = extensionUi(`main:${space}`, agent, () => attached.has(space));
