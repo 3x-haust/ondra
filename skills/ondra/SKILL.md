@@ -65,7 +65,9 @@ done once, from either side.
    (there: 설정 › 연결 › 기기 추가; with computer use, paste it there).
 2. The other one connects and this Mac asks the user to allow it (a card in Ondra): that click
    is theirs. Say so in a line, and check `remote.status` after.
-Or the other way: `remote.add` with the other device's link, and its user allows it there.
+`remote.add` with the other device's link only uses that device (one way): letting a device in
+stays the user's, so for both ways make this Mac's link instead, or the user pastes the link in
+설정 › 연결 › 기기 추가.
 
 What stays the user's: letting a Mac in, a job's security approvals, and secret values.
 
