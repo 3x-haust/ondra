@@ -32,6 +32,7 @@ import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
+import { moveCancel, moveImport, movePut } from "./spaceMove";
 import { mirrorReplacer } from "./farMirror";
 import { mirrorPath, normPath } from "./farPaths";
 import { engine } from "./rpc";
@@ -379,6 +380,16 @@ async function handle(conn: number, msg: Record<string, unknown>) {
         let value: unknown;
         if (fn === "create") value = create(c, args[0] as Parameters<typeof create>[1]);
         else if (fn === "addProject") value = addProjectFor(c, args[0], args[1]);
+        // a workspace moving here from that device (engine/spaceMove.ts)
+        else if (fn === "space.put") value = await movePut(c.device, args[0], args[1], args[2], args[3]);
+        else if (fn === "space.cancel") value = moveCancel(c.device, args[0]);
+        else if (fn === "space.import") {
+          const r = await moveImport(c.device, args[0], deviceName(c.device));
+          // a device kept to some workspaces may use the one it brought; it sees it at once
+          const may = state.settings.deviceSpaces?.[c.device];
+          setDeviceSpaces(c.device, may ? [...may, r.space] : undefined);
+          value = r;
+        }
         else if (fn === "decide") {
           // a question of a job that device may reach
           const d = state.decisions.find((x: Decision) => x.id === args[0]);
