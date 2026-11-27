@@ -19,7 +19,9 @@ permissions:
 
 concurrency:
   group: windows-installer-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only main saves the caches every build starts from, so a main build runs to the end (a newer push
+  # waits for it) instead of being cancelled before it saves anything.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -34,6 +36,11 @@ jobs:
       run:
         shell: pwsh
     steps:
+      # Defender scans every file the build writes (crates, object files, the installer); the runner
+      # is thrown away after the job, so it doesn't need it.
+      - name: Turn off real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Continue
+
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.tag }}
@@ -62,8 +69,11 @@ jobs:
       # helper, and the dictation and browser helpers the app's build script makes, each with its own
       # target dir) and the cargo registry; only those crates themselves are compiled again. The key
       # follows the toolchain and the Cargo.locks.
+      # Only main saves it (pull requests read main's caches): one copy per pull request filled the
+      # repository's 10 GB, and GitHub then deleted the caches builds were about to use.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             src-tauri -> target
             remote/host -> target
@@ -72,8 +82,9 @@ jobs:
 
       # The app crate is compiled again on every run (the checkout makes its sources new), so the
       # incremental state of the last build here or on main is kept: rustc then redoes only the code
-      # that changed. Saved under each commit; the newest one of this pull request or main comes back.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # that changed. main saves it under each commit (after the tests, whose build keeps its state
+      # there too); the newest one comes back.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: src-tauri/target/${{ env.TARGET }}/release/incremental
           key: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ github.sha }}
@@ -95,6 +106,20 @@ jobs:
       - name: Use the kept remote helper build
         if: steps.remote.outputs.cache-hit == 'true'
         run: git ls-files remote/host src-tauri/src/winvault.rs | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
+
+      # The dictation helper, the same way (its own crate only; about 45 s).
+      - id: dictate
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            dictate/target/${{ env.TARGET }}/release/ondra?dictate*
+            dictate/target/${{ env.TARGET }}/release/deps/ondra?dictate*
+            dictate/target/${{ env.TARGET }}/release/.fingerprint/ondra-dictate-*
+          key: ondra-dictate-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('dictate/**', '!dictate/target/**', '.github/workflows/windows.yml') }}
+
+      - name: Use the kept dictation helper build
+        if: steps.dictate.outputs.cache-hit == 'true'
+        run: git ls-files dictate | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
 
       - name: Build the pinned coding agent
         run: |
@@ -118,9 +143,16 @@ jobs:
           ONDRA_ENGINE_BUN_EXE: ${{ steps.bun.outputs.bun-path }}
         # rust-cache turns incremental builds off; the release profile's own setting (on for the app,
         # off for the remote helper) applies here, as in a release build.
+        # Outside a release the installer is only installed and checked here, so it is not compressed:
+        # LZMA took a minute and a half.
         run: |
           Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
-          pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
+          $fast = @()
+          if (!'${{ inputs.tag }}') {
+            '{"bundle":{"windows":{"nsis":{"compression":"none"}}}}' | Set-Content -Encoding utf8NoBOM "$env:RUNNER_TEMP/nsis-store.json"
+            $fast = '--config', "$env:RUNNER_TEMP/nsis-store.json"
+          }
+          pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign @fast '--' --locked
 
       - name: Verify installed payload
         run: |
@@ -203,6 +235,13 @@ jobs:
             farfs::tests components::tests::bundled_engine_needs_the_platform_executable_and_its_assets `
             fs::tests::copy_image_puts_the_picture_on_the_clipboard `
             components::tests::chrome_zip_unpacks_into_a_runnable_browser
+
+      - name: Save the incremental build state
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src-tauri/target/${{ env.TARGET }}/release/incremental
+          key: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ github.sha }}
 
       # a release: the installer is also the update package, signed with the updater key (never printed)
       - name: Sign the installer for the updater
