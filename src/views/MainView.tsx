@@ -1,6 +1,7 @@
 // Main: the conversation with the one who splits your requests into jobs.
 import { awaitsMerge } from "../state/needs";
 import { AlarmLine, RoutineCard } from "./Routines";
+import { idleRun } from "../engine/routines";
 import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
@@ -1001,10 +1002,10 @@ export function MainView() {
 
 const TONE_ORDER = ["bad", "ask", "review", "live", "idle", "done"] as const;
 const toneRank = (x: Task) => (discarded(x) ? TONE_ORDER.length : TONE_ORDER.indexOf(stateMeta(x).tone));
-/** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. */
+/** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. A routine's run with nothing to do isn't one. */
 const projectTasks = (project: string) =>
   tasksShown(state.space)
-    .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
+    .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived && !idleRun(x))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 
 

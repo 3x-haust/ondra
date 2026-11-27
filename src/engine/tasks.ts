@@ -3722,7 +3722,7 @@ const asksUser = (text: string) =>
   /알려\s?주시면|알려\s?주세요|해\s?주세요|해\s?주시면|주시면 이어|정해\s?주세요|골라\s?주세요|waiting for (you|your)|let me know|once you('ve| have)?\b/i.test(text.slice(-600));
 
 /** The first line of the job's last report to the user, if it wrote one. */
-export function lastReport(t: Task): string | undefined {
+export function lastReport(t: Pick<Task, "entries">): string | undefined {
   for (let i = t.entries.length - 1; i >= 0; i--) {
     const e = t.entries[i];
     if (e.kind !== "text") continue;

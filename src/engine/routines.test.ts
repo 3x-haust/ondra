@@ -6,7 +6,7 @@ import type { Routine } from "../state/types";
 import { applyRoutes, nowLine } from "./captain";
 import { CAPTAIN_SYSTEM } from "./prompts";
 import { eventText, newEvents, parseEvents } from "./routineEvents";
-import { addRoutine, ALARM_LATE, NOTHING, pollRoutine, quietRun, ringAlarm, routineById, routineLine, runRoutine, runMessage, saidNothing, saveRoutine, settleRun, SNOOZE_MIN, snoozeAlarm, tickRoutines } from "./routines";
+import { addRoutine, ALARM_LATE, idleRun, NOTHING, pollRoutine, quietRun, ringAlarm, routineById, routineLine, runRoutine, runMessage, saidNothing, saveRoutine, settleRun, SNOOZE_MIN, snoozeAlarm, tickRoutines } from "./routines";
 import { dayTime, describeWhen, nextRun, parseWhen } from "./routineTime";
 import { agentOf } from "./tasks";
 import { markDead } from "./rpc";
@@ -168,6 +168,18 @@ describe("routine runs", () => {
     expect(quietRun(t)).toBe(true);
     settleRun(t);
     expect(taskById(id)!.archived).toBe(true);
+  });
+
+  it("a finished run with nothing to do is idle; one that did something, or still runs, isn't", () => {
+    const r = make({ quiet: false });
+    const idle = runRoutine(r.id, { manual: true })!;
+    setState("tasks", (x) => x.id === idle, { status: "done", summary: `${NOTHING} 새 릴리즈 없음` });
+    const did = runRoutine(r.id)!;
+    setState("tasks", (x) => x.id === did, { status: "done", summary: "모바일을 0.97.0에 맞췄어요" });
+    expect(idleRun(taskById(idle)!)).toBe(true);
+    expect(idleRun(taskById(did)!)).toBe(false);
+    expect(idleRun({ ...taskById(idle)!, status: "running" })).toBe(false);
+    expect(idleRun({ ...taskById(did)!, routine: undefined, summary: `${NOTHING} x` })).toBe(false);
   });
 
   it("an event routine looks at the repo and runs for what is new", async () => {
