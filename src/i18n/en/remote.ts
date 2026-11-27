@@ -26,4 +26,6 @@ export default {
   "폴더예요": "It's a folder",
   "조각 순서가 맞지 않아요": "Pieces arrived out of order",
   "이름이 잘못됐어요": "Invalid name",
+  "이 기기의 워크스페이스를 모두 쓸 수 있는 기기만 맡을 수 있어요": "Only a device that may use every workspace here can take it over",
+  "{name}이(가) 연결돼 있어야 넘겨받을 수 있어요": "{name} has to be connected to hand it over",
 };

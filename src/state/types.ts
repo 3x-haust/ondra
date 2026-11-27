@@ -875,6 +875,10 @@ export interface AgentSettings {
   pins?: { decision: string; channel: string; message: string }[];
   /** 2: the work place for every channel defaults to none (an older one was set to none once) */
   v?: number;
+  /** when this device took the Discord connection (on): of two that both hold it, the later one keeps it */
+  claimAt?: number;
+  /** the connected device holding it when this one doesn't (it handed over, or it was already there) */
+  hub?: string;
 }
 
 export interface AppState {

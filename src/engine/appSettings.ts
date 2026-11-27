@@ -21,9 +21,11 @@ interface Entry {
 
 const agent = () => state.settings.agent ?? { on: false, name: "메타몽" };
 const setAgent = async (patch: Record<string, unknown>) => {
-  const { setAgent: put, startAgent, stopAgent } = await import("./discord");
+  const { setAgent: put, stopAgent } = await import("./discord");
+  // turned on: taken from the device holding it, if one does (engine/agentHub.ts)
+  if (patch.on === true) return (await import("./agentHub")).takeHere();
   put(patch);
-  if ("on" in patch) void (patch.on ? startAgent() : stopAgent());
+  if ("on" in patch) void stopAgent();
 };
 
 export const SETTINGS: Record<string, Entry> = {
