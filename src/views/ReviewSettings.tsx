@@ -2,7 +2,7 @@
 // workspace's own accounts). Each reads it through both lenses (설계 검토, 코드 검토) and the job
 // gets their findings merged: where they agree first, where they differ checked once. None set:
 // the job's own model, as before. Laid out like the account list: one row per reviewer.
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Index, Show } from "solid-js";
 import { setState, state, ownSpaces } from "../state/store";
 import type { Account, Reviewer, SpaceId } from "../state/types";
 import { reviewersFor } from "../engine/crosscheck";
@@ -56,9 +56,10 @@ export function ReviewSettings() {
             </div>
           }
         >
-          <For each={list()}>
+          <Index each={list()}>
+            {/* by place, so changing a reviewer's model or effort keeps its row (and an open picker) */}
             {(r, i) => {
-              const acc = () => state.accounts.find((a) => a.id === r.account);
+              const acc = () => state.accounts.find((a) => a.id === r().account);
               return (
                 <div class="prov-row">
                   <span class="prov-logo">
@@ -67,18 +68,18 @@ export function ReviewSettings() {
                     </Show>
                   </span>
                   <div class="prov-text">
-                    <span class="prov-title">{acc() ? accountName(acc()!, true) : r.account}</span>
+                    <span class="prov-title">{acc() ? accountName(acc()!, true) : r().account}</span>
                     <span class="prov-sub">{t("설계 검토 · 코드 검토")}</span>
                   </div>
                   <span class="spacer" />
-                  <ModelPicker accountId={r.account} model={r.model} thinking={r.thinking ?? ""} onChange={(m, e) => at(i(), { account: r.account, model: m, ...(e ? { thinking: e } : {}) })} />
-                  <button class="icon-btn sm prov-more" title={t("빼기")} aria-label={t("빼기")} onClick={() => save(list().filter((_, j) => j !== i()))}>
+                  <ModelPicker accountId={r().account} model={r().model} thinking={r().thinking ?? ""} onChange={(m, e) => at(i, { account: r().account, model: m, ...(e ? { thinking: e } : {}) })} />
+                  <button class="icon-btn sm prov-more" title={t("빼기")} aria-label={t("빼기")} onClick={() => save(list().filter((_, j) => j !== i))}>
                     <Icon name="x" size={14} />
                   </button>
                 </div>
               );
             }}
-          </For>
+          </Index>
         </Show>
         <Show when={list().length < MAX && accounts().length}>
           <label class="prov-add ag-add">

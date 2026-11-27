@@ -4,6 +4,7 @@
 import { For, Show } from "solid-js";
 import { hostStatusText, mirror, splitSpaceId, type HostInfo } from "../state/mirror";
 import { ago } from "./bits";
+import { reconcile } from "solid-js/store";
 import { setState, state } from "../state/store";
 import { windowLabel } from "../state/limits";
 import { setView } from "../state/ui";
@@ -36,10 +37,12 @@ export function chosenComputer(mine: string = state.space): Place | undefined {
 }
 
 export function setComputer(mine: string, p: Omit<Place, "space"> | undefined) {
-  // replaced whole (a store merges objects): this Mac clears it, another account drops the model
+  // replaced whole (a store merges objects): this Mac clears it, another account drops the model.
+  // reconcile, not clear-then-set: the place never goes missing in between, so the chip showing it
+  // (and its open picker) stays while its model or effort changes
   if (!state.settings.computers) setState("settings", "computers", {});
-  setState("settings", "computers", mine, undefined!);
-  if (p) setState("settings", "computers", mine, { host: p.host, account: p.account, model: p.model, thinking: p.thinking });
+  if (!p) setState("settings", "computers", mine, undefined!);
+  else setState("settings", "computers", mine, reconcile({ host: p.host, account: p.account, model: p.model, thinking: p.thinking }));
 }
 
 /** the account there new work runs on: the one picked, else what that workspace would pick */
