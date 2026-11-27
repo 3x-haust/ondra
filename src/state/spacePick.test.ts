@@ -1,7 +1,7 @@
 import { reconcile } from "solid-js/store";
 import { beforeEach, describe, expect, it } from "vitest";
 import { freshState, ownSpace, setState } from "./store";
-import { hostSpaceId, linkWord, type HostMirror } from "./mirror";
+import { hostSpaceId, linkTone, linkWord, type HostMirror } from "./mirror";
 import { carried } from "./workspace";
 
 const HOST = "a".repeat(64);
@@ -45,5 +45,19 @@ describe("linkWord", () => {
     expect(linkWord(h("lost", 1))).toBe("연결 안 됨");
     expect(linkWord(h("off"))).toBe("연결 안 됨");
     expect(linkWord(h("denied"))).toBe("연결 안 됨");
+  });
+});
+
+describe("linkTone (the Mac bar's status color)", () => {
+  const h = (status: HostMirror["status"], since?: number): HostMirror => ({ status, since, projects: [], tasks: [] });
+  it("tells connected, trying, lost and disconnected here apart", () => {
+    expect(linkTone(h("ok"))).toBe("ok");
+    expect(linkTone(undefined)).toBe("trying");
+    expect(linkTone(h("connecting"))).toBe("trying");
+    expect(linkTone(h("waiting"))).toBe("trying");
+    expect(linkTone(h("connecting", 1))).toBe("down");
+    expect(linkTone(h("lost", 1))).toBe("down");
+    expect(linkTone(h("denied"))).toBe("down");
+    expect(linkTone(h("off"))).toBe("off");
   });
 });

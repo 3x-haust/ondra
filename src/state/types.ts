@@ -789,6 +789,8 @@ export interface Settings {
   deviceSpaces?: Record<string, string[]>;
   /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 기기", its letters, a tint from the name) */
   thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
+  /** the Mac bar's order, by device id ("local" is this one; dragged there); one not in it goes after, as added */
+  macOrder?: string[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** the sidebar's project order, by id (dragged there); a project not in it goes after, as added */
   projectOrder?: string[];

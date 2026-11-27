@@ -12,9 +12,9 @@ import {
   Palette, PawPrint, Pizza, Plane, Puzzle, Rocket, Shapes, Snowflake, Sparkles, SquareCheck, SquareTerminal, Star, Sun, Target, Minus, Plus, ChevronLeft, ChevronRight, RotateCcw,
   ThumbsUp, TrainFront, TreePine, Trophy, Umbrella, Users, Utensils, Wrench, Zap,
 } from "lucide-solid";
-import { decisionsIn, setState, spacesOf, state } from "../state/store";
+import { decisionsIn, inOrder, moveMac, setState, spacesOf, state } from "../state/store";
 import { switchSpace } from "../state/workspace";
-import { linkWord, mirror } from "../state/mirror";
+import { linkTone, linkWord, mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
 import { askRemoveDevice, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
@@ -47,18 +47,19 @@ const LOCAL = "local";
 export interface Mac { id: string; name: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; local: boolean }
 type Look = Partial<Pick<Mac, "name" | "icon" | "emoji" | "hue" | "colors" | "grain" | "theme">>;
 
-/** this Mac, then every Mac added, in the bar's order (⌃1 is this Mac) */
+/** this Mac and every Mac added, in the bar's order (dragged there; ⌃1 is the first) */
 export function macs(): Mac[] {
   const me = state.settings.thisMac;
-  return [
+  return inOrder([
     { id: LOCAL, name: me?.name || thisComputer(), icon: me?.icon, emoji: me?.emoji, hue: me?.hue, colors: me?.colors, grain: me?.grain, theme: me?.theme, local: true },
     ...(state.settings.hosts ?? []).map((h) => ({ id: h.id, name: h.name, icon: h.icon, emoji: h.emoji, hue: h.hue, colors: h.colors, grain: h.grain, theme: h.theme, local: false })),
-  ];
+  ], state.settings.macOrder);
 }
 /** another Mac is added: picking where new work runs means something */
 export const otherMacs = () => (state.settings.hosts ?? []).length > 0;
 
-const statusOf = (m: Mac) => (m.local ? "ok" : (mirror.hosts[m.id]?.status ?? "connecting"));
+/** how its link is: this Mac always "ok" */
+const toneOf = (m: Mac) => (m.local ? "ok" : linkTone(mirror.hosts[m.id]));
 /** the device whose workspace is open */
 const current = () => state.spaces.find((s) => s.id === state.space)?.host ?? LOCAL;
 /** a device's workspaces here (another device's come once it has connected) */
@@ -455,10 +456,78 @@ function ColorPop(props: { mac: Mac; at: DOMRect }) {
   );
 }
 
+// a device dragged left or right goes there (pointer events: the webview keeps HTML drag-and-drop
+// for files); the menu's 옮기기 does the same without dragging
+const [dragMac, setDragMac] = createSignal<{ id: string; to: number } | null>(null);
+/** the press that may become a drag; `cancelled`: Escape ended its drag before the button was let go */
+let dragFrom: { id: string; x: number; pointer: number; cancelled?: boolean } | undefined;
+let justDragged = false;
+const barIds = () => macs().map((m) => m.id);
+function macDown(e: PointerEvent, id: string) {
+  if (e.button !== 0) return;
+  dragFrom = { id, x: e.clientX, pointer: e.pointerId };
+}
+function macMove(e: PointerEvent & { currentTarget: HTMLElement }) {
+  if (!dragFrom || dragFrom.cancelled || e.pointerId !== dragFrom.pointer) return;
+  if (!dragMac()) {
+    // let go somewhere else before it became a drag
+    if (!(e.buttons & 1)) return void (dragFrom = undefined);
+    if (Math.abs(e.clientX - dragFrom.x) < 5) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.documentElement.classList.add("mbar-dragging");
+    document.addEventListener("keydown", escDrag, true);
+  }
+  const id = dragFrom.id;
+  const others = [...document.querySelectorAll<HTMLElement>(".mbar [data-mac]")].filter((b) => b.dataset.mac !== id);
+  const to = others.filter((b) => {
+    const r = b.getBoundingClientRect();
+    return r.left + r.width / 2 < e.clientX;
+  }).length;
+  setDragMac({ id, to });
+}
+function stopDrag() {
+  setDragMac(null);
+  document.documentElement.classList.remove("mbar-dragging");
+  document.removeEventListener("keydown", escDrag, true);
+}
+function macDragEnd(drop: boolean) {
+  const d = dragMac();
+  const cancelled = dragFrom?.cancelled;
+  dragFrom = undefined;
+  stopDrag();
+  if (!d && !cancelled) return;
+  // the click that ends a drag (or a cancelled one) doesn't open the device
+  justDragged = true;
+  setTimeout(() => (justDragged = false), 0);
+  if (drop && d && barIds().indexOf(d.id) !== d.to) moveMac(barIds(), d.id, d.to);
+}
+const escDrag = (e: KeyboardEvent) => {
+  if (e.key !== "Escape" || !dragFrom) return;
+  e.preventDefault();
+  e.stopPropagation();
+  dragFrom.cancelled = true;
+  stopDrag();
+};
+/** where the dragged device would land: before this one, or after the last (nothing when it stays put) */
+function dropAt(id: string): "before" | "after" | undefined {
+  const d = dragMac();
+  if (!d || d.id === id) return undefined;
+  const ids = barIds();
+  if (ids.indexOf(d.id) === d.to) return undefined;
+  const others = ids.filter((x) => x !== d.id);
+  if (others[d.to] === id) return "before";
+  if (d.to >= others.length && others[others.length - 1] === id) return "after";
+  return undefined;
+}
+
 function macMenu(m: Mac, at: DOMRect): MenuEntry[] {
   const pick = (p: Choice) => () => requestAnimationFrame(() => setOpen({ id: m.id, at, pick: p }));
+  const ids = barIds();
+  const i = ids.indexOf(m.id);
   return [
     { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: pick("name") },
+    ...(i > 0 ? [{ id: "left", label: t("왼쪽으로 옮기기"), icon: "back", run: () => moveMac(ids, m.id, i - 1) }] : []),
+    ...(i < ids.length - 1 ? [{ id: "right", label: t("오른쪽으로 옮기기"), icon: "arrow", run: () => moveMac(ids, m.id, i + 1) }] : []),
     "sep",
     { id: "icon", label: t("아이콘 바꾸기"), icon: "smilePlus", run: pick("icon") },
     { id: "color", label: t("색 바꾸기"), icon: "palette", run: pick("color") },
@@ -490,18 +559,36 @@ export function MacBar() {
                 <button
                   class="mbar-mac"
                   style={tintVars(m())}
-                  classList={{ on: current() === id, ctx: ctxFor() === `mac:${id}` || open()?.id === id, off: !tabsOf(m()).length, away: statusOf(m()) !== "ok" }}
+                  data-mac={id}
+                  data-link={m().local ? undefined : toneOf(m())}
+                  classList={{
+                    on: current() === id,
+                    ctx: ctxFor() === `mac:${id}` || open()?.id === id,
+                    off: !tabsOf(m()).length,
+                    away: toneOf(m()) !== "ok",
+                    dragging: dragMac()?.id === id,
+                    "drop-before": dropAt(id) === "before",
+                    "drop-after": dropAt(id) === "after",
+                  }}
                   aria-pressed={current() === id}
                   aria-label={m().local ? m().name : `${m().name}, ${t(linkWord(mirror.hosts[id]))}`}
                   title={[m().name, m().local ? "" : hostState(id), i() < 9 ? shortcutHint(`mac${i() + 1}` as ShortcutId) : ""].filter(Boolean).join(" · ")}
-                  onClick={() => pickMac(id)}
+                  onClick={() => !justDragged && pickMac(id)}
+                  onPointerDown={(e) => macDown(e, id)}
+                  onPointerMove={macMove}
+                  onPointerUp={() => macDragEnd(true)}
+                  onPointerCancel={() => macDragEnd(false)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     const at = e.currentTarget.getBoundingClientRect();
                     openMenuAt(`mac:${id}`, () => macMenu(m(), at), e);
                   }}
                 >
-                  <MacMark mac={m()} />
+                  <span class="mbar-mark">
+                    <MacMark mac={m()} />
+                    {/* another device's link, on the corner of its icon or emoji (a dot mark is colored itself) */}
+                    <Show when={!m().local && (m().emoji || (m().icon && MAC_ICONS[m().icon!]))}><i class="mbar-link" aria-hidden="true" /></Show>
+                  </span>
                   {/* a question waits in one of its workspaces (the tabs show only the open device's) */}
                   <Show when={current() !== id && tabsOf(m()).some((s) => decisionsIn(s.id).length)}><i class="space-alert" /></Show>
                   {/* the one picked opens into a pill with its name */}

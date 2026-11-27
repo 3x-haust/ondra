@@ -127,12 +127,20 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
   });
 }
 
+/** a device's link as the Mac bar's mark colors it: connected, trying for the first time (or
+ *  waiting to be allowed), not connected after all, or disconnected here on purpose */
+export type LinkTone = "ok" | "trying" | "down" | "off";
+export function linkTone(h: HostMirror | undefined): LinkTone {
+  const s = h?.status ?? "connecting";
+  if (s === "ok" || s === "off") return s;
+  return (s === "connecting" || s === "waiting") && !h?.since ? "trying" : "down";
+}
+
 /** a device's state in one word (the Mac bar's mark, read out): trying for the first time is
  *  "연결 중"; once it was connected and isn't, "연결 안 됨" even while it tries again */
 export function linkWord(h: HostMirror | undefined): "연결됨" | "연결 중" | "연결 안 됨" {
-  const s = h?.status ?? "connecting";
-  if (s === "ok") return "연결됨";
-  return (s === "connecting" || s === "waiting") && !h?.since ? "연결 중" : "연결 안 됨";
+  const tone = linkTone(h);
+  return tone === "ok" ? "연결됨" : tone === "trying" ? "연결 중" : "연결 안 됨";
 }
 
 /** a Mac's state in words, the same everywhere (settings, sidebar, the run chip, a job): "연결됨",
