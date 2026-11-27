@@ -1,4 +1,4 @@
-<!-- Vendored from epoko77-ai/im-not-ai (skills/humanize-korean/references/quick-rules.md), MIT License, Copyright (c) 2026 epoko77-ai. See LICENSES.md. A reference of tells for Korean text, not a checklist: each line is a pattern and its fix; use what helps the reader. The change-rate guard, self-check and grading parts belong to the original tool's pipeline (its scripts aren't here); skip them. -->
+<!-- Vendored from epoko77-ai/im-not-ai (skills/humanize-korean/references/quick-rules.md), MIT License, Copyright (c) 2026 epoko77-ai. License text: the app's third-party notices. A reference of tells for Korean text, not a checklist: each line is a pattern and its fix; use what helps the reader. The change-rate guard, self-check and grading parts belong to the original tool's pipeline (its scripts aren't here); skip them. -->
 
 # Quick Rules — Monolith Fast Path 전용 (v2.0)
 

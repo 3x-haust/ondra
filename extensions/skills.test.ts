@@ -323,10 +323,11 @@ describe("code-map skill", () => {
   const body = readFileSync(map.filePath, "utf8");
   const script = join(map.baseDir, "scripts", "codemap.mjs");
 
-  it("ships its script executable, shows each command, and credits Groma", () => {
+  it("ships its script executable, shows each command, and credits Groma in the app's notices", () => {
     expect(statSync(script).mode & 0o111).not.toBe(0);
     for (const cmd of ["where", "survey", "check --stamp", "owner", "blocks --container", "from-groma"]) expect(body).toContain(`codemap ${cmd}`);
-    expect(readFileSync(join(map.baseDir, "NOTICE.md"), "utf8")).toContain("Copyright (c) 2026 Alex Gavrilescu");
+    // credited in the app's notices, not in the skill
+    expect(readFileSync(join(map.baseDir, "..", "..", "notices", "skills", "code-map", "NOTICE.md"), "utf8")).toContain("Copyright (c) 2026 Alex Gavrilescu");
     expect(readFileSync(join(map.baseDir, "references", "format.md"), "utf8")).toContain("## Fields");
     expect(skillLine(map)).toBe("코드 구조를 지도로 그려 설명하고 최신으로 지켜요");
   });
@@ -504,5 +505,15 @@ describe("the skill tool: one call", () => {
     const vague = pickSkill(bundled, "디자인");
     expect(vague.load).toBeUndefined();
     expect(vague.others.length).toBeGreaterThan(0);
+  });
+});
+
+describe("skill credits", () => {
+  it("live in the app's notices, never in a skill an agent reads", async () => {
+    const { skillSources } = await import("../scripts/notices.mjs");
+    const root = join(import.meta.dirname, "..");
+    const inSkills = readdirSync(join(root, "skills"), { recursive: true, encoding: "utf8" }).filter((f) => /(^|\/)(notice|licen[cs]es?)(\.[a-z]+)?$/i.test(f));
+    expect(inSkills).toEqual([]);
+    expect(skillSources().map((s: { name: string }) => s.name)).toContain("skills/qa");
   });
 });

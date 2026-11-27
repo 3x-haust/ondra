@@ -19,7 +19,7 @@ metadata:
 A code explanation that is gone after one chat is redone by the next job. A
 map kept on disk is read in a second, checked against the code in a second,
 and gets better each time someone fixes it. The map is a C4-style picture
-(after [Groma](https://github.com/MrLesk/Groma.md), see `NOTICE.md`):
+(after [Groma](https://github.com/MrLesk/Groma.md)):
 
 | level | what | in the chat |
 |---|---|---|

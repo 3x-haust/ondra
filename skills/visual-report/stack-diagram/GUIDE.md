@@ -15,7 +15,7 @@ Produces engineering-drawing-style architecture diagrams: real logos on white ti
 - Network access to the icon sources (svgl.app, raw.githubusercontent.com, cdn.jsdelivr.net, aws.amazon.com and d1.awsstatic.com for AWS icons, services.google.com for Google Cloud icons, learn.microsoft.com and arch-center.azureedge.net for Azure icons, plus the brand's own site or repo for `name=URL`) when fetching icons
 - Playwright + Chromium for `render_png.py`: `pip install playwright && python3 -m playwright install --with-deps chromium`
 
-> **In Ondra** (notes added to Ondra's bundled copy; the skill is caru-ini/stack-diagram, MIT, see `LICENSE`):
+> **In Ondra** (notes added to Ondra's bundled copy; the skill is caru-ini/stack-diagram, MIT, licensed in the app's third-party notices):
 > - Nothing to install for PNGs: without Playwright, `render_png.py` drives the headless Chrome Ondra ships (`$ONDRA_BROWSER_EXECUTABLE_PATH` in every job) with the same viewport, waits and both themes.
 > - Work in a folder under `$APP_ARTIFACTS_DIR` (icons, draft, `out.html`, PNGs). Show the result with a `shot` block per PNG (absolute path) and a `link` block (`kind: "file"`) to the HTML.
 > - Only brand names go to the icon sources; never pass an internal service name to `fetch_icons.py` (use `assets/generic/` icons for those).

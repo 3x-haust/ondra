@@ -130,4 +130,4 @@ did that the real target won't; those stay unverified.
   app-check-upkeep skill does that, and a routine can run it regularly
   ("매주 앱 확인 스킬 점검해줘"). Offer it once; don't make the routine.
 
-Adapted from pstack's create-verification-skill (MIT, Lauren Tan); see NOTICE.md.
+Adapted from pstack's create-verification-skill (MIT, Lauren Tan); its license is in the app's third-party notices.
