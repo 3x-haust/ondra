@@ -41,7 +41,7 @@ import { modelsNow, refreshModels } from "./modelList";
 import { connectionOf, connModelLabel, effortLevels } from "./connections";
 import { effortFor } from "./models";
 import * as jobs from "./tasks";
-import { connectHosts, dialBack, forgotBy, fromInSide, helperGone, onPeer, removeHost, startHosts, wantsHelper } from "./hosts";
+import { connectHosts, dialBack, forgotBy, fromInSide, helperGone, hostName, onPeer, removeHost, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 import { moveCancel, moveImport, movePut } from "./spaceMove";
@@ -51,6 +51,8 @@ import { engine } from "./rpc";
 import { agentStatus, onAgentStatus } from "./discord";
 import { readWays } from "./agentWays";
 import { forgetNote } from "./agentMemory";
+import * as hub from "./agentHub";
+import { AGENT_JOB_KEYS } from "./agentJobs";
 
 interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -93,6 +95,7 @@ interface Conn {
   uiSent?: Map<string, string>;
   settingsSent?: string;
   agentSent?: string;
+  hubSent?: string;
 }
 const conns = new Map<number, Conn>();
 const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
@@ -129,7 +132,9 @@ function spacesOf(device: string): Set<string> | undefined {
   return l ? new Set(l) : undefined;
 }
 type Asked = Pick<Conn, "device" | "watch" | "sessions" | "same" | "agent">;
-const reach = (c: Asked): Reach => ({ device: c.device, watch: c.watch, sessions: c.sessions, agent: showsAgent(c), spaces: spacesOf(c.device) });
+const reach = (c: Asked): Reach => ({ device: c.device, watch: c.watch, sessions: c.sessions, agent: showsAgent(c), hub: holdsAgent(c), spaces: spacesOf(c.device) });
+/** the device holding the Discord agent's connection (engine/agentHub.ts): the agent's work here goes to it */
+const holdsAgent = (c: Pick<Conn, "device">) => !!c.device && state.settings.agent?.hub === c.device;
 /** what that device keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
 const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
@@ -139,7 +144,8 @@ function flush() {
   const live = state.tasks.filter((x) => x.status === "running" || x.status === "waiting");
   for (const [conn, c] of conns) {
     if (projectsDirty) void sendProjects(conn);
-    if (!c.watch.size && !c.sessions && !c.sent.size && !c.all) continue;
+    sendHub(conn, c);
+    if (!c.watch.size && !c.sessions && !c.sent.size && !c.all && !holdsAgent(c)) continue;
     const pick = c.all || dirtyAll ? state.tasks : [...new Set([...[...dirty].map((id) => taskById(id)).filter((x): x is Task => !!x && !x.host), ...live])];
     const out: Record<string, unknown>[] = [];
     let size = 0;
@@ -272,6 +278,12 @@ async function readAgentWays() {
   if (now !== ways || has !== token) (ways = now), (token = has), (sharedDirty = true), soon();
 }
 
+/** whether this device holds the Discord agent's connection, to every device let in (engine/agentHub.ts) */
+function sendHub(conn: number, c: Conn) {
+  const now = JSON.stringify({ on: hub.holding(), at: state.settings.agent?.claimAt ?? 0 });
+  if (now !== c.hubSent) (c.hubSent = now), void send(conn, { t: "hub", ...JSON.parse(now) });
+}
+
 /** this device's Discord agent as another device's 에이전트 tab shows it */
 function agentNow(): FarAgent {
   const a = state.settings.agent;
@@ -290,8 +302,13 @@ function agentNow(): FarAgent {
 /** its Settings › 에이전트 as that device's settings page shows it: whether a token is kept, never the token */
 function agentSettingsNow(): FarAgentSettings {
   const a = state.settings.agent;
-  const own = ownSpaces();
   const places = a?.places ?? [];
+  // a place may be a workspace of a third device: named here, as this device knows it
+  const spaces: Record<string, { label: string; device?: string }> = {};
+  for (const id of [a?.space, ...places.map((p) => p.space)]) {
+    const sp = id ? state.spaces.find((x) => x.id === id) : undefined;
+    if (sp) spaces[sp.id] = { label: sp.label, ...(sp.host ? { device: hostName(sp.host) } : {}) };
+  }
   const channels = a?.channels ?? [];
   const rooms: Record<string, string> = {};
   for (const id of [...places.map((p) => p.channel), ...channels]) {
@@ -303,9 +320,10 @@ function agentSettingsNow(): FarAgentSettings {
     ...(a?.ownerId ? { ownerId: a.ownerId } : {}),
     ...(a?.voice ? { voice: a.voice } : {}),
     others: a?.others !== false,
-    space: a?.space && own.some((s) => s.id === a.space) ? a.space : own[0]?.id,
+    ...(a?.space ? { space: a.space } : {}),
     ...(a?.account ? { account: a.account } : {}),
     places: places.map((p) => ({ channel: p.channel, ...(p.label ? { label: p.label } : {}), ...(p.space ? { space: p.space } : {}), ...(p.account ? { account: p.account } : {}) })),
+    spaces,
     channels,
     rooms,
   };
@@ -452,12 +470,48 @@ export function create(c: Asked, f: FarAsk) {
     ...(mine(f.follows) ? { follows: mine(f.follows) } : {}),
     ...(f.issue && typeof f.issue.n === "number" ? { issue: f.issue } : {}),
     ...(typeof f.by === "string" && f.by ? { by: f.by } : {}),
+    ...(agentAsk(f.agent) ? { agent: agentAsk(f.agent) } : {}),
   });
   // asked with a permission of its own (that device's default, or the one picked there)
   // an older Mac still says "edits" for auto
   const perm = permissionOf(f.permission);
   if (perm) updateTask(id, (x) => (x.permission = perm));
   return id;
+}
+
+/** this device's id on the network as it is now (connected: always known) */
+function ownIdNow(): string {
+  const id = remote().id;
+  if (!id) throw new Error("not ready");
+  return id;
+}
+
+/** a device that may take the Discord agent from here (its memory goes with it): one let in to every workspace */
+function mayHold(c: Conn): string {
+  if (!c.device || spacesOf(c.device)) throw new Error(t("이 기기의 워크스페이스를 모두 쓸 수 있는 기기만 맡을 수 있어요"));
+  return c.device;
+}
+
+/** the device holding the agent shows one of its jobs here on Discord: where (its thread, its head line…) */
+function agentJob(c: Conn, id: unknown, patch: unknown) {
+  const tk = typeof id === "string" ? taskById(id) : undefined;
+  if (!tk?.agent || !holdsAgent(c) || !mayReach(reach(c), tk, taskById) || !patch || typeof patch !== "object") throw new Error("그 작업은 쓸 수 없어요");
+  const p = patch as Record<string, unknown>;
+  const ok: Record<string, unknown> = {};
+  for (const k of AGENT_JOB_KEYS) {
+    const v = p[k];
+    if (v === undefined || typeof v === "boolean" || (typeof v === "string" && v.length <= 32)) ok[k] = v;
+  }
+  updateTask(tk.id, (x) => (x.agent = { ...x.agent, ...ok }));
+}
+
+/** the Discord agent's work asked from another device: where it was asked, nothing else */
+function agentAsk(a: unknown): FarAsk["agent"] {
+  if (!a || typeof a !== "object") return undefined;
+  const o = a as Record<string, unknown>;
+  const id = (x: unknown) => (typeof x === "string" && /^\d{5,25}$/.test(x) ? x : undefined);
+  if (!id(o.channel)) return undefined;
+  return { channel: id(o.channel), ...(id(o.room) ? { room: id(o.room) } : {}), ...(o.quiet === true ? { quiet: true } : {}), ...(o.shots === false ? { shots: false } : {}) };
 }
 
 /** One of this Mac's projects' secrets, for Settings › 시크릿 on the Mac that added it: its saved names
@@ -586,7 +640,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       c.sessions = msg.sessions === true;
       c.same = msg.same === true;
       c.agent = msg.agent === true;
-      c.chatSent = c.uiSent = c.asksSent = c.settingsSent = c.agentSent = undefined;
+      c.chatSent = c.uiSent = c.asksSent = c.settingsSent = c.agentSent = c.hubSent = undefined;
       if (c.agent) void readAgentWays();
       c.all = true;
       soon();
@@ -598,6 +652,10 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       try {
         let value: unknown;
         if (fn === "create") value = create(c, args[0] as Parameters<typeof create>[1]);
+        // the Discord agent moving to that device (여기서 맡기 there): a device that may use every workspace here
+        else if (fn === "agentRelease") value = await hub.release(mayHold(c), ownIdNow());
+        else if (fn === "agentReleased") value = hub.released(mayHold(c));
+        else if (fn === "agentJob") value = agentJob(c, args[0], args[1]);
         else if (fn === "addProject") value = addProjectFor(c, args[0], args[1]);
         // a workspace moving here from that device (engine/spaceMove.ts)
         else if (fn === "space.put") value = await movePut(c.device, args[0], args[1], args[2], args[3]);

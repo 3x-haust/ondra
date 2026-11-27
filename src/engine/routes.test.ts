@@ -252,6 +252,30 @@ describe("work handed to another space or device", () => {
     expect(taskById(id)).toBeUndefined();
   });
 
+  it("the Discord agent's chat for a channel that works on another device sends new work there, as the agent's", async () => {
+    spaces();
+    far.started.length = 0;
+    setState("settings", "agent", { on: true, name: "메타몽", places: [{ channel: "777777", space: `h:${PC}:home` }] });
+    setState("captain", [{ id: "m0", at: 1, space: "home", project: "@agent", from: "me", text: "빌드해", discord: { channel: "777777", message: "1" } } as never]);
+    const out = await applyRoutes("home~@agent", [{ kind: "new", title: "빌드", task: "빌드해 봐" }], "빌드해");
+    const id = (out[0] as { taskId: string }).taskId;
+    expect(far.started).toEqual([[PC, expect.objectContaining({ id, host: PC, agent: { channel: "777777" } }), expect.objectContaining({ id, hostSpace: "home", agent: { channel: "777777" } })]]);
+    // a job's end (not the user's words) may carry it on there too
+    far.started.length = 0;
+    await applyRoutes("home~@agent", [{ kind: "new", title: "이어서", task: "테스트도" }], "", undefined, false);
+    expect(far.started).toHaveLength(1);
+  });
+
+  it("the Discord agent's chat for a channel with no place keeps work here unless main names one", async () => {
+    spaces();
+    far.started.length = 0;
+    setState("settings", "agent", { on: true, name: "메타몽" });
+    setState("captain", [{ id: "m0", at: 1, space: "home", project: "@agent", from: "me", text: "x", discord: { channel: "888888", message: "1" } } as never]);
+    const out = await applyRoutes("home~@agent", [{ kind: "new", title: "여기", task: "여기서" }], "여기서");
+    expect(taskById((out[0] as { taskId: string }).taskId)?.space).toBe("home");
+    expect(far.started).toEqual([]);
+  });
+
   it("finds a device's space by id, and not one of a device switched off", () => {
     spaces();
     expect(elsewhere(`h:${PC}:home`, "home")?.host).toBe(PC);

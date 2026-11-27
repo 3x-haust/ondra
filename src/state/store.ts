@@ -76,6 +76,15 @@ export function withoutEmptyLegacy(s: AppState): AppState {
   };
 }
 
+/** the Discord agent's work place for every channel was a workspace until it became none by default
+ *  (engine/agentPlaces.ts): an older one is set to none once */
+export function agentPlacesNone(s: AppState): AppState {
+  const a = s.settings.agent;
+  if (!a || (a.v ?? 0) >= 2) return s;
+  const { space: _was, ...rest } = a;
+  return { ...s, settings: { ...s.settings, agent: { ...rest, v: 2 } } };
+}
+
 export const freshState = (): AppState => ({
   version: 3,
   onboarded: false,
@@ -169,7 +178,7 @@ export async function loadState() {
       if (parsed.version === 3) {
         const base = freshState();
         setState(
-          reconcile(withoutEmptyLegacy({
+          reconcile(agentPlacesNone(withoutEmptyLegacy({
             ...base,
             ...parsed,
             tasks: (parsed.tasks ?? []).map(unpackTask),
@@ -180,7 +189,7 @@ export async function loadState() {
             btws: (parsed.btws ?? []).map((b) => (b.pending ? { ...b, pending: false, error: b.answer ? undefined : "앱이 닫혀 응답이 끊겼어요" } : b)),
             side: (parsed.side ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),
             sent: sentBySpace(parsed),
-          })),
+          }))),
         );
       }
     } catch (e) {

@@ -47,7 +47,8 @@ describe("ondra_settings (appSettings)", () => {
 
   it("turning the agent on starts it", async () => {
     await writeSettings({ "agent.on": true, "agent.channels": "1, 2" });
-    expect(discord.setAgent).toHaveBeenCalledWith({ on: true });
+    // taken here (no other device holds it): on, as of now
+    expect(discord.setAgent).toHaveBeenCalledWith(expect.objectContaining({ on: true, claimAt: expect.any(Number) }));
     expect(discord.startAgent).toHaveBeenCalled();
     expect(discord.setAgent).toHaveBeenCalledWith({ channels: ["1", "2"] });
   });

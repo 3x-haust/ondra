@@ -223,7 +223,9 @@ describe("another device's app settings", () => {
 
   it("A sees B's agent settings as B has them, and follows when B changes them", async () => {
     b.m.store.setState("settings", "agent", { on: false, name: "도리", ownerId: "42", channels: ["c1"], places: [{ channel: "c1", label: "#orbit · 서버", space: "home" }] });
-    await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.settings).toMatchObject({ token: false, ownerId: "42", others: true, space: "home", channels: ["c1"], places: [{ channel: "c1", label: "#orbit · 서버" }] }));
+    await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.settings).toMatchObject({ token: false, ownerId: "42", others: true, channels: ["c1"], places: [{ channel: "c1", label: "#orbit · 서버", space: "home" }], spaces: { home: { label: "개인" } } }));
+    // every channel: none until set
+    expect(a.m.mirror.mirror.hosts[B].agent?.settings?.space).toBeUndefined();
     expect(a.m.mirror.mirror.hosts[B].agent?.name).toBe("도리");
     b.m.store.setState("settings", "agent", "others", false);
     await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.settings?.others).toBe(false));

@@ -14,6 +14,8 @@ export interface Reach {
   watch: ReadonlySet<string>;
   sessions?: boolean;
   agent?: boolean;
+  /** it holds the Discord agent's connection: the agent's work (in a workspace it may use) goes to it */
+  hub?: boolean;
   spaces?: ReadonlySet<string>;
 }
 
@@ -38,7 +40,7 @@ export function mayReach(r: Reach, t: Task | undefined, byId: ById): boolean {
   if (!t || t.host) return false;
   const root = rootOf(t, byId);
   if (root.host || !spaceAllowed(r.spaces, root.space) || !spaceAllowed(r.spaces, t.space)) return false;
-  return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device) || (!!r.sessions && !root.answer && !root.archived && (!root.agent || !!r.agent));
+  return (!!r.hub && !!root.agent) || (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device) || (!!r.sessions && !root.answer && !root.archived && (!root.agent || !!r.agent));
 }
 
 /** the calls another device may make on one job: the job's id comes first */

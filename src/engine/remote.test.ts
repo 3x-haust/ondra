@@ -187,8 +187,9 @@ describe("this device's Discord agent, for a device that shows it", () => {
     watchWith({ agent: true });
     await vi.waitFor(() => expect(ofKind("agent")).toHaveLength(1));
     expect((ofKind("agent")[0].agent as { settings: unknown }).settings).toEqual({
-      token: false, ownerId: "42", voice: "짧게", others: false, space: "home",
-      places: [{ channel: "c1", label: "#orbit · 서버", space: "work" }], channels: ["c1", "c9"], rooms: { c1: "#orbit" },
+      // every channel: none (not set); the workspaces its places name, by their names here
+      token: false, ownerId: "42", voice: "짧게", others: false,
+      places: [{ channel: "c1", label: "#orbit · 서버", space: "work" }], spaces: { work: { label: "회사" } }, channels: ["c1", "c9"], rooms: { c1: "#orbit" },
     });
   });
   it("its chat is seen there, never written to", async () => {
