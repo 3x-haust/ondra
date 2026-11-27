@@ -24,7 +24,7 @@ export interface Hook {
   space?: string;
 }
 
-const EVENTS: { id: HookEvent; label: string }[] = [
+export const EVENTS: { id: HookEvent; label: string }[] = [
   { id: "before_tool", label: "도구를 쓰기 전" },
   { id: "after_tool", label: "도구를 쓴 뒤" },
   { id: "prompt", label: "요청이 올 때" },

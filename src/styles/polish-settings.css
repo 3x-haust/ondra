@@ -1406,6 +1406,19 @@
   border: 0;
   box-shadow: none;
 }
+/* whose settings the pages show: this device or a connected one */
+.settings-side .set-device {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  margin: calc(-1 * var(--s-4)) 0 var(--s-12);
+  padding-left: var(--s-8);
+  color: var(--ink-3);
+}
+.settings-side .set-device .select {
+  flex: 1;
+  min-width: 0;
+}
 .settings-side .set-nav-group {
   padding: var(--s-16) var(--s-8) var(--s-4);
   font-size: var(--fs-xs);
@@ -1609,6 +1622,14 @@
 .sp-sheet .sp-cmd { display: flex; flex-direction: column; gap: var(--s-4); min-width: 0; }
 .sp-sheet .sp-cmd .input { max-width: 200px; font-family: var(--font-mono, ui-monospace, monospace); }
 .sp-sheet .sp-cmd .set-note { overflow-wrap: anywhere; }
+
+/* a settings page of a connected device: its lines, the ones off dimmed */
+.settings-inner .far-row .set-sub {
+  overflow-wrap: anywhere;
+}
+.settings-inner .far-row.off .set-label b {
+  color: var(--ink-3);
+}
 
 /* settings › 에이전트 with a connected device picked: seen, changed there */
 .settings-inner .ag-far-note {

@@ -43,6 +43,7 @@ import {
 import { RemoteSettings } from "./RemoteSettings";
 import { PetSettings } from "./PetSettings";
 import { AgentPage } from "./FarAgentSettings";
+import { FarSettingsPage } from "./FarSettingsPage";
 import { ReviewSettings } from "./ReviewSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now } from "../ui/bits";
@@ -184,7 +185,7 @@ function LocalChecks() {
 const modelAccounts = () =>
   state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
 
-/** the device whose settings 일반 and 에이전트 show: this one (undefined) or a connected one that shares them */
+/** the device whose settings the settings pages show: this one (undefined) or a connected one that shares them */
 const [settingsOf, setSettingsOf] = createSignal<string>();
 export { setSettingsOf };
 /** the device picked among `devices` a page offers, if it is one of them (else this device) */
@@ -192,29 +193,15 @@ export const farPicked = (devices: string[]) => {
   const h = settingsOf();
   return h && devices.includes(h) ? h : undefined;
 };
-/** a page's 기기 row: this device or one of the connected `devices` (none: no row) */
-export function DevicePick(props: { devices: string[] }) {
-  const far = () => farPicked(props.devices);
-  return (
-    <Show when={props.devices.length}>
-      <div class="set-group">
-        <Row title={t("기기")}>
-          <div class="seg">
-            <button classList={{ on: !far() }} onClick={() => setSettingsOf(undefined)}>{t("이 기기")}</button>
-            <For each={props.devices}>{(h) => <button classList={{ on: far() === h }} onClick={() => setSettingsOf(h)}>{hostName(h)}</button>}</For>
-          </div>
-        </Row>
-      </div>
-    </Show>
-  );
-}
 /** the connected devices that share their settings */
-const sharingDevices = () => Object.keys(mirror.hosts).filter((h) => mirror.hosts[h].status === "ok" && !!mirror.hosts[h].settings);
+export const sharingDevices = () => Object.keys(mirror.hosts).filter((h) => mirror.hosts[h].status === "ok" && !!mirror.hosts[h].settings);
+/** the device every settings page shows now */
+const farNow = () => farPicked(sharingDevices());
 
 // ───────────────── general
 function General() {
   // this device's settings, or the picked device's (changed there)
-  const far = () => farPicked(sharingDevices());
+  const far = farNow;
   const cfg = <T,>(k: SharedSetting): T => (far() ? farSettings(far()!)?.[k] : SETTINGS[k].get()) as T;
   const setCfg = (k: SharedSetting, v: unknown) => {
     const host = far();
@@ -235,8 +222,6 @@ function General() {
   return (
     <>
       <PageHead tab="general" />
-      {/* another connected device's settings, seen and changed from here */}
-      <DevicePick devices={sharingDevices()} />
       <GroupTitle title={t("화면")} />
       <div class="set-group">
         <Row title={t("테마")}>
@@ -1061,7 +1046,7 @@ interface KeyRow { id: ShortcutId; label: string; section: string; note?: string
  * Every key the app has, in the palette's section order, each one rebindable: the commands,
  * the keys that aren't commands (hints, quick input, quit) and ⌘1–9 by place in the sidebar.
  */
-function keyRows(): KeyRow[] {
+export function keyRows(): KeyRow[] {
   const commands = appCommands();
   const rows: KeyRow[] = SHORTCUT_EXTRAS.map(([id, label]) => ({ id, label: t(label), section: t("일반") }));
   const places = () => Array.from({ length: 9 }, (_, i): KeyRow => {
@@ -1327,9 +1312,10 @@ export function SettingsNav(props: { onBack: () => void }) {
   onMount(() => window.addEventListener("keydown", key));
   onCleanup(() => window.removeEventListener("keydown", key));
   // macOS permissions mean nothing elsewhere; the group is named for this computer
+  // (another device picked: its page says whether it has them)
   const mac = /Macintosh/.test(navigator.userAgent);
-  const shown = SETTINGS_TABS.filter((x) => mac || x.id !== "tools");
-  const groups = () => [...new Set(shown.map((x) => x.group))];
+  const shown = () => SETTINGS_TABS.filter((x) => mac || farNow() || x.id !== "tools");
+  const groups = () => [...new Set(shown().map((x) => x.group))];
   return (
     <aside class="sidebar settings-side">
       <div class="sb-top" data-tauri-drag-region />
@@ -1357,6 +1343,16 @@ export function SettingsNav(props: { onBack: () => void }) {
           />
           <Show when={!q()}><kbd>{chordLabel(primaryChord("KeyF"))}</kbd></Show>
         </label>
+        {/* whose settings every page shows: this device or a connected one */}
+        <Show when={sharingDevices().length}>
+          <label class="set-device">
+            <Icon name="monitor" size={14} />
+            <select class="select" aria-label={t("기기")} value={farNow() ?? ""} onChange={(e) => setSettingsOf(e.currentTarget.value || undefined)}>
+              <option value="">{t("이 기기")}</option>
+              <For each={sharingDevices()}>{(h) => <option value={h}>{hostName(h)}</option>}</For>
+            </select>
+          </label>
+        </Show>
         <Show
           when={q().trim()}
           fallback={
@@ -1364,8 +1360,8 @@ export function SettingsNav(props: { onBack: () => void }) {
               <For each={groups()}>
                 {(g) => (
                   <>
-                    <Show when={g}><div class="set-nav-group">{g === "이 Mac" ? thisComputer() : t(g)}</div></Show>
-                    <For each={shown.filter((x) => x.group === g)}>
+                    <Show when={g}><div class="set-nav-group">{g === "이 Mac" ? (farNow() ? hostName(farNow()!) : thisComputer()) : t(g)}</div></Show>
+                    <For each={shown().filter((x) => x.group === g)}>
                       {(tab) => (
                         <button class="sb-row sb-main set-nav" classList={{ on: settingsTab() === tab.id }} onClick={() => setView({ name: "settings", tab: tab.id })}>
                           <span class="set-nav-icon"><Icon name={tab.icon} size={14} /></span>
@@ -1407,6 +1403,12 @@ export function SettingsPage(props: { onBack: () => void }) {
   onMount(() => window.addEventListener("keydown", key, true));
   onCleanup(() => window.removeEventListener("keydown", key, true));
   let body!: HTMLDivElement;
+  // the page another device's settings show: "<device>\n<tab>"
+  const farPage = createMemo(() => {
+    const h = farNow();
+    const tab = settingsTab();
+    return h && tab !== "general" && tab !== "agent" ? `${h}\n${tab}` : undefined;
+  });
   // each tab opens where it was left, at its top the first time; a row found by the search wins
   // a row found by the search: once its tab is drawn, bring it into view and light it for a moment
   createEffect(on(jump, (row) => {
@@ -1427,6 +1429,8 @@ export function SettingsPage(props: { onBack: () => void }) {
       <div class="head" data-tauri-drag-region />
       <div class="settings-body" ref={(el) => ((body = el), scrollKept(() => `settings/${settingsTab()}`)(el))}>
         <div class="settings-inner">
+          {/* another device picked: its page, but 일반 and 에이전트 show it themselves */}
+          <Show when={farPage()} keyed fallback={
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>
             <Match when={settingsTab() === "shortcuts"}><Shortcuts /></Match>
@@ -1443,6 +1447,9 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "hooks"}><HooksTab /></Match>
             <Match when={settingsTab() === "tools"}><Permissions /></Match>
           </Switch>
+          }>
+            {(f) => <FarSettingsPage host={f.split("\n")[0]} tab={f.split("\n")[1] as SettingsTab} />}
+          </Show>
         </div>
       </div>
     </div>

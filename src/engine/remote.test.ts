@@ -27,6 +27,8 @@ vi.mock("../lib/native", async (orig) => ({
 }));
 // a picker (UI): only its names are used here
 vi.mock("../ui/AccountPicker", () => ({ accountName: (a: { id: string }) => a.id, service: (p: string) => p }));
+// the settings pages (UI helpers): the tab and the language asked for
+vi.mock("../views/farPages", () => ({ farPage: async (tab: string, l: string) => ({ groups: [{ rows: [{ title: `${tab} ${l}` }] }] }) }));
 const { initRemote, removeDevice, setDeviceSpaces } = await import("./remote");
 
 const DEV = "d".repeat(64);
@@ -154,6 +156,19 @@ describe("calls from a Mac allowed in", () => {
   });
   it("never reach a project shown here from a third Mac", async () => {
     expect((await call("create", [{ id: "n2", title: "n", ask: "do", project: `r:${"c".repeat(64)}:app` }]))?.error).toBeTruthy();
+  });
+});
+
+describe("a tab of this device's settings, for the settings page of a device that shares them", () => {
+  const watchWith = (extra: Record<string, unknown>) => hear({ ev: "msg", conn: 1, data: { t: "watch", projects: [], sessions: true, ...extra } });
+  it("comes in the language that device asks in (Korean unless it says English)", async () => {
+    watchWith({ same: true });
+    expect((await call("settingsPage", ["hooks", "en"]))?.value).toEqual({ groups: [{ rows: [{ title: "hooks en" }] }] });
+    expect((await call("settingsPage", ["hooks", "fr"]))?.value).toEqual({ groups: [{ rows: [{ title: "hooks ko" }] }] });
+  });
+  it("is refused to a device that doesn't share them", async () => {
+    watchWith({});
+    expect((await call("settingsPage", ["hooks", "ko"]))?.error).toBe("bad request");
   });
 });
 

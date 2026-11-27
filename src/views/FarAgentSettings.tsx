@@ -6,18 +6,28 @@ import { hostName } from "../engine/hosts";
 import { Logo } from "../ui/Logos";
 import { Icon } from "../ui/Icon";
 import { AgentSettings } from "./AgentSettings";
-import { DevicePick, farPicked, GroupTitle, PageHead, Row } from "./Settings";
+import { farPicked, GroupTitle, PageHead, Row, sharingDevices } from "./Settings";
 import { t } from "../i18n";
 
-/** the connected devices that send their agent's settings */
-export const agentDevices = () => Object.keys(mirror.hosts).filter((h) => mirror.hosts[h].status === "ok" && !!mirror.hosts[h].agent?.settings);
-
-/** the 에이전트 page: this device's settings, or the picked device's */
+/** the 에이전트 page: this device's settings, or the picked device's (an older Ondra there sends none) */
 export function AgentPage() {
   return (
-    <Show when={farPicked(agentDevices())} keyed fallback={<AgentSettings />}>
-      {(host) => <FarAgentSettings host={host} />}
+    <Show when={farPicked(sharingDevices())} keyed fallback={<AgentSettings />}>
+      {(host) => (
+        <Show when={mirror.hosts[host]?.agent?.settings} fallback={<OlderAgent host={host} />}>
+          <FarAgentSettings host={host} />
+        </Show>
+      )}
     </Show>
+  );
+}
+
+function OlderAgent(props: { host: string }) {
+  return (
+    <>
+      <PageHead tab="agent" />
+      <div class="set-group"><div class="empty-line">{t("{name}의 Ondra를 업데이트하면 볼 수 있어요", { name: hostName(props.host) })}</div></div>
+    </>
   );
 }
 
@@ -51,7 +61,6 @@ function FarAgentSettings(props: { host: string }) {
   return (
     <>
       <PageHead tab="agent" />
-      <DevicePick devices={agentDevices()} />
       <p class="set-quiet ag-far-note">{t("{name}에서 바꿀 수 있어요", { name: hostName(props.host) })}</p>
       <GroupTitle title={t("디스코드")} />
       <div class="set-group prov-list">
