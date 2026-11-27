@@ -3269,9 +3269,11 @@ func keepUserOffBackdrop() -> Never {
             event.location = back
             // macOS has the pointer where the last event left it, often `back` already (the step
             // before was put back there too), and a warp to where it has it does nothing: the arrow
-            // stayed on this display, out of sight, while the hand kept pushing. A warp to where it
-            // really is first makes the one back a real move.
-            CGWarpMouseCursorPosition(p)
+            // stayed on this display, out of sight, while the hand kept pushing. A warp one point
+            // beside `back` first makes the one back a real move. Not to `p`: an app that reads
+            // the pointer between the two warps (Orbit's hot corners) saw it leave the corner and
+            // fired the corner again, so Notification Center opened and closed at once.
+            CGWarpMouseCursorPosition(CGPoint(x: back.x - 1, y: back.y))
             CGWarpMouseCursorPosition(back)
             // pushed on for over a second, it is still where it just was
             keeperLast = (back, now)
