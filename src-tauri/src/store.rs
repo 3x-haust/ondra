@@ -522,7 +522,7 @@ pub fn account_dir(app: &AppHandle, account_id: &str) -> Option<PathBuf> {
     Some(data_dir(app).join("accounts").join(safe))
 }
 
-fn default_agent_dir() -> PathBuf {
+pub(crate) fn default_agent_dir() -> PathBuf {
     home().join(".pi/agent")
 }
 
