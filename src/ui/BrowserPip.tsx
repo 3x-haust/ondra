@@ -107,20 +107,24 @@ export function BrowserPip() {
   onMount(() => window.addEventListener("resize", onResize));
   onCleanup(() => window.removeEventListener("resize", onResize));
 
-  // grow in from its corner when it (re)appears
+  // grow in from its corner when it (re)appears, once it is on the page: a node fresh from its
+  // template has no height to place it by, and an animation started on it never runs (it stays at
+  // its first frame, unseen, taking the clicks meant for what is under it)
   const enter = (node: HTMLDivElement) => {
     el = node;
-    put(spotOf(corner()));
-    if (calm()) return;
-    const p = at;
-    const towardEdge = { x: corner().endsWith("l") ? -10 : 10, y: corner().startsWith("t") ? -10 : 10 };
-    node.animate(
-      [
-        { opacity: 0, transform: `translate3d(${p.x + towardEdge.x}px, ${p.y + towardEdge.y}px, 0) scale(0.92)` },
-        { opacity: 1, transform: `translate3d(${p.x}px, ${p.y}px, 0) scale(1)` },
-      ],
-      { duration: 320, easing: EASE },
-    );
+    onMount(() => {
+      put(spotOf(corner()));
+      if (calm()) return;
+      const p = at;
+      const towardEdge = { x: corner().endsWith("l") ? -10 : 10, y: corner().startsWith("t") ? -10 : 10 };
+      node.animate(
+        [
+          { opacity: 0, transform: `translate3d(${p.x + towardEdge.x}px, ${p.y + towardEdge.y}px, 0) scale(0.92)` },
+          { opacity: 1, transform: `translate3d(${p.x}px, ${p.y}px, 0) scale(1)` },
+        ],
+        { duration: 320, easing: EASE },
+      );
+    });
   };
   // shrinking away holds its end (unseen) till it is gone; back before that (the job flickered
   // out and in), that end is dropped and it shows again: never left on screen unseen, taking the
