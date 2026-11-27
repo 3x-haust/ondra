@@ -39,6 +39,14 @@ describe("what a Mac allowed in may reach", () => {
     for (const id of ["answer", "old", "agent", "far"]) expect(mayReach(r, by(id), by), id).toBe(false);
     expect(mayReach({ ...r, spaces: new Set(["work"]) }, by("loose"), by)).toBe(false);
   });
+  it("the agent's work too when it shows that device's agent, not its archived jobs", () => {
+    const all = [job("agent", { agent: {} }), job("agentKid", { parentId: "agent" }), job("agentOld", { agent: {}, archived: true })];
+    const by = (id: string) => all.find((x) => x.id === id);
+    const r: Reach = { ...reach, sessions: true, agent: true };
+    for (const id of ["agent", "agentKid"]) expect(mayReach(r, by(id), by), id).toBe(true);
+    expect(mayReach(r, by("agentOld"), by)).toBe(false);
+    expect(mayReach({ ...r, sessions: false }, by("agent"), by)).toBe(false);
+  });
   it("only in the workspaces it may use", () => {
     const home: Reach = { ...reach, spaces: new Set(["home"]) };
     expect(mayReach(home, byId("inApp"), byId)).toBe(true);

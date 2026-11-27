@@ -13,7 +13,7 @@
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { askHere, chatHere, hostOfTask, hostSpaceId, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, splitSpaceId, type FarAsk, type FarMessage, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
+import { askHere, chatHere, hostOfTask, hostSpaceId, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, splitSpaceId, type FarAgent, type FarAsk, type FarMessage, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
 import { accountsIn, projectsIn, setState, spacesOf, state, tasksIn } from "../state/store";
 import { switchSpace } from "../state/workspace";
 import type { Decision, Entry, Space, Task } from "../state/types";
@@ -215,6 +215,15 @@ export async function farDecide(d: Decision, optionId: string, values?: FormValu
   if (!ok && mirror.hosts[host] && !mirror.hosts[host][list]?.some((x) => x.id === d.id)) setMirror("hosts", host, list, (l) => [...(l ?? []), d]);
 }
 
+/** 잊기 on that device's agent's note: gone here now, back if that device can't take it */
+export async function farForgetNote(host: string, id: string) {
+  const note = mirror.hosts[host]?.agent?.notes.find((n) => n.id === id);
+  if (!note) return;
+  setMirror("hosts", host, "agent", "notes", (l) => l.filter((n) => n.id !== id));
+  const ok = await viaHost(host, "agentForget", [id]).then(() => true, () => false);
+  if (!ok && mirror.hosts[host]?.agent && !mirror.hosts[host].agent!.notes.some((n) => n.id === id)) setMirror("hosts", host, "agent", "notes", (l) => [...l, note]);
+}
+
 /** that device's chats (main's and its projects') in its workspaces: what changed, or all of them */
 function applyChat(host: string, d: Record<string, unknown>) {
   if (!mirror.hosts[host]) return;
@@ -250,8 +259,9 @@ function applyUi(host: string, d: Record<string, unknown>) {
  *  workspaces (a device too old to know `sessions` sends only the first) */
 function watch(host: string) {
   const projects = (state.settings.hostProjects ?? []).filter((l) => l.host === host).map((l) => l.id);
-  // `same`: its chats, screen state and settings too (an older Ondra passes it by)
-  void sendTo(host, { t: "watch", projects, sessions: true, same: true }).catch(() => {});
+  // `same`: its chats, screen state and settings too; `agent`: its Discord agent for its 에이전트 tab
+  // (an older Ondra passes them by)
+  void sendTo(host, { t: "watch", projects, sessions: true, same: true, agent: true }).catch(() => {});
 }
 
 async function dial(host: string) {
@@ -424,6 +434,9 @@ export function onPeer(ev: Record<string, unknown>) {
       break;
     case "ui":
       applyUi(host, d);
+      break;
+    case "agent":
+      if (mirror.hosts[host] && d.agent && typeof d.agent === "object") setMirror("hosts", host, "agent", d.agent as FarAgent);
       break;
     case "settings":
       if (mirror.hosts[host] && d.settings && typeof d.settings === "object") setMirror("hosts", host, "settings", d.settings as Record<string, unknown>);

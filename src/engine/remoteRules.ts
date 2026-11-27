@@ -7,12 +7,13 @@ import type { Settings, Task } from "../state/types";
 // ───────── a Mac allowed in
 
 /** what one connected Mac may reach: the projects it keeps (asked with "watch"), the work done in
- *  the workspaces it may use here when it asked for that too (`sessions`), and those workspaces
- *  (missing = all) */
+ *  the workspaces it may use here when it asked for that too (`sessions`), the Discord agent's work
+ *  among them when it shows that device's agent (`agent`), and those workspaces (missing = all) */
 export interface Reach {
   device: string;
   watch: ReadonlySet<string>;
   sessions?: boolean;
+  agent?: boolean;
   spaces?: ReadonlySet<string>;
 }
 
@@ -30,14 +31,14 @@ export const spaceAllowed = (spaces: ReadonlySet<string> | undefined, space: str
 /**
  * A job that device may see and act on: one of this Mac's own (never one shown here from a third
  * Mac), in a workspace it may use, and in a project it keeps, asked for by it, or (`sessions`) any
- * job of the list there: not a quick answer, archived or the Discord agent's (subagents go with
- * their top job).
+ * job of the list there: not a quick answer or archived, and the Discord agent's only with `agent`
+ * (subagents go with their top job).
  */
 export function mayReach(r: Reach, t: Task | undefined, byId: ById): boolean {
   if (!t || t.host) return false;
   const root = rootOf(t, byId);
   if (root.host || !spaceAllowed(r.spaces, root.space) || !spaceAllowed(r.spaces, t.space)) return false;
-  return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device) || (!!r.sessions && !root.answer && !root.archived && !root.agent);
+  return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device) || (!!r.sessions && !root.answer && !root.archived && (!root.agent || !!r.agent));
 }
 
 /** the calls another device may make on one job: the job's id comes first */

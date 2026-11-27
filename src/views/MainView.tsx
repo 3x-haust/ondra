@@ -990,7 +990,7 @@ const toneRank = (x: Task) => (discarded(x) ? TONE_ORDER.length : TONE_ORDER.ind
 /** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. A routine's run with nothing to do isn't one. */
 const projectTasks = (project: string) =>
   tasksShown(state.space)
-    .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived && !idleRun(x))
+    .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived && !x.agent && !idleRun(x))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 
 

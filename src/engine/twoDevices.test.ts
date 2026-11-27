@@ -158,11 +158,12 @@ describe("the main chat is one chat on both devices", () => {
     await wait(() => expect(b.m.store.state.chatCleared?.home).toBeGreaterThan(0));
   });
 
-  it("the Discord agent's chat stays on its device", async () => {
-    b.m.store.setState("captain", (l) => [...l, { id: "ag1", at: Date.now(), space: "home", project: "@agent", from: "me", text: "비밀 채널 얘기" }]);
+  it("the Discord agent's chat shows on A as that agent's, never in main", async () => {
+    b.m.store.setState("captain", (l) => [...l, { id: "ag1", at: Date.now(), space: "home", project: "@agent", from: "me", text: "에이전트 채널 얘기" }]);
     b.m.captain.throwThought("에이전트 다음 말", "home");
-    await wait(() => expect(a.m.shared.chatIn(theirs).some((m) => m.text === "에이전트 다음 말")).toBe(true));
-    expect(JSON.stringify(a.m.mirror.mirror.hosts[B])).not.toContain("비밀 채널 얘기");
+    await wait(() => expect(a.m.shared.chatIn(theirs, "@agent").map((m) => m.text)).toContain("에이전트 채널 얘기"));
+    expect(a.m.shared.chatIn(theirs).some((m) => m.text === "에이전트 채널 얘기")).toBe(false);
+    await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.name).toBe("메타몽"));
   });
 });
 

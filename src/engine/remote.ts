@@ -5,10 +5,12 @@
 //
 //   them → here  {t:"projects"} {t:"watch",projects,sessions?,same?} {t:"call",seq,fn,args}
 //   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"decisions",list}
-//                {t:"chat",msgs,gone?,asks?,all?} {t:"ui",set,all?} {t:"settings",settings} {t:"ret",seq,value|error}
+//                {t:"chat",msgs,gone?,asks?,all?} {t:"ui",set,all?} {t:"settings",settings} {t:"agent",agent} {t:"ret",seq,value|error}
 // A device that asks for `same` (and may use every workspace here) also gets this device's main and
 // project chats, its screen state in its workspaces and its app settings, and may act on them
-// (state/shared.ts): a workspace is then the same on both.
+// (state/shared.ts): a workspace is then the same on both. One that asks for `agent` as well sees this
+// device's Discord agent in its 에이전트 tab: its chat (not written to from there), its work and
+// questions, its memory, ways and routines.
 // Files, folders and terminals of those jobs ("far.*" calls, {t:"pty…"}) are engine/farHost.ts.
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
@@ -21,7 +23,7 @@ import { createEffect, createMemo, createRoot, createSignal, on } from "solid-js
 import { produce, unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
-import { AGENT_CHAT, onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { isAgentChat, onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import { applyUi, sharedUi, uiSpace } from "../state/shared";
 import { viewState } from "../state/viewState";
 import { onDraft } from "../state/drafts";
@@ -29,7 +31,7 @@ import { sharedSettings, setShared } from "./appSettings";
 import * as captain from "./captain";
 import { permissionOf } from "../state/persist";
 import type { CaptainMessage, Decision, SpaceId, Task } from "../state/types";
-import type { FarAsk, HostInfo } from "../state/mirror";
+import type { FarAgent, FarAsk, HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
@@ -45,6 +47,9 @@ import { moveCancel, moveImport, movePut } from "./spaceMove";
 import { mirrorReplacer } from "./farMirror";
 import { mirrorPath, normPath } from "./farPaths";
 import { engine } from "./rpc";
+import { agentStatus, onAgentStatus } from "./discord";
+import { readWays } from "./agentWays";
+import { forgetNote } from "./agentMemory";
 
 interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -79,11 +84,14 @@ interface Conn {
   decisions?: string;
   /** it wants the chats, screen state and settings too (state/shared.ts) */
   same?: boolean;
+  /** it shows this device's Discord agent too */
+  agent?: boolean;
   /** each chat message as last sent; main's questions; each screen value; the settings */
   chatSent?: Map<string, string>;
   asksSent?: string;
   uiSent?: Map<string, string>;
   settingsSent?: string;
+  agentSent?: string;
 }
 const conns = new Map<number, Conn>();
 const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
@@ -100,7 +108,7 @@ onDraft(() => ((sharedDirty = true), soon()));
 onWrite((args) => {
   if (!conns.size) return;
   if (args[0] === "projects") projectsDirty = true;
-  if (args[0] === "captain" || args[0] === "decisions" || args[0] === "canvas" || args[0] === "settings") sharedDirty = true;
+  if (args[0] === "captain" || args[0] === "decisions" || args[0] === "canvas" || args[0] === "settings" || args[0] === "agentNotes" || args[0] === "routines") sharedDirty = true;
   if (args[0] !== "tasks") return soon();
   const sel = args[1];
   if (args.length < 3) dirtyAll = true;
@@ -119,7 +127,8 @@ function spacesOf(device: string): Set<string> | undefined {
   const l = state.settings.deviceSpaces?.[device];
   return l ? new Set(l) : undefined;
 }
-const reach = (c: Pick<Conn, "device" | "watch" | "sessions">): Reach => ({ device: c.device, watch: c.watch, sessions: c.sessions, spaces: spacesOf(c.device) });
+type Asked = Pick<Conn, "device" | "watch" | "sessions" | "same" | "agent">;
+const reach = (c: Asked): Reach => ({ device: c.device, watch: c.watch, sessions: c.sessions, agent: showsAgent(c), spaces: spacesOf(c.device) });
 /** what that device keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
 const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
@@ -172,9 +181,18 @@ function flush() {
 }
 
 /** a device that sees this one's chats, screen state and settings: it asked, and it may use every workspace */
-const sharesWith = (c: Conn) => !!c.same && !spacesOf(c.device);
-/** a chat that goes to such a device: in this device's own workspaces, never the Discord agent's */
-const sharedChat = (space: string, project?: string) => project !== AGENT_CHAT && ownSpaces().some((s) => s.id === space);
+function sharesWith(c: Pick<Conn, "device" | "same">) {
+  return !!c.same && !spacesOf(c.device);
+}
+/** such a device that shows this one's Discord agent too (it asked) */
+function showsAgent(c: Pick<Conn, "device" | "same" | "agent">) {
+  return !!c.agent && sharesWith(c);
+}
+const ownChat = (space: string) => ownSpaces().some((s) => s.id === space);
+/** a chat such a device may act on: in this device's own workspaces, never the Discord agent's */
+const sharedChat = (space: string, project?: string) => ownChat(space) && !isAgentChat(captain.chatKey(space as SpaceId, project));
+/** a chat it sees: those, and the agent's when it shows the agent */
+const seenChat = (c: Conn, space: string, project?: string) => sharedChat(space, project) || (showsAgent(c) && ownChat(space));
 const chatOf = (key: string) => {
   const [space, project] = key.split("~");
   return { space: space as SpaceId, project: project || undefined };
@@ -189,7 +207,7 @@ function sendShared(conn: number, c: Conn) {
   const msgs: unknown[] = [];
   const seen = new Set<string>();
   for (const m of state.captain) {
-    if (!sharedChat(m.space, m.project)) continue;
+    if (!seenChat(c, m.space, m.project)) continue;
     seen.add(m.id);
     const key = captain.chatKey(m.space, m.project);
     const draft = m.pending ? captain.mainDraft(key, m.id) : "";
@@ -201,7 +219,7 @@ function sendShared(conn: number, c: Conn) {
   }
   const gone = [...sent.keys()].filter((id) => !seen.has(id));
   for (const id of gone) sent.delete(id);
-  const asks = state.decisions.filter((d) => d.taskId.startsWith("main:") && sharedChat(chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project));
+  const asks = state.decisions.filter((d) => d.taskId.startsWith("main:") && seenChat(c, chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project));
   const asksJson = JSON.stringify(asks);
   const asksNew = asksJson !== c.asksSent;
   c.asksSent = asksJson;
@@ -238,6 +256,32 @@ function sendShared(conn: number, c: Conn) {
   const settings = sharedSettings();
   const json = JSON.stringify(settings);
   if (json !== c.settingsSent) (c.settingsSent = json), void send(conn, { t: "settings", settings });
+
+  if (!showsAgent(c)) return;
+  const agent = agentNow();
+  const agentJson = JSON.stringify(agent);
+  if (agentJson !== c.agentSent) (c.agentSent = agentJson), void send(conn, { t: "agent", agent });
+}
+
+/** the agent's ways (agent/AGENT.md) as last read: a file, read now and then */
+let ways = "";
+async function readAgentWays() {
+  const now = await readWays().catch(() => ways);
+  if (now !== ways) (ways = now), (sharedDirty = true), soon();
+}
+
+/** this device's Discord agent as another device's 에이전트 tab shows it */
+function agentNow(): FarAgent {
+  const a = state.settings.agent;
+  const s = agentStatus();
+  return {
+    name: a?.name || "메타몽",
+    on: !!a?.on,
+    status: { state: s.state, ...(s.why ? { why: s.why } : {}) },
+    notes: state.agentNotes ?? [],
+    ways,
+    routines: (state.routines ?? []).filter((r) => r.agent && !r.draft && ownChat(r.space)),
+  };
 }
 
 /** a chat of this device's, as that device names it: one it may see */
@@ -284,19 +328,23 @@ const SHARED_CALLS: Record<string, (c: Conn, args: unknown[]) => unknown> = {
     if (!sharesWith(c)) throw new Error("bad request");
     return setShared(String(key), value);
   },
+  // 잊기 in that device's 에이전트 tab: one of the agent's own notes here
+  agentForget: (c, [id]) => {
+    if (!showsAgent(c) || typeof id !== "string" || !state.agentNotes?.some((n) => n.id === id)) throw new Error("bad request");
+    forgetNote(id);
+  },
 };
 
 /** the questions the jobs that device keeps wait on (its cards, "내 차례"), sent when they change.
  *  A Mac too old to know {t:"decisions"} passes it by. */
-export function decisionsFor(device: string, watch: Set<string>, sessions?: boolean): Decision[] {
-  const c = { device, watch, sessions } as Conn;
+export function decisionsFor(c: Asked): Decision[] {
   return state.decisions.filter((d) => {
     const t = d.taskId.startsWith("main:") ? undefined : taskById(d.taskId);
-    return !!t && !t.host && wanted(c, t);
+    return !!t && !t.host && mayReach(reach(c), t, taskById);
   });
 }
 function sendDecisions(conn: number, c: Conn) {
-  const list = decisionsFor(c.device, c.watch, c.sessions);
+  const list = decisionsFor(c);
   const json = JSON.stringify(list);
   if (json === c.decisions) return;
   c.decisions = json;
@@ -346,7 +394,7 @@ async function sendProjects(conn: number) {
 
 /** a new job here, from another device (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that device picked; on the account it picked there, else that workspace's choice */
-export function create(c: Pick<Conn, "device" | "watch" | "sessions">, f: FarAsk) {
+export function create(c: Asked, f: FarAsk) {
   if (!f || typeof f !== "object" || typeof f.ask !== "string") throw new Error("bad request");
   // this Mac's own project only (never one shown here from a third Mac)
   const p = f.project && !f.project.startsWith("r:") ? projectById(f.project) : undefined;
@@ -510,7 +558,9 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);
       c.sessions = msg.sessions === true;
       c.same = msg.same === true;
-      c.chatSent = c.uiSent = c.asksSent = c.settingsSent = undefined;
+      c.agent = msg.agent === true;
+      c.chatSent = c.uiSent = c.asksSent = c.settingsSent = c.agentSent = undefined;
+      if (c.agent) void readAgentWays();
       c.all = true;
       soon();
       break;
@@ -536,7 +586,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
           // a question of a job that device may reach
           const d = state.decisions.find((x: Decision) => x.id === args[0]);
           // or one main asks in a chat it shares
-          const ask = d?.taskId.startsWith("main:") && sharesWith(c) && sharedChat(chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project);
+          const ask = d?.taskId.startsWith("main:") && sharesWith(c) && seenChat(c, chatOf(d.taskId.slice(5)).space, chatOf(d.taskId.slice(5)).project);
           if (!d || (!ask && !mayReach(reach(c), taskById(d.taskId), taskById))) throw new Error("그 작업은 쓸 수 없어요");
           value = await jobs.decide(String(args[0]), String(args[1]), args[2] && typeof args[2] === "object" ? (args[2] as FormValues) : undefined);
         } else if (fn === "handOn") {
@@ -765,7 +815,11 @@ export function initRemote() {
   // plan use moves on its own (refreshed every couple of minutes): the other Macs hear it when it does
   setInterval(() => {
     for (const [conn, c] of conns) sendInfo(conn, c);
+    // the agent's ways change when it is told on Discord: read again for the devices that show it
+    if ([...conns.values()].some(showsAgent)) void readAgentWays();
   }, 20_000);
+  // the agent's state (connected, stopped…) goes to the devices that show it
+  onAgentStatus(() => ((sharedDirty = true), soon()));
   fromInSide({
     cameIn: (id) => Object.values(remote().live).some((d) => d.id === id),
     // that device removed this one and said so by cutting it off (its goodbye may not come): not let in either

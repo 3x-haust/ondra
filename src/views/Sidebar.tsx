@@ -39,7 +39,7 @@ import { bucket, needsYou, type Bucket } from "../state/needs";
 function forkOrder(space: string): Task[] {
   const order: Bucket[] = ["you", "failed", "review", "work", "done"];
   return tasksShown(space as Task["space"])
-    .filter((t) => !t.parentId && !t.answer)
+    .filter((t) => !t.parentId && !t.answer && !t.agent)
     .sort((a, b) => order.indexOf(bucket(a)) - order.indexOf(bucket(b)) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 }
 
@@ -542,7 +542,7 @@ function jobList(all: () => readonly Task[], inList: (t: Task) => boolean) {
  */
 export function AgentJobs(props: { space: Task["space"] }) {
   const [showArchived, setShowArchived] = createSignal(false);
-  const { roots, archived, isOld, shown } = jobList(() => state.tasks.filter((t) => t.space === props.space), agentListed);
+  const { roots, archived, isOld, shown } = jobList(() => tasksShown(props.space), agentListed);
   const filed = (t: Task) => !!t.project && projectsShown(props.space).some((p) => p.id === t.project);
   const projects = createMemo(() => projectsShown(props.space).filter((p) => roots().some((t) => t.project === p.id)));
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
@@ -620,11 +620,14 @@ export function Sidebar() {
   const needs = createMemo(() => every().filter(needsYou).length);
   const boardLive = () => every().filter((t) => t.status === "running").length;
   const mainBusy = () => messagesIn(state.space).some((m) => !m.project && m.pending);
-  // the agent: on, or something of it here; this device's only, not in a connected device's workspace
-  const agentShown = () => !splitSpaceId(state.space) && (!!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space));
+  // the agent: on, or something of it here; in a connected device's workspace, that device's (when it sends it)
+  const farAgent = () => { const far = splitSpaceId(state.space); return far ? mirror.hosts[far.host]?.agent : undefined; };
+  const agentChat = () => messagesIn(state.space).filter((m) => m.project === AGENT_CHAT);
+  const agentJobs = () => tasksShown(state.space).filter((x) => x.agent);
+  const agentShown = () => !!(splitSpaceId(state.space) ? farAgent()?.on : state.settings.agent?.on) || agentChat().length > 0 || agentJobs().length > 0;
   // its jobs going now, counted as a project row counts its own (top-level jobs only)
-  const agentLive = () => state.tasks.filter((x) => x.agent && x.space === state.space && !x.parentId && x.status === "running").length;
-  const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");
+  const agentLive = () => agentJobs().filter((x) => !x.parentId && x.status === "running").length;
+  const agentBusy = () => agentChat().some((m) => m.pending) || agentJobs().some((x) => x.status === "running");
   const agentAsks = () => agentDecisions().filter((d) => taskById(d.taskId)?.space === state.space).length;
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
   const tabs = () => deviceSpaces();
@@ -712,7 +715,7 @@ export function Sidebar() {
         <Show when={agentShown()}>
           <button class="sb-row sb-main" classList={{ on: view().name === "agent" }} onClick={() => setView({ name: "agent" })}>
             <Icon name="pet" size={16} class="sb-main-ic" />
-            <span class="sb-title">{state.settings.agent?.name || tr("에이전트")}</span>
+            <span class="sb-title">{(splitSpaceId(state.space) ? farAgent()?.name : state.settings.agent?.name) || tr("에이전트")}</span>
             <Show when={agentAsks()} fallback={<Show when={agentLive()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: agentLive() })}><span class="spin xs" />{agentLive()}</span></Show>}>
               <span class="sb-live sb-agent-ask" title={tr("물어보는 중 {n}개", { n: agentAsks() })}>{agentAsks()}</span>
             </Show>

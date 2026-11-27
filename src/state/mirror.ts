@@ -3,7 +3,7 @@
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
 import type { Limit } from "../lib/native";
-import type { CaptainMessage, Decision, Project, SpaceId, Task } from "./types";
+import type { AgentNote, CaptainMessage, Decision, Project, Routine, SpaceId, Task } from "./types";
 
 /** "off": disconnected here for now (연결 끊기) */
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
@@ -32,6 +32,21 @@ export interface HostMirror {
   ui?: Record<string, unknown>;
   /** its app settings the settings page offers (engine/appSettings.ts SHARED_SETTINGS) */
   settings?: Record<string, unknown>;
+  /** its Discord agent, for its 에이전트 tab here (a device that doesn't show it: none) */
+  agent?: FarAgent;
+}
+
+/** another device's Discord agent as it sends it (engine/remote.ts agentNow); its chat comes with the
+ *  chats, its work and questions with the jobs */
+export interface FarAgent {
+  name: string;
+  on: boolean;
+  status: { state: "off" | "connecting" | "on" | "stopped"; why?: string };
+  notes: AgentNote[];
+  /** its agent/AGENT.md */
+  ways: string;
+  /** its routines (ids and workspaces as there) */
+  routines: Routine[];
 }
 
 /** a message of another device's chat: while main is still answering, what it has written and thought so far */
@@ -178,14 +193,16 @@ export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: 
 
 /** a message of that device's chat as it shows here: in its workspace's tab, its project's id here */
 export function chatHere(host: string, m: FarMessage): FarMessage {
-  return { ...m, space: hostSpaceId(host, m.space), ...(m.project ? { project: remoteProjectId(host, m.project) } : {}), ...(m.up ? { up: remoteProjectId(host, m.up) } : {}) };
+  return { ...m, space: hostSpaceId(host, m.space), ...(m.project ? { project: projectHere(host, m.project) } : {}), ...(m.up ? { up: remoteProjectId(host, m.up) } : {}) };
 }
 
 /** a question main asks there ("main:<space>~<project>"), as it shows in that chat here */
 export function askHere(host: string, d: Decision): Decision {
   const [space, project] = d.taskId.slice(5).split("~");
-  return { ...d, taskId: `main:${hostSpaceId(host, space)}${project ? `~${remoteProjectId(host, project)}` : ""}` };
+  return { ...d, taskId: `main:${hostSpaceId(host, space)}${project ? `~${projectHere(host, project)}` : ""}` };
 }
+/** a chat's project there as named here: the agent's chat keeps its name, so it reads as the agent's */
+const projectHere = (host: string, project: string) => (project === "@agent" || project.startsWith("@agent:") ? project : remoteProjectId(host, project));
 
 /** a key or value of this device's for that device's workspace, in that device's own ids */
 export const toThere = (host: string, s: string) => s.split(`h:${host}:`).join("").split(`r:${host}:`).join("");
