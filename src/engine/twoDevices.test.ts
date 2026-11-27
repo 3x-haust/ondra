@@ -32,6 +32,7 @@ function net(me: string) {
     remoteDevices: async () => [],
     remoteForget: async () => [],
     remoteHostName: async () => dev().name,
+    engineInfo: async () => ({ enginePath: "/e", engineVersion: "1", dataDir: "/d", home: "/h", browser: false, computer: false }),
     // main never gets an engine here: its answer is played by the test on that device
     agentSpawn: () => new Promise(() => {}),
     remoteCmd: async (cmd: Record<string, unknown>) => {
@@ -66,6 +67,7 @@ async function load() {
     shared: await import("../state/shared"),
     settings: await import("./appSettings"),
     tasks: await import("./tasks"),
+    rpc: await import("./rpc"),
   };
 }
 
@@ -231,6 +233,21 @@ describe("a device kept to some workspaces", () => {
     await expect(a.m.hosts.viaHost(B, "say", [{ space: "home", text: "몰래", me: "x1", reply: "x2" }])).rejects.toThrow();
     await expect(a.m.hosts.viaHost(B, "setSetting", ["theme", "dark"])).rejects.toThrow();
     expect(b.m.store.state.captain.some((m) => m.text === "몰래")).toBe(false);
+    b.m.remote.setDeviceSpaces(A, undefined);
+  });
+});
+
+describe("a device that doesn't share its chats (an older Ondra, or one that keeps this device to some workspaces)", () => {
+  it("what is typed in its workspace's main never becomes a job there as typed: main says why", async () => {
+    b.m.remote.setDeviceSpaces(A, ["home"]);
+    a.m.mirror.setMirror("hosts", B, "chat", undefined);
+    a.m.store.setState("settings", "hosts", (l) => (l ?? []).map((h) => ({ ...h, same: undefined })));
+    await a.m.rpc.refreshEngine();
+    expect(a.m.shared.farOf(theirs)).toBeUndefined();
+    const jobs = b.m.store.state.tasks.length;
+    const replyId = a.m.captain.throwThought("옮기기 화면 좀 바꿔 줘", theirs);
+    await wait(() => expect(a.m.shared.chatIn(theirs).find((m) => m.id === replyId)?.error).toBe("맥북프로의 메인에 보낼 수 없어요 · 그 기기의 Ondra를 업데이트해 주세요"));
+    expect(b.m.store.state.tasks.length).toBe(jobs);
     b.m.remote.setDeviceSpaces(A, undefined);
   });
 });
