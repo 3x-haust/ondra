@@ -254,6 +254,14 @@ export function moveProject(space: SpaceId, id: string, to: number) {
   const mine = new Set(ids);
   setState("settings", "projectOrder", [...(state.settings.projectOrder ?? []).filter((x) => !mine.has(x)), ...ids]);
 }
+/** Move a device in the Mac bar to `to` (its place in `ids`, the bar's order as shown). */
+export function moveMac(ids: string[], id: string, to: number) {
+  const from = ids.indexOf(id);
+  if (from < 0) return;
+  const next = ids.filter((x) => x !== id);
+  next.splice(Math.max(0, Math.min(to, next.length)), 0, id);
+  setState("settings", "macOrder", next);
+}
 /** Each space's jobs, this Mac's first and then the other Macs' shown there: kept as jobs come
  *  and go or move, not rebuilt on each read (the sidebar reads it for every row, every second). */
 const bySpace = createRoot(() =>

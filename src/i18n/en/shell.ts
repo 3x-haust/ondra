@@ -61,6 +61,8 @@ export default {
   "Mac 꾸미기": "Customize Mac",
   "아이콘 바꾸기": "Change icon",
   "색 바꾸기": "Change color",
+  "왼쪽으로 옮기기": "Move left",
+  "오른쪽으로 옮기기": "Move right",
   "연결 설정": "Connection settings",
   "Mac 연결": "Connect a Mac",
   "{mac}에 연결되면 워크스페이스가 보여요": "{mac}'s workspaces show once it connects",

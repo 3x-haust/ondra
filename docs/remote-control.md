@@ -12,7 +12,7 @@ The two devices reconnect on their own, with no new link needed. Older versions 
 
 ## The Mac bar
 
-The foot of the sidebar shows this device and each connected one.
+The foot of the sidebar shows this device and each connected one. Drag a device left or right to reorder the bar, or use **왼쪽으로 옮기기 / 오른쪽으로 옮기기** in its menu. The order is kept (`settings.macOrder`), and ⌃1…⌃9 follow it.
 
 Each connected device's mark shows its link: a filled green dot when connected, an amber ring that pulses while it connects or waits to be allowed, a red ring when it isn't connected, and a grey ring after **연결 끊기** here (`linkTone` in `src/state/mirror.ts`). Hovering the mark says the same in words.
 

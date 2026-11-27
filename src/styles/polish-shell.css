@@ -2096,6 +2096,30 @@
     opacity: 0.35;
   }
 }
+/* a device being dragged to another place: it dims, a line shows where it lands */
+:root.mbar-dragging,
+:root.mbar-dragging * {
+  cursor: grabbing !important;
+}
+.app .sidebar .mbar-mac.dragging {
+  opacity: 0.5;
+}
+.app .sidebar .mbar-mac:is(.drop-before, .drop-after)::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.app .sidebar .mbar-mac.drop-before::before {
+  left: -2px;
+}
+.app .sidebar .mbar-mac.drop-after::before {
+  right: -2px;
+}
 /* the device shown but not connected: its pill goes grey, not its color (its name says which) */
 .app .sidebar .mbar-mac.on.away {
   background: var(--hover);
