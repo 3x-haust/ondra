@@ -17,7 +17,7 @@ import { toast } from "../state/ui";
 import { t } from "../i18n";
 import { eventText, newEvents, parseEvents, searchFilter } from "./routineEvents";
 import { dayTime, describeWhen, LATE_OK, nextRun } from "./routineTime";
-import { archiveTask, createTask, finished } from "./tasks";
+import { archiveTask, createTask, finished, lastReport } from "./tasks";
 import { relay } from "./jobs";
 import { splitProjectId } from "../state/mirror";
 import { viaHost } from "./hosts";
@@ -93,11 +93,14 @@ export function removeRoutine(id: string) {
 /** The runs of a routine, oldest first. */
 export const runsOf = (id: string): Task[] => state.tasks.filter((x) => x.routine === id).sort((a, b) => a.createdAt - b.createdAt);
 
-/** Said nothing worth a look: the run's last word starts with NOTHING. */
-export function saidNothing(x: Pick<Task, "summary" | "result" | "saidDone">): boolean {
+/** Said nothing worth a look: the run's last word starts with NOTHING (its last message, or its done summary). */
+export function saidNothing(x: Pick<Task, "summary" | "result" | "saidDone" | "entries">): boolean {
   const last = (x.result ?? x.summary ?? x.saidDone ?? "").trim();
-  return last.startsWith(NOTHING) || (x.summary ?? "").trim().startsWith(NOTHING);
+  return last.startsWith(NOTHING) || (x.summary ?? "").trim().startsWith(NOTHING) || !!lastReport(x)?.startsWith(NOTHING);
 }
+
+/** A finished run of a routine that had nothing to do: not one of the project's jobs to look at. */
+export const idleRun = (x: Task) => !!x.routine && x.status === "done" && saidNothing(x);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const stamp = (at: number) => {
@@ -112,7 +115,7 @@ export function runMessage(r: Routine, now: number, happened?: string): string {
     r.lastAt ? `지난 실행: ${stamp(r.lastAt)}` : "첫 실행이에요.",
   ].join("\n");
   const quiet = r.quiet
-    ? `할 일이나 알릴 것이 없었다면 마지막 답을 "${NOTHING}"로 시작하고 한 줄로 끝내요. 그런 실행은 조용히 보관돼요.`
+    ? `할 일이나 알릴 것이 없었다면 마지막 답과 끝낼 때의 요약(summary)을 둘 다 "${NOTHING}"로 시작하고 한 줄로 끝내요. 그런 실행은 조용히 보관돼요.`
     : "";
   return [head, happened ? `## 새로 생긴 것\n${happened}` : "", `## 할 일\n${r.prompt}`, quiet].filter(Boolean).join("\n\n");
 }
