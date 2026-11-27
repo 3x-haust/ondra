@@ -3037,6 +3037,7 @@ export function createTask(f: {
       // the other workspaces it may reach, by name (that device's workspaces of the same names)
       reach: task.reach?.map((x) => state.spaces.find((s) => s.id === x)?.label).filter((x): x is string => !!x), follows: task.follows, issue: f.issue, by: f.by,
       permission: task.permission,
+      ...(task.agent ? { agent: task.agent } : {}),
     });
     return id;
   }

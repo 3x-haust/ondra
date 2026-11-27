@@ -34,6 +34,8 @@ export interface HostMirror {
   settings?: Record<string, unknown>;
   /** its Discord agent, for its 에이전트 tab here (a device that doesn't show it: none) */
   agent?: FarAgent;
+  /** whether it holds the Discord agent's connection, and since when (engine/agentHub.ts) */
+  hub?: { on: boolean; at: number };
 }
 
 /** another device's Discord agent as it sends it (engine/remote.ts agentNow); its chat comes with the
@@ -123,6 +125,8 @@ export interface FarAsk {
   issue?: Task["issue"];
   by?: string;
   permission?: Task["permission"];
+  /** the Discord agent's work: where it was asked (the device holding the agent shows it there) */
+  agent?: Pick<NonNullable<Task["agent"]>, "channel" | "room" | "quiet" | "shots">;
 }
 
 export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirror> }>({ hosts: {} });

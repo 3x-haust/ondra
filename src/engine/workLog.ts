@@ -9,7 +9,8 @@ import { discordApi, discordSend, discordSendFile, discordTyping } from "../lib/
 import { localLinks, openRow } from "./discordFiles";
 import { redact } from "../lib/log";
 import { expand } from "./rpc";
-import { state } from "../state/store";
+import { taskById } from "../state/store";
+import { agentTasks, jobAgent } from "./agentJobs";
 import type { Entry, PlanStep, Task } from "../state/types";
 import { forThem, tongueOf } from "./tongue";
 import { planCount } from "../state/progress";
@@ -35,14 +36,15 @@ export function jobChannel(a: Task["agent"]): string | undefined {
   const place = a?.room || a?.channel;
   return a?.thread && a.threadIn === place ? a.thread : place;
 }
-const roomOf = (t: Task) => jobChannel(t.agent);
+const roomOf = (t: Task) => jobChannel(jobAgent(t));
 const out = (s: string) => redact(s).trim();
 const ended = (t: Task) => t.status === "done" || t.status === "failed" || t.status === "paused";
 
 /** Called every few seconds: what each of the agent's jobs did since, as one message per job. */
 export async function workTick(now = Date.now()) {
   since ??= now;
-  const jobs = state.tasks.filter((t) => t.agent && !t.parentId && !t.agent.quiet && roomOf(t));
+  // (its jobs on connected devices too: the device holding Discord speaks for them)
+  const jobs = agentTasks().filter((t) => !t.parentId && !jobAgent(t)!.quiet && roomOf(t));
   for (const t of jobs) {
     if (done.has(t.id)) continue;
     let w = watching.get(t.id);
@@ -67,7 +69,7 @@ export async function workTick(now = Date.now()) {
     if (ended(t)) watching.delete(t.id), done.add(t.id);
   }
   // a job gone from the list (deleted) stops being watched
-  for (const id of watching.keys()) if (!state.tasks.some((t) => t.id === id)) watching.delete(id);
+  for (const id of watching.keys()) if (!taskById(id)) watching.delete(id);
 }
 
 async function relay(t: Task, w: Watch, now: number) {
@@ -77,10 +79,11 @@ async function relay(t: Task, w: Watch, now: number) {
     const line = lineOf(t, e, w);
     if (line) lines.push(line);
   }
-  const shots = t.agent?.shots !== false ? (w.pictures ?? []) : [];
+  // pictures and files of a job on another device are on that device: its words only
+  const shots = jobAgent(t)?.shots !== false && !t.host ? (w.pictures ?? []) : [];
   w.pictures = [];
   // two jobs in one channel: each batch says whose it is, in small print
-  const shared = [...watching.keys()].some((id) => id !== t.id && (() => { const o = state.tasks.find((x) => x.id === id); return !!o && roomOf(o) === room && !ended(o); })());
+  const shared = [...watching.keys()].some((id) => id !== t.id && (() => { const o = taskById(id); return !!o && roomOf(o) === room && !ended(o); })());
   // its checklist, when a step got done or the plan changed (where the step it's on moved, no)
   const key = planKey(t.plan);
   if (key !== w.plan && !ended(t)) {
@@ -90,7 +93,7 @@ async function relay(t: Task, w: Watch, now: number) {
   const body = lines.join("\n").slice(0, MAX_LINE * 2);
   const text = body && shared ? `-# ${t.title}\n${body}` : body;
   // links to this Mac's files go up with it, folders get a button that opens them there (discordFiles.ts)
-  const local = text ? await localLinks(text) : { text, files: [] as string[], open: [] };
+  const local = text && !t.host ? await localLinks(text) : { text, files: [] as string[], open: [] };
   if (local.text) await discordSend(room, local.text).catch(() => {});
   if (local.open.length) await discordApi("POST", `/channels/${room}/messages`, { content: "-# 📂", components: openRow(local.open) }).catch(() => {});
   for (const p of [...shots.slice(0, 4), ...local.files]) await discordSendFile(room, p).catch(() => {});
@@ -99,7 +102,7 @@ async function relay(t: Task, w: Watch, now: number) {
   if (ended(t)) return;
   // working, but silent there for a while: it is reminded to say where it is, in its own words
   const quiet = now - Math.max(w.saidAt ?? now, w.askedAt ?? 0);
-  if (t.status === "running" && quiet >= QUIET_FOR) {
+  if (t.status === "running" && quiet >= QUIET_FOR && !t.host) {
     const { whisper } = await import("./tasks");
     if (whisper(t.id, QUIET_NOTE(Math.round((now - (w.saidAt ?? now)) / 60_000)))) w.askedAt = now;
   }

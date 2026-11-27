@@ -19,7 +19,8 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid, ownSpaces } from "../state/store";
+import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid, ownSpaces, allTasks } from "../state/store";
+import { placeFor } from "./agentPlaces";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, Space, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { mcpArgs, mcpSig } from "./services";
@@ -65,6 +66,8 @@ const inOpen = (r: any): { room?: string; quiet?: boolean; shots?: boolean } => 
   ...(r?.quiet === true ? { quiet: true } : {}),
   ...(r?.shots === false ? { shots: false } : {}),
 });
+/** the agent's jobs on connected devices (it started them there): its chats see them */
+const farAgentJobs = () => allTasks().filter((t) => !!t.host && !!t.agent);
 const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
 // a project added from another device has its own chat here too (its jobs run there)
 const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
@@ -1104,7 +1107,7 @@ function context(space: string, text: string, cwd?: string, event?: Event, note?
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
   // the agent's chat sees its own work; main and the projects never see it
-  const mine = (w ? w.tasks : tasksShown(sp(space))).filter((t) => (isAgentChat(space) ? !!t.agent : !t.agent && (!pid(space) || t.project === pid(space))));
+  const mine = (w ? w.tasks : [...tasksShown(sp(space)), ...(isAgentChat(space) ? farAgentJobs() : [])]).filter((t) => (isAgentChat(space) ? !!t.agent : !t.agent && (!pid(space) || t.project === pid(space))));
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
@@ -1367,15 +1370,20 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
   // work main gives a project goes through that project's chat
   const handed = new Map<string, string[]>();
   // main only acts on this space's jobs and memory: an id from the other space is ignored
+  // (the agent's chat also acts on its jobs on connected devices: it started them there)
   const job = (id: unknown) => {
     const t = id == null ? undefined : taskById(String(id));
-    return t?.space === sp(space) ? t : undefined;
+    return t?.space === sp(space) || (isAgentChat(space) && !!t?.host && !!t.agent) ? t : undefined;
   };
+  // the agent's chat for a channel whose work goes to another device's workspace: new work goes there
+  const placed = isAgentChat(space) ? placeFor(state.settings.agent ?? { on: false, name: "" }, agentChannel(space)) : undefined;
   const piece = (id: unknown) => {
     const m = typeof id === "string" ? state.memory.find((x) => x.id === id) : undefined;
     return m && (m.space ? m.space === sp(space) : m.scope === "global") ? m.id : undefined;
   };
-  for (const r of raw) {
+  for (const raw1 of raw) {
+    const from1 = raw1?.kind === "new" ? job(raw1.from) : undefined;
+    const r = placed?.kind === "device" && raw1?.kind === "new" && !raw1.space && (!from1 || from1.host) ? { ...raw1, space: placed.space } : raw1;
     // main reacting to a job's end never carries on work the user ended or stopped
     if (!fromUser && (r?.kind === "append" || r?.kind === "new") && userParked(job(r.kind === "new" ? r.from : (r.taskId ?? r.workerId)))) continue;
     if (r?.kind === "answer") {
@@ -1432,7 +1440,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         isolate: isolateOf.get(space),
       });
       out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
-    } else if (r?.kind === "new" && (r.task || r.title) && fromUser && elsewhere(r.space, space)) {
+    } else if (r?.kind === "new" && (r.task || r.title) && (fromUser || isAgentChat(space)) && elsewhere(r.space, space)) {
       // handed to another space or device the user named: made there, with that space's folders,
       // accounts and memory (on that device, for a device's space). Only the request goes; its
       // result comes back to this chat (endChat)
@@ -1449,8 +1457,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         weight: r.weight === "heavy" ? "heavy" : "light",
         size: r.size === "small" || r.size === "large" ? r.size : undefined,
         display: work === 1 ? original : undefined,
-        // the agent's work shows on Discord as it goes; a device's job is that device's to show
-        ...(isAgentChat(space) && !to.host ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
+        // the agent's work shows on Discord as it goes (from here, for one on another device)
+        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
       });
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });

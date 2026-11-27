@@ -55,6 +55,7 @@ import { forThem, nonLatin } from "./tongue";
 import { allowed, placeOf, roomName, seeChannels, seePeople, seeServers, tagged } from "./discordPeople";
 import { localLinks, openClick, openRow } from "./discordFiles";
 import { agentHome, placeNote } from "./agentPlaces";
+import { agentTasks, decisionById, jobAgent, jobDecisions, setJobAgent } from "./agentJobs";
 import { hostName } from "./hosts";
 
 /**
@@ -176,12 +177,15 @@ const heard = new Map<string, { lines: Heard[]; guild?: string; spoke: boolean; 
 /** how long a channel stays quiet before the memory pass reads it */
 export const QUIET_MS = 10 * 60_000;
 
-/** questions asked on Discord, kept on the question itself (so a restart doesn't ask again) */
+/** questions asked on Discord, kept on the question itself (so a restart doesn't ask again); one of
+ *  its job's on another device is kept here while the app runs */
+const farPosted = new Map<string, string>();
+const own = (id: string) => state.decisions.some((d) => d.id === id);
 const posted = {
-  get: (id: string) => state.decisions.find((d) => d.id === id)?.posted,
-  has: (id: string) => !!state.decisions.find((d) => d.id === id)?.posted,
-  set: (id: string, channel: string) => setState("decisions", (d) => d.id === id, "posted", channel),
-  delete: (id: string) => setState("decisions", (d) => d.id === id, "posted", undefined),
+  get: (id: string) => (own(id) ? state.decisions.find((d) => d.id === id)?.posted : farPosted.get(id)),
+  has: (id: string) => !!posted.get(id),
+  set: (id: string, channel: string) => (own(id) ? setState("decisions", (d) => d.id === id, "posted", channel) : void farPosted.set(id, channel)),
+  delete: (id: string) => (own(id) ? setState("decisions", (d) => d.id === id, "posted", undefined) : void farPosted.delete(id)),
 };
 /** per channel: what it said there, newest last (for "그거 지워") */
 const said = new Map<string, string[]>();
@@ -234,8 +238,9 @@ export async function startAgent() {
   }
 }
 
-export function stopAgent() {
-  void discordStop();
+/** Disconnect; resolves once the connection is closed. */
+export function stopAgent(): Promise<void> {
+  const closed = discordStop();
   unlisten?.();
   unlisten = undefined;
   unhook?.();
@@ -255,6 +260,7 @@ export function stopAgent() {
   sending.clear();
   lastIn.clear();
   setStatus({ state: "off" });
+  return closed;
 }
 
 async function onDiscord(ev: DiscordEvent) {
@@ -385,7 +391,7 @@ function knowChannels(guild: string, now = Date.now()) {
 }
 
 /** a channel where work from Discord is shown (a job's room) */
-const workRoom = (channel: string) => state.tasks.some((t) => t.agent?.room === channel);
+const workRoom = (channel: string) => agentTasks().some((t) => jobAgent(t)?.room === channel);
 /** where a message is, by name (a DM, or a server's channel) */
 export const whereIs = (m: DiscordMessage, ko = false) => placeOf(m, { work: !!m.guild && workRoom(m.channel), ko });
 
@@ -626,7 +632,7 @@ async function armOwn(d: Decision) {
 /** their own words sent from the popup: the answer, as if typed under the question in the app */
 async function ownSent(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
-  const d = state.decisions.find((x) => x.id === i.custom_id!.slice(OWN_SENT.length));
+  const d = decisionById(i.custom_id!.slice(OWN_SENT.length));
   const raw = i.fields?.a;
   const text = (Array.isArray(raw) ? raw.join(" ") : (raw ?? "")).trim();
   if (!d) return void discordInteractionReply(i.id, { content: "이미 답한 질문이에요", flags: 64 }, true).catch(() => {});
@@ -643,7 +649,7 @@ async function ownSent(i: DiscordInteraction, a: AgentSettings) {
 /** 직접 답하기 pressed with no popup behind it (from before a restart): armed now, pressed again it opens */
 async function ownUnarmed(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
-  const d = state.decisions.find((x) => x.id === i.custom_id!.slice(OWN.length));
+  const d = decisionById(i.custom_id!.slice(OWN.length));
   if (d) await armOwn(d);
   await discordInteractionReply(i.id, { content: d ? "한 번 더 누르면 답을 적는 창이 열려요 (여기에 그냥 써도 돼요)" : "이미 답한 질문이에요", flags: 64 }, true).catch(() => {});
 }
@@ -651,7 +657,7 @@ async function ownUnarmed(i: DiscordInteraction, a: AgentSettings) {
 // ---- its questions pinned where they were asked: among any number of messages, what is waiting
 // on the user is in the channel's pins, and goes from there once it is answered (here or in the app)
 async function pinAsk(d: Decision, channel: string, message: string | undefined) {
-  if (!message || !me || !state.decisions.some((x) => x.id === d.id)) return;
+  if (!message || !me || !decisionById(d.id)) return;
   const pin = (path: string) => discordApi("PUT", path).then(() => true, () => false);
   if (!(await pin(`/channels/${channel}/messages/pins/${message}`)) && !(await pin(`/channels/${channel}/pins/${message}`))) return;
   setAgent({ pins: [...(settings()?.pins ?? []).filter((p) => p.decision !== d.id), { decision: d.id, channel, message }] });
@@ -662,9 +668,10 @@ async function pinAsk(d: Decision, channel: string, message: string | undefined)
 }
 /** answered or gone: its pin goes; still waiting after a restart: its popup is armed again */
 export async function unpinAnswered() {
-  for (const d of state.decisions) if (d.posted && !armed.has(d.id) && ownAnswer(d)) void armOwn(d);
+  const all = jobDecisions();
+  for (const d of all) if (posted.has(d.id) && !armed.has(d.id) && ownAnswer(d)) void armOwn(d);
   const pins = settings()?.pins ?? [];
-  const gone = pins.filter((p) => !state.decisions.some((d) => d.id === p.decision));
+  const gone = pins.filter((p) => !all.some((d) => d.id === p.decision));
   if (!gone.length) return;
   setAgent({ pins: pins.filter((p) => !gone.includes(p)) });
   for (const p of gone) {
@@ -677,7 +684,7 @@ export async function unpinAnswered() {
 async function fieldPicked(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
   const [did, n] = i.custom_id!.slice(FIELD.length).split(":");
-  const d = state.decisions.find((x) => x.id === did);
+  const d = decisionById(did);
   const f = d?.form?.[Number(n)];
   if (!d || !f) return;
   const v = { ...draftOf(d) };
@@ -723,7 +730,7 @@ async function formSent(i: DiscordInteraction, d: Decision, optionId: string, ty
 async function popupSent(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
   const [did, oid] = i.custom_id!.slice(FORM.length).split(":");
-  const d = state.decisions.find((x) => x.id === did);
+  const d = decisionById(did);
   if (d?.form?.length && d.options.some((o) => o.id === oid)) await formSent(i, d, oid, i.fields);
 }
 
@@ -731,7 +738,7 @@ async function popupSent(i: DiscordInteraction, a: AgentSettings) {
 async function picked(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
   const [did, oid] = i.custom_id!.slice(PICK.length).split(":");
-  const d = state.decisions.find((x) => x.id === did);
+  const d = decisionById(did);
   const o = d?.options.find((x) => x.id === oid);
   if (d?.form?.length && o) {
     // things to type: the click opened the popup, its sending answers; only menus: this sends it
@@ -1077,7 +1084,7 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   seePeople(back ?? []);
   const recent = recentTalk(a, (back ?? []).filter((x) => !theirs.has(x.id) && x.content.trim()).slice(-RECENT), me?.id ?? "");
   // a question of its work still open there: their words may be about that one
-  const open = [...state.decisions].reverse().find((x) => posted.get(x.id) === m.channel);
+  const open = [...jobDecisions()].reverse().find((x) => posted.get(x.id) === m.channel);
   const asking = open
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
@@ -1257,8 +1264,9 @@ async function mainSaid(replyId: string) {
 export function myState(space: string, now = Date.now()): string {
   const label = (id: string) => state.spaces.find((x) => x.id === id)?.label ?? id;
   const mins = (t: Task) => Math.max(1, Math.round((now - (t.legs?.[0]?.startedAt ?? t.createdAt)) / 60_000));
-  const snags = (t: Task) => (t.shells ?? []).filter((x) => x.ok === false).length + state.tasks.filter((k) => k.parentId === t.id && k.status === "failed").length;
-  const live = state.tasks.filter((t) => t.agent && !t.parentId && (t.status === "running" || t.status === "waiting" || t.status === "queued"));
+  const jobs = agentTasks();
+  const snags = (t: Task) => (t.shells ?? []).filter((x) => x.ok === false).length + jobs.filter((k) => k.parentId === t.id && k.status === "failed").length;
+  const live = jobs.filter((t) => !t.parentId && (t.status === "running" || t.status === "waiting" || t.status === "queued"));
   const lines: string[] = [];
   // what it is really doing, so "하는 중?" is answered from this, not from a guess
   const ago = (at: number) => { const sec = Math.max(0, Math.round((now - at) / 1000)); return sec < 90 ? `${sec}s ago` : `${Math.round(sec / 60)} min ago`; };
@@ -1272,7 +1280,7 @@ export function myState(space: string, now = Date.now()): string {
   };
   for (const t of live.filter((x) => x.space === space))
     lines.push(`- here: "${t.title}", ${mins(t)} min, ${doing(t)}${snags(t) ? `, hit ${snags(t)} snags` : ""}`);
-  for (const t of state.tasks.filter((x) => x.agent && !x.parentId && x.space === space && x.status === "failed" && now - (x.finishedAt ?? 0) < 3_600_000))
+  for (const t of jobs.filter((x) => !x.parentId && x.space === space && x.status === "failed" && now - (x.finishedAt ?? 0) < 3_600_000))
     lines.push(`- here, failed ${ago(t.finishedAt ?? now)}: "${t.title}"${t.error ? ` (${t.error.replace(/\s+/g, " ").slice(0, 80)})` : ""}`);
   const others = [...new Set(live.filter((x) => x.space !== space).map((x) => x.space))];
   for (const sp of others) {
@@ -1280,7 +1288,7 @@ export function myState(space: string, now = Date.now()): string {
     const n = ts.reduce((k, t) => k + snags(t), 0);
     lines.push(`- ${label(sp)} work (say nothing of what it is): ${ts.length} going, longest ${Math.max(...ts.map(mins))} min${n ? `, ${n} snags so far` : ""}`);
   }
-  const hard = state.tasks.filter((t) => t.agent && !t.parentId && t.status === "failed" && now - (t.finishedAt ?? 0) < 3 * 3_600_000).length;
+  const hard = jobs.filter((t) => !t.parentId && t.status === "failed" && now - (t.finishedAt ?? 0) < 3 * 3_600_000).length;
   if (hard) lines.push(`- in the last few hours ${hard} of your jobs failed`);
   if (!lines.length) return "";
   return `Where you are right now (yours to bring up or not, like a person who is busy elsewhere; true things only: jobs run side by side, so "after that one" only when one really waits on another, say the same account's limit or the same repo):\n${lines.join("\n")}`;
@@ -1290,7 +1298,7 @@ export function myState(space: string, now = Date.now()): string {
 export function channelOf(taskId: string): string | undefined {
   const t = taskById(taskId);
   // where it works (the project's channel it picked) before where it was asked
-  const a = t?.agent ?? (t?.parentId ? taskById(t.parentId)?.agent : undefined);
+  const a = jobAgent(t) ?? (t?.parentId ? jobAgent(taskById(t.parentId)) : undefined);
   return jobChannel(a);
 }
 
@@ -1303,12 +1311,11 @@ export function channelOf(taskId: string): string | undefined {
 // archived); a word there opens it again.
 const THREAD_CLOSE_AFTER = 10 * 60_000;
 const jobOpen = (t: Task) => t.status !== "done" && t.status !== "failed";
-const setJobAgent = (id: string, patch: Partial<NonNullable<Task["agent"]>>) => setState("tasks", (x) => x.id === id, "agent", (a) => ({ ...(a ?? {}), ...patch }));
 
 export async function openThreads() {
   if (!me) return;
-  for (const t of state.tasks) {
-    const a = t.agent;
+  for (const t of agentTasks()) {
+    const a = jobAgent(t);
     const place = a?.room || a?.channel;
     if (!a || !place || t.parentId || !jobOpen(t) || (a.thread !== undefined && a.threadIn === place)) continue;
     // moved to another place: the thread it left says where it went and is put away, so the
@@ -1359,8 +1366,8 @@ const HEAD_WAITS = 3 * 60_000;
  * thread. One that carries on again (a word in its thread) shows as working until it ends again.
  */
 export async function foldThreads(now = Date.now()) {
-  for (const t of state.tasks) {
-    const a = t.agent;
+  for (const t of agentTasks()) {
+    const a = jobAgent(t);
     if (!a?.head || !a.threadIn || t.parentId || !!a.folded === !jobOpen(t)) continue;
     // a finished job's points are written a little after it ends (a failed one gets none)
     if (!jobOpen(t) && t.status === "done" && !t.digest && (t.finishedAt ?? now) > now - HEAD_WAITS) continue;
@@ -1370,8 +1377,8 @@ export async function foldThreads(now = Date.now()) {
 }
 
 export async function closeThreads(now = Date.now()) {
-  for (const t of state.tasks) {
-    const a = t.agent;
+  for (const t of agentTasks()) {
+    const a = jobAgent(t);
     if (!a?.thread || a.threadClosed || t.parentId || jobOpen(t) || (t.finishedAt ?? now) > now - THREAD_CLOSE_AFTER) continue;
     setJobAgent(t.id, { threadClosed: true });
     await discordApi("PATCH", `/channels/${a.thread}`, { name: cut(`${t.status === "failed" ? "❌" : "✅"} ${t.title || t.ask}`, 100), archived: true }).catch(() => {});
@@ -1381,7 +1388,7 @@ export async function closeThreads(now = Date.now()) {
 /** Where a question of main's was posted on Discord, for its answer from the app: the answer
  * carries on there, as if typed under the question, not wherever the user last wrote. */
 export function askedWhere(d: Decision): { discord?: CaptainMessage["discord"]; note?: string } {
-  const channel = d.posted;
+  const channel = d.posted ?? farPosted.get(d.id);
   if (!channel) return {};
   const message = settings()?.pins?.find((p) => p.decision === d.id)?.message ?? "";
   const job = threadJob(channel);
@@ -1392,7 +1399,7 @@ export function askedWhere(d: Decision): { discord?: CaptainMessage["discord"]; 
 }
 
 /** a job whose thread this is */
-const threadJob = (channel: string) => state.tasks.find((t) => t.agent?.thread === channel && !t.parentId);
+const threadJob = (channel: string) => agentTasks().find((t) => jobAgent(t)?.thread === channel && !t.parentId);
 
 /** An alarm the agent was asked for rings: said in that channel, to the user (a mention pings them). */
 export async function sayOnDiscord(channel: string, text: string) {
@@ -1406,7 +1413,7 @@ export async function sayOnDiscord(channel: string, text: string) {
 
 /** a job started from Discord asked something: post it there once */
 function postQuestions() {
-  for (const d of state.decisions) {
+  for (const d of jobDecisions()) {
     if (posted.has(d.id) || d.ui) continue;
     const t = taskById(d.taskId);
     const channel = channelOf(d.taskId);
@@ -1439,16 +1446,16 @@ const agentsOwn = (owner: string) => !!channelOf(owner) || (owner.startsWith("ma
  */
 export async function postApprovals(a: AgentSettings | undefined = settings()) {
   for (const [id, p] of approvals) {
-    if (state.decisions.some((d) => d.id === id)) continue;
+    if (decisionById(id)) continue;
     approvals.delete(id);
     if (p.message) await discordApi("PATCH", `/channels/${p.channel}/messages/${p.message}`, { components: pickButtons(p.d, "-") }).catch(() => {});
   }
   if (!a?.on || !a.ownerId) return;
-  for (const d of state.decisions) {
+  for (const d of jobDecisions()) {
     if (!d.ui || approvals.has(d.id) || posted.has(d.id) || !agentsOwn(d.taskId)) continue;
     approvals.set(d.id, { channel: "", d });
     const to = await dmChannel(a);
-    if (!to || !state.decisions.some((x) => x.id === d.id)) {
+    if (!to || !decisionById(d.id)) {
       approvals.delete(d.id);
       continue;
     }
@@ -1465,11 +1472,11 @@ export async function postApprovals(a: AgentSettings | undefined = settings()) {
   }
 }
 
-const pendingIn = (channel: string) => state.decisions.some((d) => posted.get(d.id) === channel);
+const pendingIn = (channel: string) => jobDecisions().some((d) => posted.get(d.id) === channel);
 
 /** The user's words in a channel with a question waiting, when they answer it ("그냥 끝내", "2"): that choice. */
 async function answered(channel: string, text: string): Promise<boolean> {
-  const d = [...state.decisions].reverse().find((x) => posted.get(x.id) === channel);
+  const d = [...jobDecisions()].reverse().find((x) => posted.get(x.id) === channel);
   if (!d || !text.trim()) return false;
   // things to fill in: the reply is the answer, in their words
   if (d.form?.length) {
