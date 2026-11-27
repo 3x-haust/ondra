@@ -1937,6 +1937,10 @@ final class Backdrop {
         // second time on a slot comes up straight in its corner. A display it hasn't seen lands
         // beside the main one first, and a Dock on that side jumps onto it for a moment (the
         // Dock flicker users saw when every helper made a new one).
+        // The user's screens' modes before it comes up. macOS brings a display back in the
+        // arrangement it saved for this set of screens, and a saved mirror puts a screen of the
+        // user's in a mirror of this one, at this one's 1920x1200 at 1x (a large monitor blurs).
+        let userModes = onlineDisplays().filter { !Backdrop.isOurs($0) }.compactMap { d in CGDisplayCopyDisplayMode(d).map { (d, $0) } }
         let taken = Set(onlineDisplays().filter(Backdrop.isOurs).map { CGDisplaySerialNumber($0) })
         var made: CGVirtualDisplay?
         let serials = hold ? [Backdrop.heldSerial] : (UInt32(0)..<8).map { Backdrop.serialBase + $0 }
@@ -1955,6 +1959,17 @@ final class Backdrop {
         guard let v = made else { dbgLog("display: create failed"); return false }
         let t1 = nowMs()
         while !onlineDisplays().contains(v.displayID), nowMs() - t1 < 2000 { usleep(10_000) }
+        let changed = userModes.filter { CGDisplayCopyDisplayMode($0.0)?.ioDisplayModeID != $0.1.ioDisplayModeID }
+        if CGDisplayIsInMirrorSet(v.displayID) != 0 || !changed.isEmpty {
+            var cfg: CGDisplayConfigRef?
+            CGBeginDisplayConfiguration(&cfg)
+            for d in onlineDisplays() where d == v.displayID || CGDisplayMirrorsDisplay(d) == v.displayID {
+                CGConfigureDisplayMirrorOfDisplay(cfg, d, kCGNullDirectDisplay)
+            }
+            for (d, mode) in changed { CGConfigureDisplayWithDisplayMode(cfg, d, mode, nil) }
+            CGCompleteDisplayConfiguration(cfg, .permanently)
+            dbgLog("display \(v.displayID) came up mirrored or changed a screen's mode; put back")
+        }
         // Its place: above and right of every screen of the user's, touching them only at a
         // corner; past another job's display if one is there. A window's top never goes above
         // its screen's menu bar, so no window the user drags or the app moves can reach it (one
