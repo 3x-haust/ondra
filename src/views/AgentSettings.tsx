@@ -9,8 +9,7 @@ import { knownHub, takeHere } from "../engine/agentHub";
 import { hostName } from "../engine/hosts";
 import { mirror } from "../state/mirror";
 import { Logo } from "../ui/Logos";
-import { DevicePick, GroupTitle, PageHead, Row, Switch_ } from "./Settings";
-import { agentDevices } from "./FarAgentSettings";
+import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
 import { TalkRooms, useRooms, WorkPlaces } from "./AgentPlaces";
 import { t } from "../i18n";
 
@@ -78,7 +77,6 @@ export function AgentSettings() {
   return (
     <>
       <PageHead tab="agent" />
-      <DevicePick devices={agentDevices()} />
       <GroupTitle title={t("디스코드")} />
       <div class="set-group prov-list">
         {/* who it is and whether it's on: one row, like an account */}
