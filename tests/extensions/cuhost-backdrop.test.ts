@@ -43,6 +43,21 @@ describe("computer-use off-screen display", () => {
     expect(keeper).toMatch(/pullBackWindows\(of:/);
   });
 
+  // macOS brings a display back in the arrangement it saved for that set of screens. A saved
+  // mirror put the user's screen in a mirror of this one when the app started, at this one's
+  // 1920x1200 at 1x: a large monitor lost its resolution and went blurry.
+  it("comes up beside the user's screens, never mirrored with one, at their own resolution", () => {
+    const ensure = body(swift, "func ensure(hold: Bool = false) -> Bool {");
+    const made = ensure.indexOf("CGVirtualDisplay(descriptor:");
+    const before = ensure.indexOf("CGDisplayCopyDisplayMode");
+    expect(before, "ensure() must note the user's screen modes before it attaches the display").toBeGreaterThan(-1);
+    expect(before).toBeLessThan(made);
+    const after = ensure.slice(made);
+    expect(after).toMatch(/CGConfigureDisplayMirrorOfDisplay\(cfg, \w+, kCGNullDirectDisplay\)/);
+    expect(after).toMatch(/CGConfigureDisplayWithDisplayMode\(cfg, \w+, \w+, nil\)/);
+    expect(after.indexOf("kCGNullDirectDisplay")).toBeLessThan(after.indexOf("var corner"));
+  });
+
   // Off the bottom-right corner, a window dragged into that corner landed on it, out of sight,
   // and apps saw the pointer there before it was put back.
   it("sits above the user's screens, where no window reaches, and no app sees the pointer on it", () => {
