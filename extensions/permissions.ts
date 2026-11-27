@@ -9,7 +9,7 @@
 // Starts from ONDRA_PERMISSION and can be changed mid-run with `/ondra-permission <mode>`.
 // Questions go out as ui.select, which Ondra shows as a decision card.
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { visitShellCommands } from "./lib/shell-commands";
 
 type Mode = "ask" | "auto" | "full";
@@ -304,6 +304,36 @@ export function githubWrite(command: string): string | undefined {
   return hit;
 }
 
+/**
+ * `gh pr merge --delete-branch` run in a linked git worktree (every Ondra job folder): gh merges,
+ * then checks out the default branch to delete the local one, which fails because the user's
+ * folder already has it checked out, so the remote branch is never deleted.
+ */
+export function worktreeMergeDelete(command: string, cwd: string): boolean {
+  let hit = false;
+  visitShellCommands(command, ([executable, ...args]) => {
+    if (basename(executable) !== "gh") return;
+    const words = args.filter((a) => !a.startsWith("-"));
+    if (words[0] === "pr" && words[1] === "merge" && args.some((a) => /^(-d|--delete-branch(=true)?)$/.test(a))) hit = true;
+  });
+  return hit && linkedWorktree(cwd);
+}
+
+/** A folder inside a linked worktree: its `.git` is a file pointing into `<repo>/.git/worktrees/`. */
+function linkedWorktree(cwd: string): boolean {
+  for (let dir = resolve(cwd); ; dir = dirname(dir)) {
+    const git = join(dir, ".git");
+    if (existsSync(git)) {
+      try {
+        return statSync(git).isFile() && /\/worktrees\//.test(readFileSync(git, "utf8"));
+      } catch {
+        return false;
+      }
+    }
+    if (dirname(dir) === dir) return false;
+  }
+}
+
 const UDID = /\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\b/gi;
 
 /**
@@ -410,6 +440,12 @@ export default function (pi: any) {
             reason: `GitHub 쓰기가 꺼져 있어요 (\`${gh}\`). 읽기만 하고, GitHub에 남길 내용은 결과에 적어 사용자에게 넘기세요.`,
           };
       }
+      if (worktreeMergeDelete(String(event.input?.command ?? ""), ctx.cwd))
+        return {
+          block: true,
+          reason:
+            "`gh pr merge --delete-branch`는 git worktree에서 기본 브랜치로 체크아웃하다 'already used by worktree' 오류로 멈춰 원격 브랜치를 남겨요. `--delete-branch` 없이 합친 뒤 `git push origin --delete <브랜치>`로 원격 브랜치를 지우세요.",
+        };
       // in every mode: another space's (or the user's, or another job's) device is off-limits
       const mine = jobDevices();
       const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);

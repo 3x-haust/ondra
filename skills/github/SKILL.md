@@ -63,8 +63,10 @@ Work through `gh`. The web pages are for a person to look at; give them links.
     shows what is allowed.
   - Recent merged PRs (`gh pr list --state merged -L 5 --json mergeCommit,title`) show
     what people actually use.
-- `gh pr merge N --squash|--merge|--rebase [--delete-branch]`. When branch protection
-  holds it, say what it waits on (reviews, checks). Bypass it only when told to.
+- `gh pr merge N --squash|--merge|--rebase`. When branch protection holds it, say what it
+  waits on (reviews, checks). Bypass it only when told to.
+- In a git worktree, `--delete-branch` fails (the default branch is checked out in another
+  folder) and leaves the remote branch: merge without it, then `git push origin --delete <branch>`.
 - Never force-push or push directly to the default branch unless told to.
 
 ## Releases
