@@ -56,14 +56,8 @@ export const SETTINGS: Record<string, Entry> = {
   githubWrite: { where: "일반 › 작업 폴더와 GitHub › GitHub 푸시·PR 허용", kind: { type: "bool" }, get: () => !!state.settings.githubWrite, set: (v: boolean) => setState("settings", "githubWrite", v) },
   browserPip: { where: "일반 › 알림과 미리보기 › 작업 브라우저 작게 띄우기", kind: { type: "bool" }, missing: true, get: () => state.settings.browserPip !== false, set: (v: boolean) => setState("settings", "browserPip", v) },
   jobSound: { where: "일반 › 알림과 미리보기 › 알림 소리", kind: { type: "bool" }, missing: true, get: () => state.settings.jobSound !== false, set: (v: boolean) => setState("settings", "jobSound", v) },
-  remote: {
-    where: "연결 › 다른 기기에서 이 기기 쓰기 (my other Macs may give this one work)",
-    kind: { type: "bool" },
-    get: () => !!state.settings.remote,
-    set: async (v: boolean) => (await import("./remote")).setRemoteOn(v),
-  },
   remoteAwake: {
-    where: "연결 › 전원에 연결돼 있는 동안 잠들지 않기",
+    where: "연결 › 잠자기 방지 (while connected to other devices)",
     kind: { type: "bool" },
     get: () => !!state.settings.remoteAwake,
     set: async (v: boolean) => (setState("settings", "remoteAwake", v), (await import("./remote")).keepAwake()),

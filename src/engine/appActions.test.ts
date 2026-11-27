@@ -7,6 +7,9 @@ import { view } from "../state/ui";
 import { handle } from "./bridge";
 import { ACTIONS } from "./appActions";
 
+// a picker (UI) the remote side names accounts with: only its names are used there
+vi.mock("../ui/AccountPicker", () => ({ accountName: (a: { id: string }) => a.id, service: (p: string) => p }));
+
 const job = (id: string, over: Partial<Task> = {}): Task => ({
   id, space: "home", topic: "Ondra", title: id, ask: `Do ${id}`, cwd: "/repo", status: "done",
   priority: 2, weight: "light", accountId: "default", createdAt: 1, now: "", plan: [], legs: [], entries: [], shells: [], inbox: [], ...over,
@@ -71,8 +74,17 @@ describe("ondra_app: what the user could press, main and a job press too", () =>
     expect((await app("project.move", { id: a, to: 0 })).error).toMatch(/from 1/);
   });
 
-  it("another device's link needs this Mac open to others first, and a link to add one", async () => {
-    expect((await app("remote.link")).error).toMatch(/ondra_settings \{"remote": true\}/);
+  it("this Mac's link needs nothing turned on first (it waits for this Mac to be reachable), and a link to add one", async () => {
+    await import("./remote");
+    vi.useFakeTimers();
+    try {
+      let out: any;
+      void app("remote.link").then((r) => (out = r));
+      for (let i = 0; i < 200 && !out; i++) await vi.advanceTimersByTimeAsync(250);
+      expect(out?.error).toMatch(/isn't reachable yet/);
+    } finally {
+      vi.useRealTimers();
+    }
     expect((await app("remote.add", { link: "hello" })).error).toMatch(/isn't a connect link/);
     expect((await app("remote.add")).error).toBe("remote.add takes link");
   });

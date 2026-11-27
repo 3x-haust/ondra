@@ -11,7 +11,7 @@ vi.mock("../lib/native", async (orig) => ({
   remoteStart: async () => {},
   remoteHostName: async () => "Test Mac",
 }));
-const { hideHostProject, onPeer, removeHost, showHostProject, connectHosts, disconnectHost, reconnect } = await import("./hosts");
+const { addHost, dialBack, fromInSide, hideHostProject, onPeer, removeHost, showHostProject, connectHosts, disconnectHost, reconnect } = await import("./hosts");
 
 const A = "a".repeat(64);
 const B = "b".repeat(64);
@@ -180,6 +180,55 @@ describe("disconnecting for now", () => {
   });
 });
 
+describe("a device that came in here (both ways)", () => {
+  const dials = () => sent.filter((c) => c.cmd === "dial" && c.peer === A);
+  it("connected already: left as it is", async () => {
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    expect(dials()).toEqual([]);
+  });
+  it("lost here: dialed again now, without waiting for the next try", async () => {
+    peer("closed", "timed out");
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    await flush();
+    expect(dials()).toHaveLength(1);
+  });
+  it("came in before that device knew this one (its ok on the way): tried again while it is still connected here", async () => {
+    const C = "c".repeat(64);
+    const removed: string[] = [];
+    fromInSide({ cameIn: (id) => id === C, removedThere: (id) => void removed.push(id) });
+    dialBack(C, "PC");
+    peer("denied", "unknown", C);
+    expect(state.settings.hosts?.find((h) => h.id === C)).toMatchObject({ back: true });
+    expect(removed).toEqual([]);
+    // it went away meanwhile: let go quietly, nothing was ever connected to it
+    fromInSide({ cameIn: () => false, removedThere: (id) => void removed.push(id) });
+    peer("denied", "unknown", C);
+    expect(state.settings.hosts?.some((h) => h.id === C)).toBe(false);
+    expect(removed).toEqual([]);
+  });
+  it("once connected it is like any other: removed there means removed here too", async () => {
+    const C = "c".repeat(64);
+    const removed: string[] = [];
+    fromInSide({ cameIn: () => true, removedThere: (id) => void removed.push(id) });
+    dialBack(C, "PC");
+    peer("ok", undefined, C);
+    expect(state.settings.hosts?.find((h) => h.id === C)?.back).toBeUndefined();
+    peer("denied", "revoked", C);
+    expect(removed).toEqual([C]);
+  });
+  it("disconnected here for now: stays disconnected", async () => {
+    disconnectHost(A);
+    sent.length = 0;
+    dialBack(A, "Studio");
+    await flush();
+    expect(dials()).toEqual([]);
+  });
+});
+
 describe("hiding one of its projects", () => {
   it("takes it and its jobs off the list, and keeps it off when the list comes again", () => {
     hideHostProject(A, "app");
@@ -199,5 +248,28 @@ describe("hiding one of its projects", () => {
     expect(state.settings.hostProjects?.map((p) => p.id).sort()).toEqual(["app", "web"]);
     expect(state.settings.hosts?.find((h) => h.id === A)?.hidden).toEqual([]);
     expect(remoteProjectId(A, "app")).toBe(`r:${A}:app`);
+  });
+});
+
+describe("who may come in, by how it was added", () => {
+  const C = "c".repeat(64);
+  const link = `ondra://connect/${C}?code=abc&name=PC`;
+  const dialOf = () => sent.filter((c) => c.cmd === "dial" && c.peer === C).pop();
+  it("pasted by the user here: both ways (that device is let in here once it lets this one in)", async () => {
+    await addHost(link);
+    expect(dialOf()).toMatchObject({ trust: true, pair: "abc" });
+  });
+  it("added by an agent: one way, every time it is dialed", async () => {
+    await addHost(link, true);
+    expect(dialOf()).toMatchObject({ trust: false });
+    reconnect(C);
+    await flush();
+    await flush();
+    expect(dialOf()).toMatchObject({ trust: false });
+  });
+  it("one that came in here (already let in) is dialed both ways", async () => {
+    dialBack(C, "PC");
+    await flush();
+    expect(dialOf()).toMatchObject({ trust: true });
   });
 });

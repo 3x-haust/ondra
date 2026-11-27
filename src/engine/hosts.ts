@@ -7,6 +7,9 @@
 // Two ways to stop: 연결 끊기 (disconnect for now: kept, not dialed until 다시 연결) and 제거
 // (remove: everything of that device goes from here, and that device is told to forget this one; when it
 // can't be reached it's told the next time it can, see `leaving`).
+//
+// A connection goes both ways: a device this one connects to lets it in (the helper does it), and
+// a device that comes in here is connected to as well (dialBack).
 import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
@@ -221,8 +224,33 @@ async function dial(host: string) {
   const h = hostOf(host);
   if (!h || h.off) return;
   status(host, "connecting");
-  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
+  await remoteCmd({ cmd: "dial", peer: host, name: await remoteHostName(), them: h.name, trust: !h.oneWay, ...(h.pair ? { pair: h.pair } : {}) }).catch(() => again(host));
 }
+
+/** that device came in here and lets this one in too: this one uses it as well (added now when it isn't yet) */
+export function dialBack(id: string, name: string) {
+  // removed here and not told yet (an older Ondra kept it let in): it stays removed
+  if (leavingOf(id)) return;
+  const h = hostOf(id);
+  if (!h) {
+    setState("settings", "hosts", (l) => [...(l ?? []), { id, name, back: true }]);
+    return void dial(id);
+  }
+  const s = mirror.hosts[id]?.status;
+  if (h.off || s === "ok" || s === "connecting" || s === "waiting") return;
+  // it can be reached now: no need to wait for the next try
+  reconnect(id);
+}
+
+/** that device removed this one (its goodbye came): it goes from here too, with nothing to tell it */
+export function forgotBy(id: string) {
+  if (hostOf(id)) forgetHost(id);
+}
+
+/** the side letting devices in (remote.ts): whether a device is connected into this one now, and what it
+ *  does when a device used here turns out to have removed this one (not let in either) */
+const inSide = { cameIn: (_id: string) => false, removedThere: (_id: string, _name: string) => {} };
+export const fromInSide = (f: typeof inSide) => void Object.assign(inSide, f);
 
 function again(host: string) {
   const r = retry.get(host) ?? { n: 0 };
@@ -282,7 +310,18 @@ function denied(host: string, reason: string) {
     status(host, "denied", reason);
     return again(host);
   }
+  // added as it came in here: that device may not know this one yet (its "ok" on the way). While it is
+  // still connected here, try again; else it's let go quietly, nothing was ever connected to it
+  if (hostOf(host)?.back && (reason === "unknown" || reason === "revoked")) {
+    if (inSide.cameIn(host)) {
+      status(host, "connecting");
+      return again(host);
+    }
+    return forgetHost(host);
+  }
   const name = hostName(host);
+  // removed there (not a link that ran out): it isn't let in here either
+  const removed = (reason === "unknown" || reason === "revoked") && !hostOf(host)?.pair;
   const why =
     reason === "refused" ? t("{name}에서 연결을 거절했어요", { name })
     : reason === "unknown" && hostOf(host)?.pair ? t("연결 링크가 만료됐거나 이미 쓰였어요")
@@ -291,6 +330,7 @@ function denied(host: string, reason: string) {
   if (!why) return status(host, "denied", reason);
   forgetHost(host);
   toast(why, "info", undefined, { stay: true });
+  if (removed) inSide.removedThere(host, name);
 }
 
 /** the helper's word about the Macs this one dialed */
@@ -311,7 +351,7 @@ export function onPeer(ev: Record<string, unknown>) {
       if (hostOf(host)?.off) return void remoteCmd({ cmd: "hangup", peer: host }).catch(() => {});
       status(host, "ok");
       // the code did its job: from now on this Mac is known there
-      if (hostOf(host)?.pair) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, pair: undefined } : x)));
+      if (hostOf(host)?.pair || hostOf(host)?.back) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, pair: undefined, back: undefined } : x)));
       void sendTo(host, { t: "projects" }).catch(() => {});
       watch(host);
     } else if (s === "waiting") status(host, "waiting");
@@ -367,12 +407,13 @@ function parseLink(text: string): { id: string; code: string; name: string } | u
   return code ? { id: m[1].toLowerCase(), code, name: q.get("name") || "Mac" } : undefined;
 }
 
-/** add a Mac from its link: connects at once (that device asks its user to allow this one) */
-export async function addHost(text: string): Promise<boolean> {
+/** add a Mac from its link: connects at once (that device asks its user to allow this one). Pasted by the
+ *  user here, it goes both ways; added by an agent (`oneWay`), that device isn't let in here by it. */
+export async function addHost(text: string, oneWay = false): Promise<boolean> {
   const l = parseLink(text);
   if (!l) return false;
   const rest = (state.settings.hosts ?? []).filter((h) => h.id !== l.id);
-  setState("settings", "hosts", [...rest, { id: l.id, name: l.name, pair: l.code }]);
+  setState("settings", "hosts", [...rest, { id: l.id, name: l.name, pair: l.code, ...(oneWay ? { oneWay } : {}) }]);
   // removed before and added again: it isn't to be told goodbye anymore
   if (leavingOf(l.id)) byeDone(l.id);
   retry.delete(l.id);
@@ -447,8 +488,7 @@ function forgetHost(id: string) {
 }
 
 /** 제거: that device goes from here, and it is told to forget this one (now, or once it can be reached) */
-export function removeHost(id: string) {
-  const name = hostName(id);
+export function removeHost(id: string, name = hostName(id)) {
   forgetHost(id);
   setState("settings", "leaving", (l) => [...(l ?? []).filter((x) => x.id !== id), { id, name, at: Date.now() }]);
   byeRetry.delete(id);
@@ -503,13 +543,11 @@ export function hiddenProjects(host: string): { id: string; name: string }[] {
 }
 
 let helper = false;
-/** the helper runs while this Mac works on others or lets others in */
+/** the helper runs while this Mac is connected to others, or is about to be */
 export async function startHosts() {
-  if (!helper) {
-    await remoteStart();
-    helper = true;
-  }
-  await remoteCmd({ cmd: "host", on: !!state.settings.remote }).catch(() => {});
+  if (helper) return;
+  await remoteStart();
+  helper = true;
 }
 export const helperGone = () => void (helper = false);
 

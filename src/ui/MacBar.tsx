@@ -16,7 +16,7 @@ import { decisionsIn, setState, spacesOf, state } from "../state/store";
 import { switchSpace } from "../state/workspace";
 import { linkWord, mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
-import { askRemoveHost, hostConnectItem } from "./macActions";
+import { askRemoveDevice, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { hostState, thisComputer } from "./ComputerPicker";
 import { projectHue } from "./ProjectBadge";
@@ -464,7 +464,7 @@ function macMenu(m: Mac, at: DOMRect): MenuEntry[] {
     { id: "color", label: t("색 바꾸기"), icon: "palette", run: pick("color") },
     { id: "settings", label: t("연결 설정"), icon: "gear", run: () => setView({ name: "settings", tab: "remote" }) },
     // the same two as in Settings › 연결: for now, or for good (asks first)
-    ...(m.local ? [] : (["sep", hostConnectItem(m.id), "sep", { id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askRemoveHost(m.id) }] as MenuEntry[])),
+    ...(m.local ? [] : (["sep", hostConnectItem(m.id), "sep", { id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askRemoveDevice(m.id) }] as MenuEntry[])),
   ];
 }
 

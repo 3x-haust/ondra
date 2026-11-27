@@ -1,14 +1,14 @@
 # Connections: working on another computer
 
-A connected computer's projects show in this app's sidebar. Jobs in those projects run on the host, with its files, tools and accounts. You don't need a remote desktop session.
+A connected computer's projects show in this app's sidebar. Jobs in those projects run on that computer, with its files, tools and accounts. You don't need a remote desktop session. A connection goes both ways: each of the two computers can use the other.
 
 ## Setting it up
 
-1. On the computer that will run the jobs, open Settings › 연결 and turn on **다른 기기에서 이 기기 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
-2. On the computer you're connecting from, open Settings › 연결, press **기기 추가** and paste the link. The host then asks **허용 / 거절**. Older Mac versions label these controls **다른 기기에서 이 기기 쓰기** and **기기 추가**.
-3. Once allowed, the host's projects appear automatically in the sidebar, in the workspace tab of the same name, with the host's name beside them. A project added there later shows up too, and one removed there disappears.
+1. On either computer, open Settings › 연결, press **기기 추가**, then **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
+2. On the other computer, open Settings › 연결, press **기기 추가** and paste the link. The computer that made the link then asks **허용 / 거절**.
+3. Once allowed, each computer's projects appear automatically in the other's sidebar, in a workspace tab of the same name, with that computer's name beside them. A project added there later shows up too, and one removed there disappears.
 
-The two devices reconnect on their own, with no new link needed. To run jobs in the other direction, repeat setup with their roles reversed.
+The two devices reconnect on their own, with no new link needed. Older versions connected one way only (and had a **다른 기기에서 이 기기 쓰기** switch); such a connection becomes two-way by itself once both computers run this version.
 
 ## Hiding a project
 
@@ -16,13 +16,11 @@ A project of another device can't be deleted from here (it is that device's), bu
 
 ## Disconnecting and removing
 
-Both sides have the same two actions, in Settings › 연결 and (on the Mac doing the looking) in the Mac bar's menu:
+Each device has the same two actions, in Settings › 연결 and in the Mac bar's menu. Both act on the connection both ways:
 
-- **연결 끊기** is for now and asks nothing. On the Mac looking on, it stops connecting to that device until **다시 연결**, even across restarts (`hosts[].off`); the projects stay in the list. On the Mac doing the work, it ends that device's live connection; the other Mac shows "그 기기에서 연결을 끊었어요" and doesn't dial again until its user presses 다시 연결 or the app starts again.
-- **제거** is for good and asks first. Getting back needs a new link.
-  - From the Mac looking on: that device's projects, its jobs shown here, a run location set to it (`settings.computers`) and a workspace tab only it had all go. That Mac is told to forget this one. When it can't be reached, the goodbye waits in `settings.leaving` (shown in Settings as "연결되면 그 기기에서도 이 기기를 제거해요") and is tried at each launch and again with backoff (30 s doubling to 30 min) for 30 days.
-  - From the Mac doing the work: that device can't come in anymore. It works whether hosting is on or not: the list in `remote/devices.json` is always shown, and with the helper not running the file is changed directly (`remote_forget`). The other Mac hears why it was cut off and removes this Mac on its side too, so nothing stale is left there.
-- The other side saying no also cleans up: removed there, a refused request or a link that expired takes that device out of the list here with a note saying why. Only "connections are off there" is retried.
+- **연결 끊기** is for now and asks nothing. This Mac stops connecting to that device until **다시 연결**, even across restarts (`hosts[].off`), and that device's live connection here ends; the projects stay in the list. The other Mac shows "그 기기에서 연결을 끊었어요" and doesn't dial again until its user presses 다시 연결 or the app starts again.
+- **제거** is for good and asks first. Getting back needs a new link. That device's projects, its jobs shown here, a run location set to it (`settings.computers`) and a workspace tab only it had all go, and it can't come in anymore (`remote/devices.json`; with the helper not running the file is changed directly, `remote_forget`). That Mac is told to forget this one and removes it on its side too. When it can't be reached, the goodbye waits in `settings.leaving` (shown in Settings as "연결되면 그 기기에서도 이 기기를 제거해요") and is tried at each launch and again with backoff (30 s doubling to 30 min) for 30 days.
+- The other side saying no also cleans up: removed there, a refused request or a link that expired takes that device out of the list here (both ways) with a note saying why. Only "connections are off there" (an older version) is retried.
 
 Jobs that a removed Mac started keep running on the Mac doing the work. A note names how many, with **정리**: it lists them and offers to stop and archive them. The device's ⋯ menu offers the same while any are left.
 
@@ -31,14 +29,17 @@ Jobs that a removed Mac started keep running on the Mac doing the work. A note n
 The Mac doing the work checks every call (`src/engine/remoteRules.ts`):
 
 - A job call (tell, stop, merge, remove, …) goes ahead only on a job that device may reach: a job of a project it keeps, or one it started, and their subagents. Never a job shown here from a third Mac.
-- Each Mac allowed in can be limited to some workspaces (its ⋯ menu in Settings › 연결 › 이 기기; `settings.deviceSpaces`, missing = all). It is sent only those workspaces' projects, accounts and jobs, and can only make jobs and projects there.
+- Each Mac allowed in can be limited to some workspaces (its ⋯ menu in Settings › 연결; `settings.deviceSpaces`, missing = all). It is sent only those workspaces' projects, accounts and jobs, and can only make jobs and projects there.
 - A message from that device is the user's own: it can't pass for one of this Mac's agents.
 
 ## How it fits together
 
-- **The network.** `remote/host` is the `ondra-remote` helper, written in Rust on iroh. Each Mac keeps a key in `<data dir>/remote/key` (0600); the public half is its address. Macs reach each other over QUIC. That is hole-punched UDP when possible, or a relay when not. Either way the traffic is end-to-end encrypted. Only Macs listed in `remote/devices.json` get in, and only while 다른 기기에서 이 기기 쓰기 is on (a goodbye gets through even while it's off). One helper process plays both sides: it accepts other Macs and dials out to them. The app drives it over stdin/stdout, and the Macs' own first lines are described at the top of `main.rs`.
-- **Saying why.** A Mac removing another dials it with `"bye": true` in its hello; the host forgets it and answers `{"t":"bye"}`. A host ending a connection closes it with a reason the other side reads: `revoked` (removed), `dropped` (cut for now) or `off` (hosting turned off).
-- **Older versions.** A field or answer a peer doesn't know is ignored. An older host doesn't know a goodbye: it lets the Mac in instead, which then hangs up and tells its user to remove it on that device too. An older client hears a "cut for now" as a plain disconnect and dials again.
+- **The network.** `remote/host` is the `ondra-remote` helper, written in Rust on iroh. Each Mac keeps a key in `<data dir>/remote/key` (0600); the public half is its address. Macs reach each other over QUIC. That is hole-punched UDP when possible, or a relay when not. Either way the traffic is end-to-end encrypted. Only Macs listed in `remote/devices.json` get in. One helper process plays both sides: it accepts other Macs and dials out to them. It runs while this Mac has a device in either list, or while 기기 추가 is open. The app drives it over stdin/stdout, and the Macs' own first lines are described at the top of `main.rs`.
+- **Both ways.** A Mac dialing says `"both": true` in its hello. When the host answers ok, the dialing helper adds the host to its own `devices.json` before anything else, and the host, seeing `both`, adds the dialing Mac to its `settings.hosts` and dials back (`dialBack` in `hosts.ts`). So one link and one 허용 connect both ways, and a one-way connection from an older version becomes two-way at its next connect. The dial back may arrive before the dialing Mac has read the ok: an entry added that way (`back`) that hears "unknown" tries again while that Mac is still connected in, and is let go quietly otherwise. A hangup or a newer dial makes a dial still on its way give up, so an ok that comes after 제거 lets nobody in.
+- **Letting in stays the user's.** Only a link the user pastes here (or a device the user allowed here) goes both ways. A link an agent adds (`ondra_app remote.add`) is dialed without `both` (`hosts[].oneWay`): this Mac uses that device, and that device isn't let in here by it.
+- **From older versions.** At startup, before the helper runs: a device removed in an older version and not told yet (`settings.leaving`) is no longer let in, and with 다른 기기에서 이 기기 쓰기 left off (`settings.remote: false`), devices that only came in here aren't either. Devices this Mac uses become two-way.
+- **Saying why.** A Mac removing another dials it with `"bye": true` in its hello; the host forgets it and answers `{"t":"bye"}`. A host ending a connection closes it with a reason the other side reads: `revoked` (removed) or `dropped` (cut for now). Older hosts also say `off` (hosting turned off).
+- **Older versions.** A field or answer a peer doesn't know is ignored. An older host doesn't know a goodbye: it lets the Mac in instead, which then hangs up and tells its user to remove it on that device too. An older client hears a "cut for now" as a plain disconnect and dials again. An older Mac doesn't say `both`, so it is only dialed back once it is updated.
 - **The side doing the work** is `src/engine/remote.ts`. It sends the jobs of the projects the other Mac keeps: first each whole job, then only what changed (a job's fields, and its entries from the first one that differs). It does what the other Mac asks with the same functions the window uses: create, tell, stop, merge, queue edits and so on.
 - **The side looking on** is `src/engine/hosts.ts` and `src/state/mirror.ts`. Those jobs are held in memory and never written to this Mac's state.json. `taskById`, `projectById`, `projectsShown` and `tasksShown` include them, so the sidebar and the job view work unchanged. The engine's own loops (scheduler, PR watching and so on) read `state.tasks`, which doesn't include them. An action on another device's job is sent there; see `far()` at the top of each action in `tasks.ts`.
 

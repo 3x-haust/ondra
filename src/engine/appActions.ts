@@ -50,61 +50,53 @@ export const ACTIONS: Record<string, Action> = {
   // ───────── 다른 기기 (설정 › 연결)
   "remote.status": {
     where: "설정 › 연결",
-    about: "Whether others may work on this Mac (remote), the Macs added here (this one sends them work), the Macs let in here, and who is asking to come in",
+    about: "The devices connected to this Mac, both ways: each with whether this Mac is on it now (this one sends it work) and whether it is on this Mac now (it sends work here), and who is asking to connect",
     run: async () => {
       const { remote } = await remoteMod();
       const r = remote();
+      const ids = [...new Set([...(state.settings.hosts ?? []).map((h) => h.id), ...r.devices.map((d) => d.id)])];
       return {
-        remote: !!state.settings.remote,
         this_mac_ready: !!r.id,
-        added_here: (state.settings.hosts ?? []).map((h) => ({ id: h.id, name: h.name, state: mirror.hosts[h.id]?.status ?? "connecting" })),
-        let_in: r.devices.map((d) => ({ id: d.id, name: d.name, connected: Object.values(r.live).some((l) => l.id === d.id) })),
+        devices: ids.map((id) => ({
+          id,
+          name: state.settings.hosts?.find((h) => h.id === id)?.name ?? r.devices.find((d) => d.id === id)?.name,
+          using_it: state.settings.hosts?.some((h) => h.id === id) ? (mirror.hosts[id]?.status ?? "connecting") : "not yet (it connects once that device runs a newer Ondra)",
+          it_uses_this: Object.values(r.live).some((l) => l.id === id) ? "connected" : r.devices.some((d) => d.id === id) ? "allowed, not connected now" : "not yet",
+        })),
         asking: r.asks.map((x) => x.device.name),
         link_open: r.pair && r.pair.until > Date.now() ? `until ${new Date(r.pair.until).toLocaleTimeString()}` : undefined,
       };
     },
   },
   "remote.link": {
-    where: "설정 › 연결 › 연결 링크 복사",
+    where: "설정 › 연결 › 기기 추가 › 연결 링크 복사",
     about:
-      "Make this Mac's connect link (ondra://connect/…, good for 10 minutes and one Mac) for another device or PC to add this one with (there: 설정 › 연결 › 기기 추가, or remote.add on that one). Needs remote on (ondra_settings remote:true). When that one connects, the user allows it here themselves (a card in Ondra); you can't",
+      "Make this Mac's connect link (ondra://connect/…, good for 10 minutes and one device) for another device or PC to connect with (there: 설정 › 연결 › 기기 추가, or remote.add on that one). When it connects, the user allows it here themselves (a card in Ondra; you can't), and then each device can use the other",
     run: async () => {
-      if (!state.settings.remote) return fail("others may not work on this Mac yet: turn it on first (ondra_settings {\"remote\": true}), then make the link");
       const { connectLink } = await remoteMod();
       const link = await connectLink();
-      return link ? { link, good_for: "10 minutes, one Mac", then: "the user allows it in Ondra on this Mac when it asks" } : fail("this Mac isn't reachable yet; try again in a few seconds");
+      return link ? { link, good_for: "10 minutes, one device", then: "the user allows it in Ondra on this Mac when it asks; then both can use each other" } : fail("this Mac isn't reachable yet; try again in a few seconds");
     },
   },
   "remote.add": {
     where: "설정 › 연결 › 기기 추가",
-    about: "Add another device by its connect link: this one then sends work to it. That Mac's user allows it there",
-    takes: { link: "the ondra://connect/… link from the other Mac" },
+    about:
+      "Use another device by its connect link: once its user allows it there, this Mac can use it. It goes one way: that device can't use this Mac by it (letting a device in is the user's: for both ways, remote.link here and the user allows it, or the user pastes the link in 설정 › 연결 › 기기 추가)",
+    takes: { link: "the ondra://connect/… link from the other device" },
     run: async (a) => {
       const { addHost } = await hostsMod();
-      return (await addHost(str(a, "link"))) ? { added: true, then: "that device's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
+      return (await addHost(str(a, "link"), true)) ? { added: true, then: "that device's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
     },
   },
   "remote.remove": {
-    where: "설정 › 연결 › 다른 기기 › 제거",
-    about: "Remove a Mac added here (its projects and jobs go from this list; that device is told to forget this one)",
-    takes: { id: "its id from remote.status added_here" },
+    where: "설정 › 연결 › 기기 › 제거",
+    about: "Remove a connected device, both ways (its projects and jobs go from this list, it can't use this Mac anymore, and it is told to forget this one)",
+    takes: { id: "its id from remote.status devices" },
     run: async (a) => {
+      const { remote, removeDevice } = await remoteMod();
       const id = str(a, "id");
-      if (!(state.settings.hosts ?? []).some((h) => h.id === id)) return fail(`no Mac ${id} added here`);
-      (await hostsMod()).removeHost(id);
-      return { removed: id };
-    },
-  },
-  "remote.forget": {
-    where: "설정 › 연결 › 이 기기 › 제거",
-    about: "Stop a Mac let in here from coming in again (it may be let in again with a new link)",
-    takes: { id: "its id from remote.status let_in" },
-    run: async (a) => {
-      const { remote, forgetDevice } = await remoteMod();
-      const id = str(a, "id");
-      if (!remote().devices.some((d) => d.id === id)) return fail(`no Mac ${id} let in here`);
-      await forgetDevice(id);
-      return { forgotten: id };
+      if (!(state.settings.hosts ?? []).some((h) => h.id === id) && !remote().devices.some((d) => d.id === id)) return fail(`no device ${id} connected`);
+      return (await removeDevice(id)) ? { removed: id } : fail(`couldn't remove ${id}: it may still come in`);
     },
   },
 
