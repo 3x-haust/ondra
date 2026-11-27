@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
 import { checkEvidence } from "./proof";
@@ -31,7 +32,7 @@ let fire: (name: string, payload: unknown) => void;
 let engineId = "";
 
 beforeEach(async () => {
-  setState(reconcile(freshState()));
+  setState(reconcile(testState()));
   const events = new Map<string, (payload: unknown) => void>();
   fire = (name, payload) => events.get(name)?.(payload);
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
@@ -539,7 +540,7 @@ describe("a job waiting on its background commands", () => {
 
   it("waits for a CI watch that ends (gh run watch, gh pr checks --watch) instead of asking whether it is done", async () => {
     for (const cmd of ["gh run watch 45924579686 --exit-status --interval 30 > /dev/null 2>&1; echo \"exit=$?\"", "gh pr checks 905 --watch --fail-fast"]) {
-      setState(reconcile(freshState()));
+      setState(reconcile(testState()));
       await working([job()]);
       status(1, 0, { cmds: [cmd] });
       await ends("윈도우와 리눅스 빌드는 아직 GitHub에서 진행 중이에요. 기다리는 작업이 끝나면 알림이 와요.");

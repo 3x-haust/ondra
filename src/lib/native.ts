@@ -239,7 +239,7 @@ export const mcpSecretDelete = (space: string, server: string) => call<void>("mc
 export const pickFiles = (prompt: string) => call<string[]>("pick_files", { prompt }, []);
 
 // ───────────────────────── accounts ─────────────────────────
-/** Login folder of an account ("default" = ~/.pi/agent). */
+/** Login folder of an account (an older version's "default" = ~/.pi/agent). */
 export const accountDirPath = (accountId: string) => call<string | null>("account_dir_path", { accountId }, null);
 /** Providers with saved credentials in the account (keys of auth.json). */
 export const accountProviders = (accountId: string) => call<string[]>("account_providers", { accountId }, []);

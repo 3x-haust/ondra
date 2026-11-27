@@ -43,22 +43,45 @@ function sentBySpace(p: AppState): Record<string, string[]> {
   return out;
 }
 
+/** What every account starts with; a saved one is filled in from it. */
+export const accountBase = (): Omit<Account, "id" | "space" | "label"> => ({ providers: [], model: "", badModels: [], stats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
+
+/** the account older versions made on install ("기본", signed in through ~/.pi/agent) */
+export const LEGACY_ACCOUNT = "default";
+
+/**
+ * There is no built-in account: every account is one the person signed in to. An older state's
+ * 기본 stays only while it has a login (then it's named like any other: by its service and email);
+ * an empty one goes, with what pointed at it (a picked account, a reviewer, the agent's account).
+ */
+export function withoutEmptyLegacy(s: AppState): AppState {
+  const old = s.accounts.find((a) => a.id === LEGACY_ACCOUNT);
+  if (!old) return s;
+  if (old.providers.length || old.connection) return { ...s, accounts: s.accounts.map((a) => (a.id === LEGACY_ACCOUNT && a.label === "기본" ? { ...a, label: "" } : a)) };
+  const keep = <T extends { account?: string }>(l: T[] | undefined) => l?.filter((r) => r.account !== LEGACY_ACCOUNT);
+  const pick = Object.fromEntries(Object.entries(s.accountPick ?? {}).filter(([, id]) => id !== LEGACY_ACCOUNT));
+  const agent = s.settings.agent;
+  return {
+    ...s,
+    accounts: s.accounts.filter((a) => a.id !== LEGACY_ACCOUNT),
+    ...(s.accountPick ? { accountPick: pick } : {}),
+    settings: {
+      ...s.settings,
+      ...(s.settings.reviewers ? { reviewers: keep(s.settings.reviewers) } : {}),
+      ...(s.settings.reviewersBySpace ? { reviewersBySpace: Object.fromEntries(Object.entries(s.settings.reviewersBySpace).map(([k, l]) => [k, keep(l) ?? []])) } : {}),
+      ...(agent
+        ? { agent: { ...agent, account: agent.account === LEGACY_ACCOUNT ? undefined : agent.account, places: agent.places?.map((p) => (p.account === LEGACY_ACCOUNT ? { ...p, account: undefined } : p)) } }
+        : {}),
+    },
+  };
+}
+
 export const freshState = (): AppState => ({
   version: 3,
   onboarded: false,
   space: "home",
   spaces: [{ id: "home", label: "개인", folder: "~", rules: "" }],
-  accounts: [
-    {
-      id: "default",
-      space: "home",
-      label: "기본",
-      providers: [],
-      model: "",
-      badModels: [],
-      stats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    },
-  ],
+  accounts: [],
   tasks: [],
   decisions: [],
   captain: [],
@@ -146,18 +169,18 @@ export async function loadState() {
       if (parsed.version === 3) {
         const base = freshState();
         setState(
-          reconcile({
+          reconcile(withoutEmptyLegacy({
             ...base,
             ...parsed,
             tasks: (parsed.tasks ?? []).map(unpackTask),
             settings: { ...base.settings, ...parsed.settings, permission: permissionOf(parsed.settings?.permission) ?? base.settings.permission },
-            accounts: parsed.accounts.map((a) => ({ ...base.accounts[0], ...a, badModels: a.badModels ?? [] })),
+            accounts: (parsed.accounts ?? []).map((a) => ({ ...accountBase(), ...a, badModels: a.badModels ?? [] })),
             // the request queue lives in memory: a reply still "thinking" when the app closed never comes back
             captain: (parsed.captain ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),
             btws: (parsed.btws ?? []).map((b) => (b.pending ? { ...b, pending: false, error: b.answer ? undefined : "앱이 닫혀 응답이 끊겼어요" } : b)),
             side: (parsed.side ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),
             sent: sentBySpace(parsed),
-          }),
+          })),
         );
       }
     } catch (e) {

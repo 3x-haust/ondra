@@ -29,8 +29,8 @@ export function accountName(account: Account | string | undefined, short = false
   const who = services(a).join(" · ");
   const mail = short ? "" : emails[a.id];
   if (who) return [who, mail].filter(Boolean).join(" · ");
-  // no provider known yet: who it is, else the built-in login, never the workspace's name
-  return emails[a.id] || (a.id === "default" ? t("기본 로그인") : t(a.label));
+  // no provider known yet: who it is, else its label, never the workspace's name
+  return emails[a.id] || (a.label ? t(a.label) : t("로그인 필요"));
 }
 
 export function AccountPicker(props: {

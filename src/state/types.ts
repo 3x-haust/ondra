@@ -56,7 +56,7 @@ export interface TokenStats {
 }
 
 export interface Account {
-  /** "default" = the user's own ~/.pi/agent login */
+  /** "default" = an older version's 기본, signed in through the user's own ~/.pi/agent */
   id: string;
   space: SpaceId;
   label: string;

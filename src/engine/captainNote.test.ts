@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import { stopMain, throwThought } from "./captain";
 import { markDead, startRpc } from "./rpc";
 
@@ -11,7 +12,7 @@ const NOTE = "(Ondra) The user sent this from Discord.\n- Their explicit words o
 
 beforeEach(async () => {
   vi.useFakeTimers();
-  setState(reconcile(freshState()));
+  setState(reconcile(testState()));
   const events = new Map<string, (payload: unknown) => void>();
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
     events.set(name, fn as (payload: unknown) => void);

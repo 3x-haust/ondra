@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { agentDecisions, allDecisions, freshState, setState, state } from "../state/store";
+import { agentDecisions, allDecisions, setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import { resetMain, stopMain, throwThought } from "./captain";
 import { markDead, startRpc } from "./rpc";
 import { decide } from "./tasks";
@@ -13,7 +14,7 @@ const responses = () => vi.mocked(native.agentSend).mock.calls.filter(([, c]) =>
 
 beforeEach(async () => {
   vi.useFakeTimers();
-  setState(reconcile(freshState()));
+  setState(reconcile(testState()));
   const events = new Map<string, (payload: unknown) => void>();
   fire = (name, payload) => events.get(name)?.(payload);
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
