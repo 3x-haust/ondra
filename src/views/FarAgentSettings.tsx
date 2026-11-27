@@ -25,7 +25,13 @@ function FarAgentSettings(props: { host: string }) {
   const h = () => mirror.hosts[props.host];
   const agent = () => h()?.agent;
   const s = (): FarAgentSettings => agent()?.settings ?? { token: false, others: true, places: [], channels: [], rooms: {} };
-  const spaceName = (id?: string) => h()?.info?.spaces.find((x) => x.id === id)?.label ?? id ?? "";
+  /** a place there: none, one of its workspaces, or a third device's ("MacBook › 회사") */
+  const spaceName = (id?: string) => {
+    if (!id) return t("없음");
+    const named = s().spaces?.[id];
+    const label = named?.label ?? h()?.info?.spaces.find((x) => x.id === id)?.label ?? id;
+    return `${named?.device ?? hostName(props.host)} › ${label}`;
+  };
   const accountLabel = (id?: string) => (id ? (h()?.info?.accounts.find((x) => x.id === id)?.name ?? id) : t("자동"));
   const where = (space?: string, account?: string) => [spaceName(space), accountLabel(account)].filter(Boolean).join(" · ");
   /** a channel by the name its bot knows, else the one saved with it ("#orbit · server") */
@@ -78,7 +84,7 @@ function FarAgentSettings(props: { host: string }) {
           <span class="prov-logo"><Icon name="globe" size={16} /></span>
           <div class="prov-text">
             <span class="prov-title">{t("모든 채널")}</span>
-            <span class="prov-sub">{s().places.length ? t("아래 채널 말고 전부") : t("시킨 일은 여기서 해요")}</span>
+            <span class="prov-sub">{!s().space ? t("프로젝트 이름으로 공간을 찾고, 모르면 물어봐요") : s().places.length ? t("아래 채널 말고 전부") : t("시킨 일은 여기서 해요")}</span>
           </div>
           <span class="spacer" />
           <span class="set-quiet">{where(s().space, s().account)}</span>
@@ -92,7 +98,7 @@ function FarAgentSettings(props: { host: string }) {
                 <Show when={room(p.channel, p.label).server}>{(server) => <span class="prov-sub">{server()}</span>}</Show>
               </div>
               <span class="spacer" />
-              <span class="set-quiet">{where(p.space ?? s().space, p.account)}</span>
+              <span class="set-quiet">{where(p.space, p.account)}</span>
             </div>
           )}
         </For>

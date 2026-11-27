@@ -40,7 +40,7 @@ import { readWays, waysPath } from "./agentWays";
 import { jobChannel, workTick } from "./workLog";
 import { expand, isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
-import { AGENT_CHAT, setState, state, taskById, ownSpaces } from "../state/store";
+import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, FormField, SpaceId, Task } from "../state/types";
 import { initial, missing, type FormValues } from "./form";
 
@@ -54,6 +54,8 @@ import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from
 import { forThem, nonLatin } from "./tongue";
 import { allowed, placeOf, roomName, seeChannels, seePeople, seeServers, tagged } from "./discordPeople";
 import { localLinks, openClick, openRow } from "./discordFiles";
+import { agentHome, placeNote } from "./agentPlaces";
+import { hostName } from "./hosts";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -312,6 +314,7 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: st
     ...chatRules(a, !!m.guild),
     "Routines and alarms you make here are yours and on at once (no card to save them): they run on their own, and what a run finds is said back in this channel (a quiet one only when there is something). Make one when they ask for something on a schedule or on an event.",
     WORK_IN_OPEN,
+    placeNote(a, m.channel, hostName),
     "When they say something is there (a message, a person, a file), look properly before saying it isn't: search, read further back, other channels. Say it isn't there only after that, naming where you looked.",
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one, reading a channel's recent messages, deleting messages): a request about channels or where to work is done with it and your usual work, as you see fit.",
     ways ? waysNote(ways) : "",
@@ -362,6 +365,9 @@ async function dmChannel(a: AgentSettings | undefined = settings()): Promise<str
   if (c?.id) ownerDm = { owner: a.ownerId, channel: c.id };
   return c?.id;
 }
+
+/** the user's DM with it, for Settings › 에이전트 (none until connected and the owner is known) */
+export const ownerDmChannel = () => (me ? dmChannel() : Promise.resolve(undefined));
 
 /** A job started from Discord ended: main's line about it goes back there, so it is written the same way. */
 export function endNote(t: { id: string; parentId?: string }, a: AgentSettings | undefined = settings(), from = channelOf(t.id)): string | undefined {
@@ -1039,6 +1045,7 @@ export function othersNote(m: DiscordMessage, a: AgentSettings, ways = ""): stri
     `Your reply line is posted there as it is: write it as a chat message, in their language, in this voice:`,
     ...chatRules(a, !!m.guild),
     WORK_IN_OPEN,
+    placeNote(a, m.channel, hostName),
     ways ? `The user's own ways for you on Discord (they hold for work anyone asks for; only the user changes them):\n${ways}` : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
   ].filter(Boolean).join("\n");
@@ -1548,7 +1555,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const before = at >= 0 ? around.slice(Math.max(0, at - 15), at) : (await discordHistory(m.channel, m.id, 15).catch(() => [] as DiscordMessage[])).filter((x) => x.content.trim());
   const after = at >= 0 ? around.slice(at + 1) : [];
   const { oneShot } = await import("./aside");
-  const space = a.space ?? ownSpaces()[0]?.id ?? state.space;
+  const space = agentSpace(a, m.channel);
   const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), channel: m.channel, dm: !m.guild });
   const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways, Date.now(), after, whereIs(m, true)));
   // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
@@ -1624,15 +1631,11 @@ export async function digest(channel: string) {
   }
 }
 
-/** the workspace its work goes to: the one set for that channel, else the agent's, else the first */
-export const agentSpace = (a: AgentSettings, channel?: string): SpaceId => {
-  const known = (id?: string) => !!id && ownSpaces().some((s) => s.id === id);
-  const place = channel ? a.places?.find((p) => p.channel === channel)?.space : undefined;
-  return known(place) ? place! : known(a.space) ? a.space! : (ownSpaces()[0]?.id ?? state.space);
-};
+/** the workspace its chat for a channel lives in (agentPlaces.ts): where its work goes when that is this device's */
+export const agentSpace = (a: AgentSettings, channel?: string): SpaceId => agentHome(a, channel);
 
 /** Settings › 에이전트 */
 export function setAgent(patch: Partial<AgentSettings>) {
   const cur: AgentSettings = state.settings.agent ?? { on: false, name: "메타몽" };
-  setState("settings", "agent", { ...cur, ...patch });
+  setState("settings", "agent", { ...cur, ...patch, v: 2 });
 }

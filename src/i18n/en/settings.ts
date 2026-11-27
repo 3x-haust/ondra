@@ -698,6 +698,8 @@ export default {
   "아래 채널 말고 전부": "All but the ones below",
   "시킨 일은 여기서 해요": "Work asked anywhere runs here",
   "채널 따로 정하기": "Set a channel apart",
+  "프로젝트 이름으로 공간을 찾고, 모르면 물어봐요": "Finds the workspace by the project named, else asks",
+  "내 DM": "My DM",
   "부르는 곳 어디서나": "Wherever it's called",
   "채널 ID": "Channel ID",
   "다른 사람": "Other people",

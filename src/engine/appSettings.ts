@@ -2,8 +2,9 @@
 // tool, extensions/ondra.ts → bridge settings_read / settings_write): what the user would switch
 // in Settings themselves, by name. Nothing else of the app's state is reachable this way, and no
 // secret value ever passes through: the Discord token is moved natively from a saved secret.
+import { agentHome } from "./agentPlaces";
 import { discordTokenFromSecret, discordTokenHas } from "../lib/native";
-import { setState, state, ownSpaces } from "../state/store";
+import { setState, state } from "../state/store";
 import type { Permission } from "../state/types";
 import { reviewersFor } from "./crosscheck";
 
@@ -70,7 +71,7 @@ export const SETTINGS: Record<string, Entry> = {
   "agent.on": { where: "에이전트 › 디스코드에서 쓰기 (needs the bot token first)", kind: { type: "bool" }, get: () => agent().on, set: (v: boolean) => setAgent({ on: v }) },
   "agent.name": { where: "에이전트 › 이름", kind: { type: "text", max: 32 }, get: () => agent().name, set: (v: string) => setAgent({ name: v }) },
   "agent.ownerId": { where: "에이전트 › 내 디스코드 ID (digits; empty = the bot's owner)", kind: { type: "text", max: 24 }, get: () => agent().ownerId ?? "", set: (v: string) => setAgent({ ownerId: v.replace(/\D/g, "") || undefined }) },
-  "agent.space": { where: "에이전트 › 일을 받을 워크스페이스 (a workspace id)", kind: { type: "enum", of: [] }, get: () => agent().space ?? ownSpaces()[0]?.id, set: (v: string) => setAgent({ space: v }) },
+  "agent.space": { where: "에이전트 › 일하는 곳 › 모든 채널 (a workspace id, a connected device's h:<device>:<id>, or none: found by the project named, else asked)", kind: { type: "enum", of: [] }, get: () => agent().space ?? "none", set: (v: string) => setAgent({ space: v === "none" ? undefined : v }) },
   "agent.others": { where: "에이전트 › 다른 사람과 대화", kind: { type: "bool" }, missing: true, get: () => agent().others !== false, set: (v: boolean) => setAgent({ others: v }) },
   "agent.account": { where: "에이전트 › AI 계정 (an account id of its workspace, or auto = the workspace's choice)", kind: { type: "enum", of: [] }, missing: "auto", get: () => agent().account ?? "auto", set: (v: string) => setAgent({ account: v === "auto" ? undefined : v }) },
   "agent.channels": { where: "에이전트 › 대화할 채널 (channel ids; empty = wherever it's called)", kind: { type: "list", max: 20 }, get: () => agent().channels ?? [], set: (v: string[]) => setAgent({ channels: v }) },
@@ -91,10 +92,10 @@ export async function setShared(key: string, v: unknown): Promise<unknown> {
   return SETTINGS[key].get();
 }
 
-/** the workspace ids, for agent.space */
-const spaceIds = () => ownSpaces().map((s) => s.id);
-/** the accounts of the agent's workspace, for agent.account */
-const agentAccountIds = () => ["auto", ...state.accounts.filter((a) => a.space === (agent().space ?? ownSpaces()[0]?.id)).map((a) => a.id)];
+/** the places, for agent.space: none, or a workspace of this device or a connected one */
+const spaceIds = () => ["none", ...state.spaces.map((s) => s.id)];
+/** the accounts of the workspace its chat lives in, for agent.account */
+const agentAccountIds = () => ["auto", ...state.accounts.filter((a) => a.space === agentHome(agent())).map((a) => a.id)];
 const kindOf = (key: string, e: Entry): Kind => (key === "agent.space" ? { type: "enum", of: spaceIds() } : key === "agent.account" ? { type: "enum", of: agentAccountIds() } : e.kind);
 
 /** Every setting with its value, where it is, and what it takes. */

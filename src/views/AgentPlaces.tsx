@@ -1,21 +1,26 @@
-// Settings › 에이전트: where its work goes (a workspace and account, for every channel or per channel)
-// and where it talks with others. Channels are picked from the servers the bot is in.
+// Settings › 에이전트: where its work goes (none, or a workspace of this device or a connected one,
+// for every channel or per channel and DM) and where it talks with others. Channels are picked from
+// the servers the bot is in, and the user's DM with it.
 import { createResource, createSignal, For, Show, type Accessor } from "solid-js";
 import { discordChannels, discordGuilds } from "../lib/native";
-import { state, ownSpaces } from "../state/store";
+import { state } from "../state/store";
 import type { AgentPlace, SpaceId } from "../state/types";
-import { setAgent } from "../engine/discord";
+import { ownerDmChannel, setAgent } from "../engine/discord";
+import { agentHome, placeChoices, placeFor } from "../engine/agentPlaces";
+import { hostName } from "../engine/hosts";
 import { accountName } from "../ui/AccountPicker";
 import { Icon } from "../ui/Icon";
 import { GroupTitle } from "./Settings";
 import { t } from "../i18n";
 
-export type Room = { id: string; name: string; server: string };
+export type Room = { id: string; name: string; server: string; dm?: boolean };
 
-/** the text channels of every server the bot is in */
+/** the user's DM with it, then the text channels of every server the bot is in */
 async function rooms(): Promise<Room[]> {
   const out: Room[] = [];
   // outside the app (or a failed call) there are none, not an error
+  const dm = await ownerDmChannel().catch(() => undefined);
+  if (dm) out.push({ id: dm, name: t("내 DM"), server: "", dm: true });
   for (const g of (await discordGuilds().catch(() => [])) ?? []) {
     for (const c of (await discordChannels(g.id).catch(() => [])) ?? []) if (c.kind === "text") out.push({ id: c.id, name: c.name, server: g.name });
   }
@@ -27,23 +32,38 @@ export function useRooms(): Accessor<Room[]> {
 }
 
 /** "#orbit" and its server, from what the bot sees now or what was saved with it */
-function roomName(rooms: Room[], id: string, saved?: string): { name: string; server?: string } {
+function roomName(rooms: Room[], id: string, saved?: string): { name: string; server?: string; dm?: boolean } {
   const r = rooms.find((x) => x.id === id);
-  if (r) return { name: `#${r.name}`, server: r.server };
+  if (r) return r.dm ? { name: r.name, dm: true } : { name: `#${r.name}`, server: r.server };
   const [name, server] = (saved ?? id).split(" · ");
-  return { name: name.startsWith("#") ? name : `#${name}`, server };
+  return name.startsWith("#") || server ? { name: name.startsWith("#") ? name : `#${name}`, server } : { name, dm: true };
 }
+/** how a room is listed in a picker */
+const roomLabel = (r: Room) => (r.dm ? r.name : `#${r.name} · ${r.server}`);
 
-/** a workspace and, in it, an account ("자동" = the workspace's own choice) */
-function Where(props: { space: SpaceId | undefined; account: string | undefined; set: (p: { space?: SpaceId; account?: string }) => void }) {
+/** this device's name in the place picker, as the Mac bar has it */
+const thisName = () => state.settings.thisMac?.name || t("이 기기");
+
+/**
+ * A place (none, or a workspace of this device or a connected one, by device) and the account its
+ * chat runs on: in that workspace when it is this device's, else in the one its chat lives in.
+ */
+function Where(props: { space: SpaceId | undefined; account: string | undefined; home: SpaceId; set: (p: { space?: SpaceId; account?: string }) => void }) {
   return (
     <div class="ag-where">
-      <select class="select" aria-label={t("워크스페이스")} value={props.space ?? ""} onChange={(e) => props.set({ space: e.currentTarget.value, account: undefined })}>
-        <For each={ownSpaces()}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+      <select class="select" aria-label={t("워크스페이스")} value={props.space ?? ""} onChange={(e) => props.set({ space: e.currentTarget.value || undefined, account: undefined })}>
+        <option value="">{t("없음")}</option>
+        <For each={placeChoices(thisName(), hostName)}>
+          {(d) => (
+            <optgroup label={d.name}>
+              <For each={d.spaces}>{(s) => <option value={s.id}>{`${d.name} › ${s.label}`}</option>}</For>
+            </optgroup>
+          )}
+        </For>
       </select>
       <select class="select" aria-label={t("AI 계정")} value={props.account ?? "auto"} onChange={(e) => props.set({ space: props.space, account: e.currentTarget.value === "auto" ? undefined : e.currentTarget.value })}>
         <option value="auto">{t("자동")}</option>
-        <For each={state.accounts.filter((x) => x.space === props.space)}>{(x) => <option value={x.id}>{accountName(x, true)}</option>}</For>
+        <For each={state.accounts.filter((x) => x.space === props.home)}>{(x) => <option value={x.id}>{accountName(x, true)}</option>}</For>
       </select>
     </div>
   );
@@ -66,21 +86,21 @@ function AddRoom(props: { label: string; rooms: Room[]; pick: (r: Room) => void;
           }}
         >
           <option value="" disabled>{props.label}</option>
-          <For each={props.rooms}>{(r) => <option value={r.id}>{`#${r.name} · ${r.server}`}</option>}</For>
+          <For each={props.rooms}>{(r) => <option value={r.id}>{roomLabel(r)}</option>}</For>
         </select>
       </label>
     </Show>
   );
 }
 
-/** 일하는 곳: every channel by default, and the ones set apart */
+/** 일하는 곳: every channel (none by default), and the channels and DMs set apart */
 export function WorkPlaces(props: { rooms: Accessor<Room[]> }) {
-  const a = () => state.settings.agent;
-  const list = () => a()?.places ?? [];
-  const base = () => (a()?.space && ownSpaces().some((s) => s.id === a()!.space) ? a()!.space : ownSpaces()[0]?.id);
+  const a = () => state.settings.agent ?? { on: false, name: "메타몽" };
+  const list = () => a().places ?? [];
   const save = (next: AgentPlace[]) => setAgent({ places: next });
   const at = (i: number, p: Partial<AgentPlace>) => save(list().map((x, j) => (j === i ? { ...x, ...p } : x)));
   const open = () => props.rooms().filter((r) => !list().some((p) => p.channel === r.id));
+  const allSub = () => (placeFor(a()).kind === "none" ? t("프로젝트 이름으로 공간을 찾고, 모르면 물어봐요") : list().length ? t("아래 채널 말고 전부") : t("시킨 일은 여기서 해요"));
   return (
     <>
       <GroupTitle title={t("일하는 곳")} />
@@ -89,10 +109,10 @@ export function WorkPlaces(props: { rooms: Accessor<Room[]> }) {
           <span class="prov-logo"><Icon name="globe" size={16} /></span>
           <div class="prov-text">
             <span class="prov-title">{t("모든 채널")}</span>
-            <span class="prov-sub">{list().length ? t("아래 채널 말고 전부") : t("시킨 일은 여기서 해요")}</span>
+            <span class="prov-sub">{allSub()}</span>
           </div>
           <span class="spacer" />
-          <Where space={base()} account={a()?.account} set={(p) => setAgent({ space: p.space, account: p.account })} />
+          <Where space={a().space} account={a().account} home={agentHome(a())} set={(p) => setAgent({ space: p.space, account: p.account })} />
           <span class="ag-gap" />
         </div>
         <For each={list()}>
@@ -100,13 +120,13 @@ export function WorkPlaces(props: { rooms: Accessor<Room[]> }) {
             const n = () => roomName(props.rooms(), p.channel, p.label);
             return (
               <div class="prov-row">
-                <span class="prov-logo ag-hash">#</span>
+                <span class="prov-logo ag-hash">{n().dm ? <Icon name="at" size={15} /> : "#"}</span>
                 <div class="prov-text">
                   <span class="prov-title">{n().name.replace(/^#/, "")}</span>
                   <Show when={n().server}><span class="prov-sub">{n().server}</span></Show>
                 </div>
                 <span class="spacer" />
-                <Where space={p.space ?? base()} account={p.account} set={(w) => at(i(), w)} />
+                <Where space={p.space} account={p.account} home={agentHome(a(), p.channel)} set={(w) => at(i(), w)} />
                 <button class="icon-btn sm prov-more" title={t("빼기")} aria-label={t("빼기")} onClick={() => save(list().filter((_, j) => j !== i()))}>
                   <Icon name="x" size={14} />
                 </button>
@@ -114,7 +134,7 @@ export function WorkPlaces(props: { rooms: Accessor<Room[]> }) {
             );
           }}
         </For>
-        <AddRoom label={t("채널 따로 정하기")} rooms={open()} pick={(r) => save([...list(), { channel: r.id, label: `#${r.name} · ${r.server}`, space: base() }])} />
+        <AddRoom label={t("채널 따로 정하기")} rooms={open()} pick={(r) => save([...list(), { channel: r.id, label: r.dm ? r.name : `#${r.name} · ${r.server}` }])} />
       </div>
     </>
   );
@@ -165,7 +185,7 @@ export function TalkRooms(props: { rooms: Accessor<Room[]> }) {
             }}
           >
             <option value="" disabled>{t("채널 추가")}</option>
-            <For each={props.rooms().filter((r) => !ids().includes(r.id))}>{(r) => <option value={r.id}>{`#${r.name} · ${r.server}`}</option>}</For>
+            <For each={props.rooms().filter((r) => !r.dm && !ids().includes(r.id))}>{(r) => <option value={r.id}>{roomLabel(r)}</option>}</For>
           </select>
         </label>
       </Show>

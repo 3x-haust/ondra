@@ -838,6 +838,7 @@ export interface AgentPlace {
   channel: string;
   /** shown in Settings, e.g. "#orbit · 작업방" */
   label?: string;
+  /** as AgentSettings.space: missing = none */
   space?: SpaceId;
   account?: string;
 }
@@ -853,7 +854,8 @@ export interface AgentSettings {
   voice?: string;
   /** channels it answers others in; empty = wherever it is called */
   channels?: string[];
-  /** the workspace the user's requests go to; missing = the first one */
+  /** where work asked on every channel goes: a workspace of this device or a connected one's tab
+   *  ("h:<device>:<id>"); missing = none (main finds it by the project named, else asks) */
   space?: SpaceId;
   /** others may talk with it (talk only, no work); missing = on */
   others?: boolean;
@@ -871,6 +873,8 @@ export interface AgentSettings {
   form?: { who: string; until: number; picture?: string };
   /** its questions pinned where they were asked (unpinned once answered, here or in the app) */
   pins?: { decision: string; channel: string; message: string }[];
+  /** 2: the work place for every channel defaults to none (an older one was set to none once) */
+  v?: number;
 }
 
 export interface AppState {

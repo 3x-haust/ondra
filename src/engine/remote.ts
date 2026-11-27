@@ -41,7 +41,7 @@ import { modelsNow, refreshModels } from "./modelList";
 import { connectionOf, connModelLabel, effortLevels } from "./connections";
 import { effortFor } from "./models";
 import * as jobs from "./tasks";
-import { connectHosts, dialBack, forgotBy, fromInSide, helperGone, onPeer, removeHost, startHosts, wantsHelper } from "./hosts";
+import { connectHosts, dialBack, forgotBy, fromInSide, helperGone, hostName, onPeer, removeHost, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 import { moveCancel, moveImport, movePut } from "./spaceMove";
@@ -290,8 +290,13 @@ function agentNow(): FarAgent {
 /** its Settings › 에이전트 as that device's settings page shows it: whether a token is kept, never the token */
 function agentSettingsNow(): FarAgentSettings {
   const a = state.settings.agent;
-  const own = ownSpaces();
   const places = a?.places ?? [];
+  // a place may be a workspace of a third device: named here, as this device knows it
+  const spaces: Record<string, { label: string; device?: string }> = {};
+  for (const id of [a?.space, ...places.map((p) => p.space)]) {
+    const sp = id ? state.spaces.find((x) => x.id === id) : undefined;
+    if (sp) spaces[sp.id] = { label: sp.label, ...(sp.host ? { device: hostName(sp.host) } : {}) };
+  }
   const channels = a?.channels ?? [];
   const rooms: Record<string, string> = {};
   for (const id of [...places.map((p) => p.channel), ...channels]) {
@@ -303,9 +308,10 @@ function agentSettingsNow(): FarAgentSettings {
     ...(a?.ownerId ? { ownerId: a.ownerId } : {}),
     ...(a?.voice ? { voice: a.voice } : {}),
     others: a?.others !== false,
-    space: a?.space && own.some((s) => s.id === a.space) ? a.space : own[0]?.id,
+    ...(a?.space ? { space: a.space } : {}),
     ...(a?.account ? { account: a.account } : {}),
     places: places.map((p) => ({ channel: p.channel, ...(p.label ? { label: p.label } : {}), ...(p.space ? { space: p.space } : {}), ...(p.account ? { account: p.account } : {}) })),
+    spaces,
     channels,
     rooms,
   };

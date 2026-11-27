@@ -58,10 +58,13 @@ export interface FarAgentSettings {
   ownerId?: string;
   voice?: string;
   others: boolean;
-  /** where work goes from every channel not set apart */
+  /** where work goes from every channel not set apart (none: found by the project named, else asked) */
   space?: string;
   account?: string;
+  /** per channel or DM; a place without a space is none */
   places: AgentPlace[];
+  /** the workspaces those name: their name, and the device as that device calls it (none: its own) */
+  spaces?: Record<string, { label: string; device?: string }>;
   /** the channels it talks with others in; none = wherever it is called */
   channels: string[];
   /** the names its bot knows for those channels: id → "#name" */
