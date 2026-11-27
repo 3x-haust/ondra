@@ -748,18 +748,18 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
     ...(ownSpaces().length > 1
       ? (["sep", ...ownSpaces().filter((s) => s.id !== a().space).map((s) => ({ id: `to-${s.id}`, label: t("{name}(으)로 옮기기", { name: t(s.label) }), icon: "arrow", run: () => updateAccount(props.id, (x) => (x.space = s.id)) }))] as MenuEntry[])
       : []),
-    ...(props.id === "default"
-      ? []
-      : (["sep", {
-          id: "delete",
-          label: a().connection ? t("연결 삭제") : t("계정 삭제"),
-          icon: "trash",
-          danger: true,
-          run: () => {
-            accountRemove(props.id);
-            setState("accounts", (l) => l.filter((x) => x.id !== props.id));
-          },
-        }] as MenuEntry[])),
+    "sep",
+    {
+      id: "delete",
+      label: a().connection ? t("연결 삭제") : t("계정 삭제"),
+      icon: "trash",
+      danger: true,
+      run: () => {
+        // an older version's 기본 signs in through the user's own ~/.pi/agent: that folder stays
+        accountRemove(props.id);
+        setState("accounts", (l) => l.filter((x) => x.id !== props.id));
+      },
+    },
   ];
   return (
     <div class="prov-row" classList={{ ctx: ctxFor() === `acc:${props.id}`, "has-lim": windows().length > 0 || !!credits() }}>

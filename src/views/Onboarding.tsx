@@ -2,12 +2,14 @@
 // already have (only when something was found), the two macOS permissions, and the first
 // request, sent to Main so a task is already running when the window opens.
 import { createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { setState, state, updateAccount } from "../state/store";
+import { accountBase, setState, state, uid, updateAccount } from "../state/store";
 import { setView } from "../state/ui";
 import { importFrom, scan, sources } from "../engine/importer";
 import { throwThought } from "../engine/captain";
 import { engine } from "../engine/rpc";
-import { accountProviders, toolStatus, type ToolStatus } from "../lib/native";
+import { accountProviders, accountRemove, toolStatus, type ToolStatus } from "../lib/native";
+import { refreshModels } from "../engine/modelList";
+import { loadEmail } from "../state/limits";
 import { askPermission } from "../lib/permissions";
 import { appName } from "../lib/brand";
 import { Icon } from "../ui/Icon";
@@ -28,6 +30,9 @@ export function Onboarding() {
   const [realStatus, { refetch }] = createResource(toolStatus);
   const status = () => ({ ...realStatus(), ...fakeStatus() });
   const [login, setLogin] = createSignal<"sub" | "key" | null>(null);
+  /** the account the open sign-in makes: it exists only once the sign-in goes through */
+  const [signing, setSigning] = createSignal("");
+  const signIn = (way: "sub" | "key") => (setSigning(uid("acc")), setLogin(way));
   const [imported, setImported] = createSignal(false);
   const [asked, setAsked] = createSignal(false);
   const [draft, setDraft] = createSignal("");
@@ -35,9 +40,26 @@ export function Onboarding() {
   const [leaving, setLeaving] = createSignal(false);
   const [dir, setDir] = createSignal<1 | -1>(1);
 
+  // the accounts already here (an older version's state) say what they're signed in to
   const refreshLogin = async () => {
-    const p = await accountProviders("default");
-    updateAccount("default", (a) => (a.providers = p));
+    for (const a of state.accounts) {
+      const p = await accountProviders(a.id).catch(() => a.providers);
+      updateAccount(a.id, (x) => (x.providers = p));
+    }
+  };
+  /** the sign-in closed: signed in, the account is made (in the first workspace), else nothing is left */
+  const signedIn = async () => {
+    const id = signing();
+    setLogin(null);
+    setSigning("");
+    if (!id) return;
+    const providers = await accountProviders(id).catch(() => [] as string[]);
+    if (!providers.length) return void accountRemove(id).catch(() => {});
+    const space = state.spaces[0]?.id ?? "home";
+    const n = state.accounts.filter((a) => a.space === space).length + 1;
+    setState("accounts", (l) => [...l, { ...accountBase(), id, space, label: `${state.spaces[0]?.label ?? "계정"} ${n}`, providers }]);
+    void refreshModels(id, true);
+    void loadEmail(id).catch(() => {});
   };
   onMount(() => {
     void scan();
@@ -115,7 +137,7 @@ export function Onboarding() {
     e.preventDefault();
     const p = primary();
     if (p) return p.run();
-    if (at() === "account" && !loggedIn() && engine.ready) return void setLogin("sub");
+    if (at() === "account" && !loggedIn() && engine.ready) return void signIn("sub");
     const miss = at() === "access" && firstMissing();
     if (miss) openPane(miss);
   };
@@ -156,7 +178,7 @@ export function Onboarding() {
                       fallback={
                         <For each={[["sub", "구독 계정", "브라우저에서 로그인해요", "globe"], ["key", "API 키", "키를 붙여 넣어요", "key"]] as const}>
                           {([way, label, how, icon]) => (
-                            <button class="onb-row onb-pick" onClick={() => setLogin(way)} disabled={!engine.ready}>
+                            <button class="onb-row onb-pick" onClick={() => signIn(way)} disabled={!engine.ready}>
                               <span class="onb-row-icon"><Icon name={icon} size={16} /></span>
                               <span class="onb-row-main">
                                 <b>{t(label)}</b>
@@ -237,7 +259,7 @@ export function Onboarding() {
                             <span class="onb-row-icon"><Icon name="key" size={16} /></span>
                             <span class="onb-row-main"><b>{t("모델 계정")}</b></span>
                             <span class="onb-state">{t("연결 안 됨")}</span>
-                            <button class="btn sm" onClick={() => setLogin("sub")} disabled={!engine.ready}>{t("로그인")}</button>
+                            <button class="btn sm" onClick={() => signIn("sub")} disabled={!engine.ready}>{t("로그인")}</button>
                           </div>
                         </div>
                       </>
@@ -284,15 +306,8 @@ export function Onboarding() {
         </Show>
       </div>
 
-      <Show when={login()}>
-        <LoginSheet
-          accountId="default"
-          more={login() === "key"}
-          onClose={() => {
-            setLogin(null);
-            void refreshLogin();
-          }}
-        />
+      <Show when={login() && signing()}>
+        <LoginSheet accountId={signing()} more={login() === "key"} onClose={() => void signedIn()} />
       </Show>
     </div>
   );

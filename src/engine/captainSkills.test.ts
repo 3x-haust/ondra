@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import { mainTools, throwThought } from "./captain";
 import { markDead, startRpc } from "./rpc";
 
-beforeEach(() => setState(reconcile(freshState())));
+beforeEach(() => setState(reconcile(testState())));
 afterEach(() => {
   markDead("captain:home");
   vi.clearAllTimers();

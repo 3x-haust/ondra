@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import tauriConfig from "../../src-tauri/tauri.conf.json";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import type { Task } from "../state/types";
 import { appCheckRules, CAPTAIN_SYSTEM, forHost, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
@@ -22,7 +23,7 @@ const task = (parentId?: string): Task => ({
 });
 
 beforeEach(() => {
-  setState(reconcile(freshState()));
+  setState(reconcile(testState()));
   setState("settings", "instructions", "Keep changes local.");
   setState("spaces", 0, "rules", "Follow repository checks.");
 });
