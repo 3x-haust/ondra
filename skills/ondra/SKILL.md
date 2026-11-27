@@ -40,7 +40,7 @@ projects, jobs and subagents as a live map), **메모리**, **결과물** (every
 | `/skill:<name>` | Call a skill by name |
 | `/feedback` | Send feedback with recent logs to Ondra's maintainers |
 | Pet | A desktop pet; `/pet 피카츄` makes one |
-| 다른 Mac | Run jobs on another of the user's Macs (Settings › 연결), end-to-end encrypted |
+| 다른 Mac | Connect another of the user's Macs or PCs (Settings › 연결): each runs jobs on the other, end-to-end encrypted |
 | 에이전트 | Ondra on Discord, as itself: the user's words there go to the agent's own chat (Ondra main with its own session), not the user's main. Its talk, its jobs (kept out of projects, 내 차례, canvas and 결과물), its questions and its memory (people, the server, lessons) are in the sidebar's 에이전트 tab, view only; work memory is shared. Others only get talk. The `discord` tool (servers, channels, make or remove one, post, read a channel's recent messages, delete messages) is the agent chat's |
 
 Settings tabs: 일반 (theme, size, language, links, default model and permission,
@@ -59,13 +59,13 @@ every action with the button it stands for and what it takes; then `{"action":"r
 something an action does, and never say you can't press Ondra. A setting (on/off, a number, a
 choice) is `ondra_settings` instead.
 
-Another Mac or PC ("윈도우에서 이 맥 연결", "다른 맥 추가"):
-1. `ondra_settings` `{"remote": true}` if it is off (this Mac may be given work).
-2. `remote.link` makes this Mac's link (10 minutes, one Mac). Put it in on the other one
-   (there: 설정 › 연결 › Mac 추가; with computer use, paste it there).
-3. The other one connects and this Mac asks the user to allow it (a card in Ondra): that click
+Another Mac or PC ("윈도우에서 이 맥 연결", "다른 맥 추가"): a connection goes both ways, so this is
+done once, from either side.
+1. `remote.link` makes this Mac's link (10 minutes, one device). Put it in on the other one
+   (there: 설정 › 연결 › 기기 추가; with computer use, paste it there).
+2. The other one connects and this Mac asks the user to allow it (a card in Ondra): that click
    is theirs. Say so in a line, and check `remote.status` after.
-Adding another Mac here from its link is `remote.add`.
+Or the other way: `remote.add` with the other device's link, and its user allows it there.
 
 What stays the user's: letting a Mac in, a job's security approvals, and secret values.
 
