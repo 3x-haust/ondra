@@ -101,7 +101,16 @@ describe("computer-use helper keeps the target behind the user's windows", () =>
     // just was went stale and it was put back inside the corner, where no hot corner fires.
     const src = readFileSync(SOURCE, "utf8");
     const keeper = src.slice(src.indexOf("func keepUserOffBackdrop()"), src.indexOf("var keeperTap"));
-    expect(keeper).toMatch(/CGWarpMouseCursorPosition\(p\)\s+CGWarpMouseCursorPosition\(back\)/);
+    expect(keeper).toMatch(/CGWarpMouseCursorPosition\([^)]*\)\)?\s+CGWarpMouseCursorPosition\(back\)/);
     expect(keeper).toContain("keeperLast = (back, now)");
+  });
+
+  it("no app reads the pointer off the user's screen between the keeper's warps", () => {
+    // warped to where it was pushed first, Orbit's hot corner read it off the corner between the
+    // two warps and fired again: Notification Center opened and closed at once
+    const src = readFileSync(SOURCE, "utf8");
+    const keeper = src.slice(src.indexOf("func keepUserOffBackdrop()"), src.indexOf("var keeperTap"));
+    expect(keeper).not.toContain("CGWarpMouseCursorPosition(p)");
+    expect(keeper).toMatch(/CGWarpMouseCursorPosition\(CGPoint\(x: back\.x - 1, y: back\.y\)\)\s+CGWarpMouseCursorPosition\(back\)/);
   });
 });
