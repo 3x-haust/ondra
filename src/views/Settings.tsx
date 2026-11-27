@@ -14,7 +14,9 @@ import { mirror, setMirror } from "../state/mirror";
 import { scrollKept } from "../state/viewState";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf } from "../state/limits";
-import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
+import { confirmAsk, ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
+import { busyIn, moveSpace, moving } from "../engine/spaceMove";
+import { hostName } from "../engine/hosts";
 import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { macs } from "../ui/MacBar";
@@ -491,6 +493,7 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
       foot={
         <>
           <Show when={cur && cur.id !== "home"}><SpaceDelete id={cur!.id} onDone={props.onClose} /></Show>
+          <Show when={cur && cur.id !== "home" && state.settings.hosts?.length}><SpaceMove id={cur!.id} onDone={props.onClose} /></Show>
           <span class="spacer" />
           <button class="btn sm" onClick={props.onClose}>{t("취소")}</button>
           <button class="btn primary sm" disabled={!label().trim()} onMouseDown={(e) => e.preventDefault()} onClick={save}>{cur ? t("저장") : t("만들기")}</button>
@@ -623,6 +626,43 @@ function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
     >
       <Icon name="trash" size={14} />
       {sure() ? t("삭제할까요?") : t("삭제")}
+    </button>
+  );
+}
+
+/** Moving a space to a Mac this one works on: everything of it goes there and is gone from here. */
+function SpaceMove(props: { id: SpaceId; onDone?: () => void }) {
+  const label = () => t(state.spaces.find((s) => s.id === props.id)?.label ?? "");
+  const go = async (host: string) => {
+    try {
+      const r = await moveSpace(props.id, host);
+      props.onDone?.();
+      toast(t("{space} 워크스페이스를 {name}(으)로 옮겼어요", { space: t(r.label), name: hostName(host) }));
+      if (r.missing.length) toast(t("{name}에 없는 프로젝트 폴더가 있어요 · {list}", { name: hostName(host), list: r.missing.join(", ") }), "info", undefined, { stay: true });
+    } catch (e) {
+      toast(t("옮기지 못했어요 · {why}", { why: e instanceof Error ? e.message : String(e) }), "bad");
+    }
+  };
+  const ask = (host: string) => {
+    const busy = busyIn(state, props.id).length;
+    if (busy) return void toast(t("진행 중인 작업 {n}개가 끝나야 옮길 수 있어요", { n: busy }), "bad");
+    confirmAsk({
+      title: t("{space} 워크스페이스를 {name}(으)로 옮길까요?", { space: label(), name: hostName(host) }),
+      body: t("코드와 API 키는 이 기기에 남아요"),
+      action: t("옮기기"),
+      run: () => void go(host),
+    });
+  };
+  const open = (e: MouseEvent & { currentTarget: HTMLButtonElement }) => {
+    const on = (state.settings.hosts ?? []).filter((h) => mirror.hosts[h.id]?.status === "ok");
+    if (!on.length) return void toast(t("연결된 기기가 없어요"), "bad");
+    openMenuAt("space-move", () => on.map((h) => ({ id: `mv-${h.id}`, label: hostName(h.id), icon: "arrow", run: () => ask(h.id) })), e.currentTarget.getBoundingClientRect());
+  };
+  const now = () => (moving()?.space === props.id ? moving() : undefined);
+  return (
+    <button class="btn ghost sm" disabled={!!moving()} onClick={open} title={t("작업과 대화, 메모리, 프로젝트, 루틴, 계정 로그인, 설정이 그 기기로 가요. 다 옮기면 이 기기에서는 빠져요.")}>
+      <Icon name="arrow" size={14} />
+      {now() ? t("옮기는 중 {pct}%", { pct: Math.floor((now()!.done / Math.max(1, now()!.total)) * 100) }) : t("다른 기기로 옮기기")}
     </button>
   );
 }

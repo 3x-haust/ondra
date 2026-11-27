@@ -504,6 +504,8 @@ pub fn run() {
             farfs::far_real,
             farfs::far_put,
             farfs::far_cached,
+            farfs::space_moves_in,
+            farfs::space_move_clear,
             logos::logo_fetch,
             linkcard::link_card,
             worktree::worktree_merge,

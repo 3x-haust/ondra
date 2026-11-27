@@ -812,9 +812,12 @@ export const farPiece = (path: string, offset: number, len: number) =>
 /** where each path really is, links followed (null: not there) */
 export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", { paths }, paths);
 /** a piece put into this app's own folder: "cache" (another device's files shown here) or "upload" (attachments sent here) */
-export const farPut = (kind: "cache" | "upload" | "site", name: string, offset: number, data: string) =>
+export const farPut = (kind: "cache" | "upload" | "site" | "move", name: string, offset: number, data: string) =>
   call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
 export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);
+/** a workspace moved in from another Mac: its folders put in place where nothing is yet (whether each went) */
+export const spaceMovesIn = (transfer: string, items: { kind: string; from: string; to: string }[]) => call<boolean[]>("space_moves_in", { transfer, items }, items.map(() => true));
+export const spaceMoveClear = (transfer: string) => call<void>("space_move_clear", { transfer }, undefined);
 
 // ───────────────────────── logos for diagrams (src-tauri/src/logos.rs)
 /** A brand's own mark as data: URLs (an SVG already cleaned of anything active). */
