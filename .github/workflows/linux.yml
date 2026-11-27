@@ -24,8 +24,50 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # A pull request only checks that the app and its helpers compile for Linux (a few minutes);
+  # main, a release and a manual run (Actions → Run workflow, on any branch) build the packages,
+  # install them and use them (the build jobs below).
+  check:
+    name: Compile check (x64)
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+      RUSTUP_TOOLCHAIN: 1.95.0
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install system libraries and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libasound2-dev
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+
+      # `cargo check` keeps other files than a release build, so it has its own cache (main saves it).
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: check
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            src-tauri -> target
+            remote/host -> target
+            dictate -> target
+            browser -> target
+
+      - name: Compile the app and its helpers
+        run: |
+          node .github/check-stubs.mjs "$TARGET"
+          for crate in src-tauri remote/host dictate browser; do
+            cargo check --manifest-path "$crate/Cargo.toml" --target "$TARGET" --locked --all-targets
+          done
+
   build:
     name: Build and verify deb and rpm (x64)
+    if: github.event_name != 'pull_request'
     # The oldest supported runner: the packages run on systems with this glibc or newer.
     runs-on: ubuntu-22.04
     timeout-minutes: 120

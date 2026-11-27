@@ -2,7 +2,7 @@
 
 ## Get the x64 installer from CI
 
-The [Windows installer workflow](../.github/workflows/windows.yml) runs on pull requests or manually from **Actions → Windows installer → Run workflow** (once the workflow is on the default branch). It builds from a clean GitHub-hosted Windows Server 2022 VM; it does not need a self-hosted machine, signing keys or release credentials.
+The [Windows installer workflow](../.github/workflows/windows.yml) builds on pushes to `main`, for releases, or manually from **Actions → Windows installer → Run workflow** (once the workflow is on the default branch). A pull request only runs `cargo check` of the app and its helpers for this system (the `check` job); to build and test the installer for a branch, run the workflow on it. It builds from a clean GitHub-hosted Windows Server 2022 VM; it does not need a self-hosted machine, signing keys or release credentials.
 
 After the run succeeds, download **Ondra-windows-x64-nsis** from the run's **Artifacts** section and unzip it to get `*-setup.exe`. The **Verify installed payload** log includes the installer SHA-256; compare it with `Get-FileHash .\<installer-name>.exe` after extraction. The artifact is retained for seven days. This is an unsigned test installer, not a GitHub Release; Windows may show a SmartScreen warning.
 

@@ -24,8 +24,53 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # A pull request only checks that the app and its helpers compile for Windows (a few minutes);
+  # main, a release and a manual run (Actions → Run workflow, on any branch) build the installer,
+  # install it and use it (the build job below).
+  check:
+    name: Compile check (x64 MSVC)
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Turn off real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Continue
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install Rust MSVC
+        run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+
+      # `cargo check` keeps other files than a release build, so it has its own cache (main saves it).
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: check
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            src-tauri -> target
+            remote/host -> target
+            dictate -> target
+            browser -> target
+
+      - name: Compile the app and its helpers
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node .github/check-stubs.mjs $env:TARGET
+          foreach ($crate in 'src-tauri', 'remote/host', 'dictate', 'browser') {
+            cargo check --manifest-path "$crate/Cargo.toml" --target $env:TARGET --locked --all-targets
+          }
+
   build:
     name: Build and verify NSIS (x64 MSVC)
+    if: github.event_name != 'pull_request'
     runs-on: windows-2022
     timeout-minutes: 120
     env:
