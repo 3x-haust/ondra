@@ -14,11 +14,26 @@ function system(): Lang {
   return (navigator.languages?.[0] ?? navigator.language ?? "ko").toLowerCase().startsWith("ko") ? "ko" : "en";
 }
 
+/** set while text is made for another device, in that device's language (inLang) */
+let forced: Lang | undefined;
+
 /** the language in use: the setting, or the Mac's own */
 export const lang = (): Lang => {
+  if (forced) return forced;
   const l = state.settings?.language ?? "system";
   return l === "system" ? system() : l;
 };
+
+/** what `make` writes, in `l` (a page made here for another device to show) */
+export function inLang<T>(l: Lang, make: () => T): T {
+  const was = forced;
+  forced = l;
+  try {
+    return make();
+  } finally {
+    forced = was;
+  }
+}
 
 /** the app's language as a word for a model prompt: "Korean" or "English" */
 export const langName = (): string => (lang() === "en" ? "English" : "Korean");
