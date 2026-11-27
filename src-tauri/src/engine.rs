@@ -653,10 +653,13 @@ pub fn agent_alive(engine: State<'_, Engine>) -> Vec<String> {
 pub async fn engine_models(app: AppHandle, account_id: String) -> Result<Vec<String>, String> {
     let mut cmd = engine_command(&app)?;
     cmd.args(["--mode", "rpc", "--no-session", "--no-tools"]).current_dir(home());
-    if let Some(dir) = crate::store::account_dir(&app, &account_id) {
-        let _ = std::fs::create_dir_all(&dir);
+    let own = crate::store::account_dir(&app, &account_id);
+    if let Some(dir) = &own {
+        let _ = std::fs::create_dir_all(dir);
         cmd.env("PI_CODING_AGENT_DIR", dir);
     }
+    // the models newer than the engine's build come from the catalog it keeps there
+    crate::catalog::refresh(&own.unwrap_or_else(crate::store::default_agent_dir)).await;
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

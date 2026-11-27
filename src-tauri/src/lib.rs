@@ -14,6 +14,7 @@
 
 mod update;
 mod applog;
+mod catalog;
 mod components;
 mod logos;
 mod linkcard;
