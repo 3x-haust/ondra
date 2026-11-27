@@ -159,7 +159,7 @@ describe("leaving this Mac", () => {
     expect(state.tasks.map((x) => [x.id, x.space])).toEqual([["t2", "home"], ["t3", "home"]]);
     expect(state.memory.map((x) => x.id)).toEqual(["m2", "m3"]);
     expect(state.projects?.map((x) => x.id)).toEqual(["p2"]);
-    expect(state.accounts.map((x) => x.id)).toEqual(["default"]);
+    expect(state.accounts.map((x) => x.id)).toEqual([]);
     expect(state.skills.map((x) => x.name)).toEqual(["shared"]);
     expect(state.captain.map((x) => x.id)).toEqual(["c2"]);
     expect(state.routines).toEqual([]);

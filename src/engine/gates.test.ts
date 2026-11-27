@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import type { Entry, Task } from "../state/types";
 import { startRpc } from "./rpc";
 import { blocking, decide, endOrphanKids, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask, tell } from "./tasks";
@@ -51,7 +52,7 @@ const bashCalls = (emit: Emit, n: number) => {
   }
 };
 
-beforeEach(() => setState(reconcile(freshState())));
+beforeEach(() => setState(reconcile(testState())));
 afterEach(() => {
   for (const t of state.tasks) pauseTask(t.id);
   vi.restoreAllMocks();
@@ -259,7 +260,7 @@ describe("what a job leaves unchecked comes with why", () => {
 
     pauseTask("job");
     vi.restoreAllMocks();
-    setState(reconcile(freshState()));
+    setState(reconcile(testState()));
     await finish({ branch: "fix/total", size: "small", entries }, { ...done, unverified: ["화면"] });
     // a small job owes no reproduction; what it left unchecked is still asked about before it ends
     await vi.waitFor(() => expect(sent("t:job", "prompt").some((m) => m.includes("Don't finish yet"))).toBe(true));
@@ -277,7 +278,7 @@ describe("what a job leaves unchecked comes with why", () => {
 
     pauseTask("job");
     vi.restoreAllMocks();
-    setState(reconcile(freshState()));
+    setState(reconcile(testState()));
     await finish({ entries }, done);
     await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
     expect(backs()).toHaveLength(0);

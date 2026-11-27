@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
 import { pauseTask, startTask } from "./tasks";
@@ -14,7 +15,7 @@ const job = (over: Partial<Task> = {}): Task => ({
   isolate: false, answer: true, ...over,
 });
 
-beforeEach(() => setState(reconcile(freshState())));
+beforeEach(() => setState(reconcile(testState())));
 afterEach(() => {
   for (const t of state.tasks) pauseTask(t.id);
   vi.restoreAllMocks();

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
-import { freshState, setState, state } from "../state/store";
+import { setState, state } from "../state/store";
+import { testState } from "../state/testing";
 import type { Entry, Task } from "../state/types";
 import { startRpc } from "./rpc";
 import { finishTask, pauseTask, startTask, tell } from "./tasks";
@@ -27,7 +28,7 @@ let exit: () => void;
 let queued: string[] = [];
 
 beforeEach(async () => {
-  setState(reconcile(freshState()));
+  setState(reconcile(testState()));
   queued = [];
   const events = new Map<string, (payload: unknown) => void>();
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
