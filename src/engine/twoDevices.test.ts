@@ -221,6 +221,15 @@ describe("another device's app settings", () => {
     expect(a.m.store.state.settings.instructions).not.toBe("항상 한국어로");
   });
 
+  it("A sees B's agent settings as B has them, and follows when B changes them", async () => {
+    b.m.store.setState("settings", "agent", { on: false, name: "도리", ownerId: "42", channels: ["c1"], places: [{ channel: "c1", label: "#orbit · 서버", space: "home" }] });
+    await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.settings).toMatchObject({ token: false, ownerId: "42", others: true, space: "home", channels: ["c1"], places: [{ channel: "c1", label: "#orbit · 서버" }] }));
+    expect(a.m.mirror.mirror.hosts[B].agent?.name).toBe("도리");
+    b.m.store.setState("settings", "agent", "others", false);
+    await wait(() => expect(a.m.mirror.mirror.hosts[B].agent?.settings?.others).toBe(false));
+    expect(a.m.store.state.settings.agent?.name).not.toBe("도리");
+  });
+
   it("only what the settings page offers can be changed from afar", async () => {
     await expect(a.m.shared.setFarSetting(B, "hosts", [])).rejects.toThrow();
     await expect(a.m.shared.setFarSetting(B, "agent.on", true)).rejects.toThrow();
