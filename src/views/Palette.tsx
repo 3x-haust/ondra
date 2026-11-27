@@ -66,7 +66,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     // each space is its own workspace: only this one's jobs
     const tasks: Item[] = [...tasksShown(state.space)]
       .sort((a, b) => rank(a) - rank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt))
-      .filter((t) => !t.answer && (!t.parentId || needle))
+      .filter((t) => !t.answer && !t.agent && (!t.parentId || needle))
       .map((t) => ({
         id: t.id,
         label: t.title,

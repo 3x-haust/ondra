@@ -39,7 +39,7 @@ import { bucket, needsYou, type Bucket } from "../state/needs";
 function forkOrder(space: string): Task[] {
   const order: Bucket[] = ["you", "failed", "review", "work", "done"];
   return tasksShown(space as Task["space"])
-    .filter((t) => !t.parentId && !t.answer)
+    .filter((t) => !t.parentId && !t.answer && !t.agent)
     .sort((a, b) => order.indexOf(bucket(a)) - order.indexOf(bucket(b)) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 }
 
