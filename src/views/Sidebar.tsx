@@ -12,7 +12,6 @@ import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
 import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, deviceSpaces, spaceById, moveProject, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, agentListed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId, splitSpaceId } from "../state/mirror";
-import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath, revealLabel } from "../lib/native";
 import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
@@ -791,7 +790,7 @@ export function Sidebar() {
                       e.preventDefault();
                       openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);
                     }}
-                    title={p.host ? `${p.hostName} · ${hostState(p.host)} · ${p.folder}` : p.folder}
+                    title={p.folder}
                   >
                     <span
                       class="sb-proj-ic"
@@ -805,7 +804,7 @@ export function Sidebar() {
                       <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
-                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}<Show when={p.hostName}><span class="sb-host"><i class={`cn-dot is-${mirror.hosts[p.host!]?.status ?? "connecting"}`} aria-hidden="true" />{p.hostName}</span></Show></span>}>
+                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}</span>}>
                       <input
                         class="sb-rename"
                         value={p.name}
