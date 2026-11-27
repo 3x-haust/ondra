@@ -2466,6 +2466,9 @@
 /* every emoji, with search and categories */
 .ep {
   display: grid;
+  /* the card's width, not the search row's: the field's own width (20 characters) and the clear
+     button that comes with the first letter ran past the card */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-6);
 }
 .ep-search {
